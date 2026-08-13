@@ -1,0 +1,29 @@
+# CLAUDE.md §2.1 — 제출물에서 제외하는 것. tools/offline_verify.py 가 이 목록과 대조한다.
+표준 문서 md 파일/
+.omc/
+__pycache__/
+*.pyc
+_to_delete/
+_stage*/
+
+# CLAUDE.md §1-3 — 실행파일 커밋 금지
+*.hex
+*.bin
+*.elf
+*.exe
+*.apk
+
+# 개발 산출물 — 심사 대상 아님
+.pytest_cache/
+*.egg-info/
+.coverage
+project_code/logs/*.jsonl.tmp
+
+# F-160 — run.py 가 §9.2 "2. DB 준비" 로 매 실행마다 만드는 런타임 DB 파일
+project_code/backend/runtime.db
+project_code/backend/*.db-wal
+project_code/backend/*.db-shm
+
+# 실제 비밀값이 실수로 커밋되는 것을 막는다 (CLAUDE.md §1-2). 목업은 project_code/fixtures/ 에 둔다
+.env
+*.local.json

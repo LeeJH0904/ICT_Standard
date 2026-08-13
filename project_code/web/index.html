@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>기능 1 — 노드·디바이스 실시간 대시보드</title>
+<link rel="stylesheet" href="static/app.css">
+</head>
+<body>
+<a class="skip" href="#main">본문으로 건너뛰기</a>
+<header>
+  <nav aria-label="주 메뉴">
+    <ul>
+      <li><a href="index.html" aria-current="page">대시보드</a></li>
+      <li><a href="verify.html">표준 준수 검증</a></li>
+      <li><a href="rules.html">규칙·승인</a></li>
+      <li><a href="settings.html">설정</a></li>
+    </ul>
+  </nav>
+  <p id="conn" role="status">실시간 연결됨</p>
+</header>
+
+<main id="main">
+  <h1>노드·디바이스 실시간 대시보드</h1>
+  <p class="hint">TTAK.KO-10.0937 6.1 · 6.4 · TTAK.KO-10.0943 8.1.1 — 등록된 노드와 최근 수신값을 보여준다. 제어 입력은 이 화면에 없다.</p>
+
+  <div class="summary-bar" id="summary" aria-live="off">
+    <span>노드 <strong id="sum-nodes">—</strong></span>
+    <span>디바이스 <strong id="sum-devices">—</strong></span>
+    <span>알림 <strong id="sum-alerts">—</strong></span>
+  </div>
+
+  <section aria-labelledby="nodes-h" data-state="loading">
+    <h2 id="nodes-h">노드</h2>
+    <p data-state-message>불러오는 중입니다…</p>
+    <div class="cards" id="node-cards" aria-busy="true"></div>
+  </section>
+
+  <section aria-labelledby="alerts-h">
+    <h2 id="alerts-h">알림</h2>
+    <p data-state-message></p>
+    <ul id="alert-list" style="list-style:none; padding:0;"></ul>
+  </section>
+</main>
+
+<div id="live" aria-live="polite" class="sr-only"></div>
+
+<script type="module">
+import { api, ApiError } from "./static/api.js";
+import { connectStream } from "./static/stream.js";
+import { announce, setConnStatus, setViewState } from "./static/a11y.js";
+import { relativeTime, isoToEpoch, hex, formatValue } from "./static/fmt.js";
+
+const nodesSection = document.querySelector("#nodes-h").closest("section");
+const cardsEl = document.getElementById("node-cards");
+const alertsSection = document.querySelector("#alerts-h").closest("section");
+const alertListEl = document.getElementById("alert-list");
+
+const state = { nodes: [], devicesByNode: new Map(), telemetryByDevice: new Map(), statesByDevice: new Map(), alerts: [] };
+
+function sparkSvg(values, unit, label) {
+  const w = 120, h = 24;
+  if (!values.length) return `<span class="hint">추이 없음</span>`;
+  const min = Math.min(...values), max = Math.max(...values);
+  const span = max - min || 1;
+  const pts = values.map((v, i) => `${(i / Math.max(1, values.length - 1)) * w},${h - ((v - min) / span) * h}`).join(" ");
+  const desc = `${label} 추이, 최소 ${formatValue(min, unit)}, 최대 ${formatValue(max, unit)}`;
+  return `<svg class="spark" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" role="img" aria-label="${desc}">
+    <polyline points="${pts}" fill="none" stroke="currentColor" stroke-width="1.5"/>
+  </svg>`;
+}
+
+function nodeCardHtml(node, devices) {
+  const online = node.last_seen_at != null && (Date.now() / 1000 - isoToEpoch(node.last_seen_at)) < 60;
+  const connCls = online ? "online" : "stale";
+  const connText = online ? "연결됨" : `응답 없음 (${Math.round(Date.now() / 1000 - (isoToEpoch(node.last_seen_at) ?? 0))}초)`;
+  const rows = devices.map((dev) => {
+    const tel = state.telemetryByDevice.get(dev.id);
+    const ds = state.statesByDevice.get(dev.id);
+    let valueHtml, sparkHtml = "";
+    if (tel && tel.length) {
+      const latest = tel[tel.length - 1];
+      valueHtml = formatValue(latest.value, latest.unit);
+      sparkHtml = sparkSvg(tel.map((p) => p.value), latest.unit, dev.subtype || dev.device_name);
+    } else if (ds) {
+      valueHtml = Object.entries(ds.attributes || {}).map(([k, v]) => `${k}=${v}`).join(", ") || "—";
+    } else {
+      valueHtml = "—";
+    }
+    // 서버가 준 것만 쓴다 — subtype 은 레지스트리 이름, siap_subtype 은 표 7-14 원시 코드(§4.2)
+    return `<div class="device-row">
+      <span>${dev.subtype ?? dev.device_name} <span class="hint">(${hex(dev.siap_subtype)})</span></span>
+      <span>${valueHtml} ${sparkHtml}</span>
+    </div>`;
+  }).join("") || `<p class="hint">등록된 디바이스가 없습니다.</p>`;
+
+  return `<article class="card">
+    <h3>Node ${hex(node.node_id)}</h3>
+    <p class="status-line ${connCls}">${connText}</p>
+    <p class="hint">S/W ${hex(node.sw_version)} · 상태 ${node.status} · 디바이스 ${node.device_count}대</p>
+    ${rows}
+  </article>`;
+}
+
+function renderNodes() {
+  if (!state.nodes.length) {
+    setViewState(nodesSection, "empty", "아직 등록된 노드가 없습니다.");
+    cardsEl.innerHTML = "";
+    return;
+  }
+  setViewState(nodesSection, "ready", "");
+  cardsEl.innerHTML = state.nodes.map((n) => nodeCardHtml(n, state.devicesByNode.get(n.node_id) || [])).join("");
+  document.getElementById("sum-nodes").textContent = String(state.nodes.length);
+  const deviceTotal = [...state.devicesByNode.values()].reduce((a, d) => a + d.length, 0);
+  document.getElementById("sum-devices").textContent = String(deviceTotal);
+}
+
+function alertItemHtml(a) {
+  const cls = a.severity === "CRITICAL" ? "violation" : a.severity === "WARN" ? "alert" : "normal";
+  const icon = cls === "violation" ? "⚠" : cls === "alert" ? "●" : "✔";
+  return `<li class="status-line ${cls}">${icon} ${a.kind} — ${a.message} <span class="hint">(${relativeTime(isoToEpoch(a.raised_at))})</span></li>`;
+}
+
+function renderAlerts() {
+  document.getElementById("sum-alerts").textContent = String(state.alerts.length);
+  if (!state.alerts.length) {
+    setViewState(alertsSection, "empty", "아직 발생한 알림이 없습니다.");
+    alertListEl.innerHTML = "";
+    return;
+  }
+  setViewState(alertsSection, "ready", "");
+  alertListEl.innerHTML = state.alerts.map(alertItemHtml).join("");
+}
+
+async function loadDeviceData(dev) {
+  if (dev.device_kind === "ACTUATOR") {
+    const page = await api.listDeviceStates({ install_id: dev.id, limit: 1 });
+    if (page.items.length) state.statesByDevice.set(dev.id, page.items[0]);
+  } else {
+    const page = await api.listTelemetry({ install_id: dev.id, limit: 10 });
+    state.telemetryByDevice.set(dev.id, page.items.slice().reverse());
+  }
+}
+
+async function loadAll() {
+  setViewState(nodesSection, "loading", "불러오는 중입니다…");
+  try {
+    const [nodePage, alertPage] = await Promise.all([
+      api.listNodes({ limit: 500 }),
+      api.listAlerts({ limit: 50 }),
+    ]);
+    state.nodes = nodePage.items;
+    state.alerts = alertPage.items;
+    await Promise.all(state.nodes.map(async (n) => {
+      const devPage = await api.listNodeDevices(n.node_id);
+      state.devicesByNode.set(n.node_id, devPage.items);
+      await Promise.all(devPage.items.map(loadDeviceData));
+    }));
+    renderNodes();
+    renderAlerts();
+  } catch (err) {
+    const msg = err instanceof ApiError ? err.message : String(err);
+    setViewState(nodesSection, "error", `불러오지 못했습니다: ${msg}`);
+  }
+}
+
+connectStream({
+  events: ["node_up", "node_down", "alert"],
+  onStatus: setConnStatus,
+  onEvent: (type, data) => {
+    if (type === "alert") {
+      state.alerts = [data, ...state.alerts].slice(0, 50);
+      renderAlerts();
+      announce(`새 알림: ${data.kind} — ${data.message}`);
+    } else if (type === "node_up" || type === "node_down") {
+      loadAll();
+      announce(type === "node_up" ? "노드가 연결되었습니다" : "노드 연결이 끊겼습니다");
+    }
+  },
+  onPollTick: loadAll,
+});
+
+loadAll();
+</script>
+</body>
+</html>

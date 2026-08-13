@@ -1,0 +1,83 @@
+[
+ {
+  "id": "REQ_SET_CONNECTION_min",
+  "msg": "REQ_SET_CONNECTION",
+  "dir": "노드→GCG",
+  "clause": "8.1.1",
+  "hex": "120000000100000000100003",
+  "len": 12,
+  "note": "페이로드 없음"
+ },
+ {
+  "id": "RES_SET_CONNECTION_1dev",
+  "msg": "RES_SET_CONNECTION",
+  "dir": "GCG→노드",
+  "clause": "8.1.1",
+  "hex": "1210000002002700001000030010000010000300010100C041CA6666003CC220000042A00000C220000042A000003DCCCCCD00",
+  "len": 51,
+  "note": "RSC+NODE_PROPERTY+DEVICE_PROPERTY×1"
+ },
+ {
+  "id": "NOTI_DEVICE_VALUE_2sensor",
+  "msg": "NOTI_DEVICE_VALUE",
+  "dir": "노드→GCG",
+  "clause": "8.2.1.2",
+  "hex": "1220000003000E00001000030100C041CA666602014042740000",
+  "len": 26,
+  "note": "DEVICE_MAIN_INFO×2"
+ },
+ {
+  "id": "REQ_SET_DEVICE_CONTROL_valve",
+  "msg": "REQ_SET_DEVICE_CONTROL",
+  "dir": "GCG→노드",
+  "clause": "8.1.5",
+  "hex": "12003000040007000010000305C2A000000001",
+  "len": 19,
+  "note": "관수밸브 ON"
+ },
+ {
+  "id": "RES_SET_DEVICE_CONTROL_ok",
+  "msg": "RES_SET_DEVICE_CONTROL",
+  "dir": "노드→GCG",
+  "clause": "8.1.5",
+  "hex": "12103000050001000010000300",
+  "len": 13,
+  "note": "RSC=SUCCESS"
+ },
+ {
+  "id": "NOTI_ERROR_batlow",
+  "msg": "NOTI_ERROR",
+  "dir": "노드→GCG",
+  "clause": "8.2.1.1",
+  "hex": "12200000060001000010000307",
+  "len": 13,
+  "note": "NEC=ERROR_BATTERY_LOW"
+ },
+ {
+  "id": "REQ_GET_DEVICE_VALUE_3",
+  "msg": "REQ_GET_DEVICE_VALUE",
+  "dir": "GCG→노드",
+  "clause": "8.1.4.4",
+  "hex": "120028000700030000100003010205",
+  "len": 15,
+  "note": "DEVICE_ID×3"
+ },
+ {
+  "id": "REQ_SET_MSG_PROFILE",
+  "msg": "REQ_SET_MSG_FLOW_CONTROL_PROFILE",
+  "dir": "GCG→노드",
+  "clause": "8.1.3.4",
+  "hex": "120018000800070000100003000203001E003C",
+  "len": 19,
+  "note": "MSG_CONTROL_PROFILE"
+ },
+ {
+  "id": "ACK_min",
+  "msg": "ACK",
+  "dir": "양방향",
+  "clause": "8.2",
+  "hex": "123000000900000000100003",
+  "len": 12,
+  "note": "헤더만"
+ }
+]

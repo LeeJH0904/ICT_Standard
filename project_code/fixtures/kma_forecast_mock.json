@@ -1,0 +1,28 @@
+{
+  "_meta": {
+    "note": "기상청 단기예보 조회서비스(VilageFcstInfoService_2.0) 키 부재 시 자동 폴백 목업 — CLAUDE.md §7 / §1-1. 무작위·주기함수로 생성하지 않았다 — 손으로 고정한 값이다. backend/services/dms.py 가 KMA_API_KEY 환경변수 부재·실패 시 이 파일을 그대로 읽어 public_data_record.payload 로 저장한다.",
+    "provider": "기상청",
+    "service": "단기예보 조회서비스"
+  },
+  "response": {
+    "header": {
+      "resultCode": "00",
+      "resultMsg": "NORMAL_SERVICE"
+    },
+    "body": {
+      "dataType": "JSON",
+      "items": {
+        "item": [
+          {"baseDate": "20260811", "baseTime": "0500", "category": "TMX", "fcstDate": "20260812", "fcstTime": "1500", "fcstValue": "34", "nx": 60, "ny": 127},
+          {"baseDate": "20260811", "baseTime": "0500", "category": "TMN", "fcstDate": "20260812", "fcstTime": "0600", "fcstValue": "23", "nx": 60, "ny": 127},
+          {"baseDate": "20260811", "baseTime": "0500", "category": "POP", "fcstDate": "20260812", "fcstTime": "1500", "fcstValue": "30", "nx": 60, "ny": 127},
+          {"baseDate": "20260811", "baseTime": "0500", "category": "REH", "fcstDate": "20260812", "fcstTime": "1500", "fcstValue": "55", "nx": 60, "ny": 127},
+          {"baseDate": "20260811", "baseTime": "0500", "category": "SKY", "fcstDate": "20260812", "fcstTime": "1500", "fcstValue": "3", "nx": 60, "ny": 127}
+        ]
+      },
+      "pageNo": 1,
+      "numOfRows": 5,
+      "totalCount": 5
+    }
+  }
+}

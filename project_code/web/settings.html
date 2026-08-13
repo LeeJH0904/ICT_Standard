@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>설정 — 수집 주기 · 임계값</title>
+<link rel="stylesheet" href="static/app.css">
+</head>
+<body>
+<a class="skip" href="#main">본문으로 건너뛰기</a>
+<header>
+  <nav aria-label="주 메뉴">
+    <ul>
+      <li><a href="index.html">대시보드</a></li>
+      <li><a href="verify.html">표준 준수 검증</a></li>
+      <li><a href="rules.html">규칙·승인</a></li>
+      <li><a href="settings.html" aria-current="page">설정</a></li>
+    </ul>
+  </nav>
+  <p id="conn" role="status">실시간 연결됨</p>
+</header>
+
+<main id="main">
+  <h1>수집 주기 · 임계값 설정</h1>
+  <p class="hint">TTAK.KO-10.0937 6.4-2 · 부속서 A 1.3 — TTAK.KO-10.0943 표 7-15 DEVICE_PROPERTY 중 사용자가 정하는 4개 필드만 이 화면에서 쓴다. 구동기 제어값(Value)은 이 화면에 없다 — <a href="rules.html">규칙·승인</a> 또는 수동 제어를 거친다.</p>
+
+  <form id="prop-form">
+    <fieldset>
+      <legend>대상</legend>
+      <div class="field">
+        <label><input type="radio" name="target-mode" value="device" checked> 디바이스 개별</label>
+        <label><input type="radio" name="target-mode" value="zone"> 구역 일괄 (온실)</label>
+      </div>
+
+      <div class="field" id="mode-device">
+        <label for="sel-install">대상 장치</label>
+        <select id="sel-install" name="install_id"></select>
+      </div>
+
+      <div class="field" id="mode-zone" hidden>
+        <label for="sel-greenhouse">온실 ID</label>
+        <input id="sel-greenhouse" name="greenhouse_id" list="gh-suggestions" placeholder="예: demo-gh-1">
+        <datalist id="gh-suggestions"><option value="demo-gh-1"></datalist>
+        <label for="sel-location">위치 (선택 — 구역을 좁힌다)</label>
+        <input id="sel-location" name="install_location" placeholder="예: 동쪽">
+        <label for="sel-subtype">Subtype 코드 (선택, 0943 표 7-14, 0~255)</label>
+        <input id="sel-subtype" name="subtype" type="number" min="0" max="255">
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>설정 — 표 7-15 사용자 지정 4필드 중 최소 1개</legend>
+      <div class="field">
+        <label for="f-transfer">전송 모드 <span class="hint">(Transfer Mode, 2bit)</span></label>
+        <select id="f-transfer" name="transfer_mode">
+          <option value="">— 변경 안 함 —</option>
+          <option value="PERIODIC">주기 (PERIODIC)</option>
+          <option value="EVENT">이벤트 (EVENT)</option>
+          <option value="BOTH">둘 다 (BOTH)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="f-period">수집 주기 (Period, 14bit, 초) <span class="hint">0 ~ 16383</span></label>
+        <input id="f-period" name="period_sec" type="number" min="0" max="16383">
+      </div>
+      <div class="field">
+        <label for="f-lower">하한값 (Lower Value, 32bit) <span class="hint">이하이면 전송</span></label>
+        <input id="f-lower" name="lower_value" type="number" step="any">
+      </div>
+      <div class="field">
+        <label for="f-upper">상한값 (Upper Value, 32bit) <span class="hint">초과이면 전송</span></label>
+        <input id="f-upper" name="upper_value" type="number" step="any">
+      </div>
+    </fieldset>
+
+    <button type="submit" class="primary">적용</button>
+    <p id="prop-status" class="hint" role="status"></p>
+  </form>
+
+  <section aria-labelledby="dev-h">
+    <h2 id="dev-h">장치 목록 <span class="hint">(물리 특성은 읽기만 — 설치 시 확정)</span></h2>
+    <p data-state-message></p>
+    <table id="dev-table">
+      <thead><tr><th>장치</th><th>노드</th><th>Lower Limit</th><th>Upper Limit</th><th>Precision</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+</main>
+
+<div id="live" aria-live="polite" class="sr-only"></div>
+
+<script type="module">
+import { api, ApiError, describeProblem } from "./static/api.js";
+import { connectStream } from "./static/stream.js";
+import { announce, setConnStatus, setViewState } from "./static/a11y.js";
+
+const USER_ID = "demo-user-1";
+const state = { devices: [] };
+
+document.querySelectorAll('input[name="target-mode"]').forEach((r) => {
+  r.addEventListener("change", () => {
+    const zone = document.querySelector('input[name="target-mode"]:checked').value === "zone";
+    document.getElementById("mode-device").hidden = zone;
+    document.getElementById("mode-zone").hidden = !zone;
+  });
+});
+
+function deviceRowHtml(d) {
+  return `<tr>
+    <td>${d.device_name} <span class="hint">(${d.subtype ?? "—"})</span></td>
+    <td>${d.siap_node_id ?? "—"}</td>
+    <td>${d.lower_limit ?? "—"}</td>
+    <td>${d.upper_limit ?? "—"}</td>
+    <td>${d.precision_val ?? "—"}</td>
+  </tr>`;
+}
+
+async function loadDevices() {
+  const section = document.querySelector("#dev-h").closest("section");
+  setViewState(section, "loading", "불러오는 중입니다…");
+  try {
+    const nodePage = await api.listNodes({ limit: 500 });
+    const all = [];
+    for (const n of nodePage.items) {
+      const devPage = await api.listNodeDevices(n.node_id);
+      all.push(...devPage.items);
+    }
+    state.devices = all;
+    const sel = document.getElementById("sel-install");
+    sel.innerHTML = all.map((d) => `<option value="${d.id}">${d.device_name} (${d.subtype ?? d.id})</option>`).join("");
+    const tbody = document.querySelector("#dev-table tbody");
+    if (!all.length) {
+      setViewState(section, "empty", "등록된 장치가 없습니다.");
+      tbody.innerHTML = "";
+    } else {
+      setViewState(section, "ready", "");
+      tbody.innerHTML = all.map(deviceRowHtml).join("");
+    }
+  } catch (err) {
+    setViewState(section, "error", err instanceof ApiError ? err.message : String(err));
+  }
+}
+
+document.getElementById("prop-form").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const statusEl = document.getElementById("prop-status");
+  const zone = document.querySelector('input[name="target-mode"]:checked').value === "zone";
+
+  const selector = {};
+  if (zone) {
+    const gh = document.getElementById("sel-greenhouse").value.trim();
+    if (!gh) { statusEl.textContent = "온실 ID를 입력하세요."; return; }
+    selector.greenhouse_id = gh;
+    const loc = document.getElementById("sel-location").value.trim();
+    if (loc) selector.install_location = loc;
+    const st = document.getElementById("sel-subtype").value;
+    if (st !== "") selector.subtype = Number(st);
+  } else {
+    const id = document.getElementById("sel-install").value;
+    if (!id) { statusEl.textContent = "대상 장치를 선택하세요."; return; }
+    selector.install_id = id;
+  }
+
+  const property = {};
+  const transfer = document.getElementById("f-transfer").value;
+  if (transfer) property.transfer_mode = transfer;
+  const period = document.getElementById("f-period").value;
+  if (period !== "") property.period_sec = Number(period);
+  const lower = document.getElementById("f-lower").value;
+  if (lower !== "") property.lower_value = Number(lower);
+  const upper = document.getElementById("f-upper").value;
+  if (upper !== "") property.upper_value = Number(upper);
+
+  if (Object.keys(property).length === 0) {
+    statusEl.textContent = "설정값을 최소 1개 입력하세요.";
+    return;
+  }
+
+  statusEl.textContent = "적용 중…";
+  try {
+    const page = await api.setDeviceProperty(selector, property, USER_ID);
+    statusEl.textContent = `적용됨 — 대상 ${page.items.length}대: ${page.items.map((d) => d.device_name).join(", ")}`;
+    announce(statusEl.textContent);
+    await loadDevices();
+  } catch (err) {
+    statusEl.textContent = err instanceof ApiError ? describeProblem(err.problem) : String(err);
+  }
+});
+
+connectStream({
+  events: ["node_up", "node_down"],
+  onStatus: setConnStatus,
+  onEvent: () => loadDevices(),
+  onPollTick: loadDevices,
+});
+
+loadDevices();
+</script>
+</body>
+</html>

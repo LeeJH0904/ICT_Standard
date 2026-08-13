@@ -1,0 +1,2949 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "표준 프로토콜 기반 개방형 스마트온실 노드 - REST API",
+    "version": "1.0.0",
+    "summary": "TTAK.KO-10.0937 서비스 요구사항을 TTAK.KO-10.1369-Part1 데이터 모델로 노출하는 HTTP 표면",
+    "description": "설계 근거는 project_docs/api/API_명세서.md 에 있다.\n\n원칙 네 가지.\n1. 응답 필드명은 TTAK.KO-10.1369-Part1 논리적 모델의 속성명을 그대로 쓴다. 임의로 바꾸지 않는다.\n2. 노드/디바이스 종류를 경로에도 스키마에도 하드코딩하지 않는다. 종류는 Subtype 레지스트리 조회 결과일 뿐이다.\n3. 표준 위반 판정은 프로토콜 계층(siap/codec.py)이 이미 끝냈다. 이 API는 판정 결과를 렌더링만 한다.\n4. 제어 실행 경로에서 클라이언트는 명령과 대상을 지정할 수 없다. 승인된 스냅샷에서 서버가 도출한다.",
+    "license": {
+      "name": "제출용 참조 구현"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://127.0.0.1:8000",
+      "description": "run.py 기본 바인딩"
+    }
+  ],
+  "tags": [
+    {
+      "name": "system",
+      "description": "실행 상태. 아키텍처 설계서 6.3"
+    },
+    {
+      "name": "ems",
+      "description": "노드/장치 관리. TTAK.KO-10.0937 6.1"
+    },
+    {
+      "name": "dms",
+      "description": "공공데이터 관리. TTAK.KO-10.0937 6.2"
+    },
+    {
+      "name": "mms",
+      "description": "제어 모델/규칙 관리. TTAK.KO-10.0937 6.3"
+    },
+    {
+      "name": "fms",
+      "description": "농장 모니터링. TTAK.KO-10.0937 6.4"
+    },
+    {
+      "name": "fcs",
+      "description": "농장 제어. TTAK.KO-10.0937 6.5"
+    },
+    {
+      "name": "conformance",
+      "description": "표준 준수 검증 뷰(기능 2). TTAK.KO-10.0943 7.3"
+    }
+  ],
+  "paths": {
+    "/api/v1/health": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "operationId": "getHealth",
+        "summary": "I/O 스레드와 전송 링크 상태",
+        "description": "I/O 스레드가 죽어도 화면은 마지막 상태를 계속 보여주므로 심사자가 '동작 중'으로 오해한다. 살아있음을 별도로 노출한다(아키텍처 6.3).",
+        "responses": {
+          "200": {
+            "description": "정상",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/nodes": {
+      "get": {
+        "tags": [
+          "ems"
+        ],
+        "operationId": "listNodes",
+        "summary": "등록된 노드 목록",
+        "description": "TTAK.KO-10.0943 8.1.1 연결 설정 절차를 마친 노드. 노드 종류를 구분하지 않는다 - 목록은 등록 사실만 담고, 무엇이 달린 노드인지는 /nodes/{nodeId}/devices 가 답한다.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/limit"
+          },
+          {
+            "$ref": "#/components/parameters/offset"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "정상",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NodePage"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/nodes/{nodeId}": {
+      "get": {
+        "tags": [
+          "ems"
+        ],
+        "operationId": "getNode",
+        "summary": "노드 1건",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/nodeId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "정상",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Node"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/api/v1/nodes/{nodeId}/devices": {
+      "get": {
+        "tags": [
+          "ems"
+        ],
+        "operationId": "listNodeDevices",
+        "summary": "노드에 달린 장치 목록",
+        "description": "TTAK.KO-10.0943 표 7-15 DEVICE_PROPERTY 로 등록된 항목이 TTAK.KO-10.1369-Part1 7.2.2.5 장치설치정보로 저장된 결과다. 단위/유효범위/정밀도는 프레임에 실리지 않으므로 데이터 계층이 보관한다.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/nodeId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "정상",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DevicePage"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/api/v1/telemetry": {
+      "get": {
+        "tags": [
+          "fms"
+        ],
+        "operationId": "listTelemetry",
+        "summary": "환경상태 측정 이력",
+        "description": "TTAK.KO-10.1369-Part1 6.3.3 환경상태 데이터. subtype 은 열거하지 않고 문자열로 받는다 - 새 항목이 추가돼도 API 스키마를 고치지 않는다.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/installId"
+          },
+          {
+            "$ref": "#/components/parameters/subtype"
+          },
+          {
+            "$ref": "#/components/parameters/since"
+          },
+          {
+            "$ref": "#/components/parameters/until"
+          },
+          {
+            "$ref": "#/components/parameters/limit"
+          },
+          {
+            "$ref": "#/components/parameters/offset"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "정상",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TelemetryPage"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/device-states": {
+      "get": {
+        "tags": [
+          "fms"
+        ],
+        "operationId": "listDeviceStates",
+        "summary": "장치상태 보고 이력",
+        "description": "TTAK.KO-10.1369-Part1 6.3.4 장치상태 데이터. 서브타입마다 속성이 실제로 다르므로(창개폐기=개폐정도, 관수펌프=압력+분사도) 공통 필드 밖은 attributes 객체로 그대로 노출한다. 서브타입이 늘어도 스키마 변경이 없다.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/installId"
+          },
+          {
+            "$ref": "#/components/parameters/subtype"
+          },
+          {
+            "$ref": "#/components/parameters/since"
+          },
+          {
+            "$ref": "#/components/parameters/until"
+          },
+          {
+            "$ref": "#/components/parameters/limit"
+          },
+          {
+            "$ref": "#/components/parameters/offset"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "정상",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceStatePage"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/alerts": {
+      "get": {
+        "tags": [
+          "fms"
+        ],
+        "operationId": "listAlerts",
+        "summary": "알림 목록",
+        "description": "TTAK.KO-10.0937 6.4 '정해진 시간에 데이터가 수집되지 않는 경우 알림' / 6.5 '하드웨어 고장, 네트워크 단절 등 긴급 상황시 사용자 알림'. siap_nec 는 TTAK.KO-10.0943 표 7-12 오류 알림 코드다.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/since"
+          },
+          {
+            "$ref": "#/components/parameters/until"
+          },
+          {
+            "name": "unacked",
+            "in": "query",
+            "description": "확인하지 않은 알림만",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/limit"
+          },
+          {
+            "$ref": "#/components/parameters/offset"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "정상",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlertPage"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/frames": {
+      "get": {
+        "tags": [
+          "conformance"
+        ],
+        "operationId": "listFrames",
+        "summary": "송수신 프레임 로그",
+        "description": "TTAK.KO-10.0943 7.3 수신 처리 결과의 원장이다. 정상/위반을 가리지 않고 모든 프레임이 남는다 - 위반 프레임도 버리지 않는 것이 기능 2 의 전제다. header 는 그림 7-1 의 96 bit 를 분해한 값이며, 전송된 원본 비트를 그대로 보존한다.",
+        "parameters": [
+          {
+            "name": "direction",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "rx",
+                "tx"
+              ]
+            }
+          },
+          {
+            "name": "valid",
+            "in": "query",
+            "description": "true=정상만, false=위반만",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "node_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1048575
+            }
+          },
+          {
+            "$ref": "#/components/parameters/since"
+          },
+          {
+            "$ref": "#/components/parameters/until"
+          },
+          {
+            "$ref": "#/components/parameters/limit"
+          },
+          {
+            "$ref": "#/components/parameters/offset"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "정상",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FramePage"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/frames/violations": {
+      "get": {
+        "tags": [
+          "conformance"
+        ],
+        "operationId": "listViolations",
+        "summary": "격리된 위반 프레임",
+        "description": "TTAK.KO-10.0943 7.3.1 형식 검사에서 걸러진 프레임. code 는 표 7-10 응답 상태 코드다.\n\ncode / code_name / clause / detail 은 siap/codec.py 가 채운 값을 그대로 돌려준다. 서비스 계층은 표준을 다시 해석하지 않는다.",
+        "parameters": [
+          {
+            "name": "code",
+            "in": "query",
+            "description": "TTAK.KO-10.0943 표 7-10 응답 상태 코드",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 255
+            }
+          },
+          {
+            "name": "clause",
+            "in": "query",
+            "description": "표준 조항 번호 (예: 7.3.1)",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/since"
+          },
+          {
+            "$ref": "#/components/parameters/until"
+          },
+          {
+            "$ref": "#/components/parameters/limit"
+          },
+          {
+            "$ref": "#/components/parameters/offset"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "정상",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FramePage"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/frames/{frameId}": {
+      "get": {
+        "tags": [
+          "conformance"
+        ],
+        "operationId": "getFrame",
+        "summary": "프레임 1건 - 헤더 분해 + 원본 바이트",
+        "parameters": [
+          {
+            "name": "frameId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "정상",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Frame"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/api/v1/stream": {
+      "get": {
+        "tags": [
+          "conformance"
+        ],
+        "operationId": "streamEvents",
+        "summary": "SSE - 프레임 / 노드 / 알림 / 제어 실행",
+        "description": "text/event-stream. event 이름은 node_up, node_down, frame, violation, alert, execution 여섯 가지이며 data 는 해당 스키마의 JSON 1건이다.\n\nnode_up 은 TTAK.KO-10.0943 8.1.1 연결 설정 완료, alert 는 TTAK.KO-10.0937 6.4·6.5 사용자 알림 요구에 대응한다. 연결 실패 시 화면은 1초 폴링으로 폴백한다(아키텍처 설계서 8.1).",
+        "parameters": [
+          {
+            "name": "events",
+            "in": "query",
+            "description": "쉼표로 구분한 구독 이벤트. 생략하면 전부",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "example": "frame,violation"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "이벤트 스트림",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/StreamEvent"
+                },
+                "example": "event: violation\ndata: {\"id\":\"f-102\",\"is_valid\":false,\"violations\":[{\"code\":9,\"code_name\":\"INVALID_FORMAT\",\"clause\":\"7.3.1\",\"detail\":\"Payload Length=24, 실제 수신 18byte\"}]}\n\n"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/publicdata/sources": {
+      "get": {
+        "tags": [
+          "dms"
+        ],
+        "operationId": "listPublicDataSources",
+        "summary": "공공데이터 출처 메타정보",
+        "description": "TTAK.KO-10.0937 6.2 '공공데이터의 메타정보를 등록/관리'. API 키가 없으면 fixtures 목업으로 자동 폴백하며, 그 사실은 provider 가 아니라 health 의 fallback 필드에 드러난다.",
+        "responses": {
+          "200": {
+            "description": "정상",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicDataSourcePage"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/publicdata/records": {
+      "get": {
+        "tags": [
+          "dms"
+        ],
+        "operationId": "listPublicDataRecords",
+        "summary": "수집된 공공데이터 이력",
+        "parameters": [
+          {
+            "name": "source_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/since"
+          },
+          {
+            "$ref": "#/components/parameters/until"
+          },
+          {
+            "$ref": "#/components/parameters/limit"
+          },
+          {
+            "$ref": "#/components/parameters/offset"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "정상",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicDataRecordPage"
+                }
+              }
+            }
+          }
+        },
+        "description": "TTAK.KO-10.0937 6.2 DMS - 등록된 출처에서 수집한 공공데이터 이력. payload 는 출처 응답 원문이며 구조를 강제하지 않는다."
+      }
+    },
+    "/api/v1/rules": {
+      "get": {
+        "tags": [
+          "mms"
+        ],
+        "operationId": "listRules",
+        "summary": "제어 규칙 목록",
+        "parameters": [
+          {
+            "name": "approved",
+            "in": "query",
+            "description": "true=승인분만, false=미승인 초안만",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/limit"
+          },
+          {
+            "$ref": "#/components/parameters/offset"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "정상",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RulePage"
+                }
+              }
+            }
+          }
+        },
+        "description": "TTAK.KO-10.0937 6.3 MMS 제어 규칙 목록. approved=false 로 미승인 초안만 볼 수 있고, 이것이 rules.html 의 검토 대기 목록이 된다(TTAK.KO-10.0937 부속서 A 3.2 절차 3)."
+      },
+      "post": {
+        "tags": [
+          "mms"
+        ],
+        "operationId": "createRuleDraft",
+        "summary": "제어 규칙 초안 생성 (미승인)",
+        "description": "TTAK.KO-10.0937 6.3 '제어 명령을 위자드 선택 방식, 스크립트 입력 방식 등으로 직접 만들어서 등록'.\n\n이 엔드포인트는 실행 가능한 규칙을 만들 수 없다. action 과 target_install_id 를 받지 않으며, DB CHECK 가 미승인 규칙의 두 필드를 NULL 로 강제한다. 생성형 AI 의 출력은 draft_text 로만 들어온다.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RuleDraftRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "초안 생성됨",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rule"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          }
+        }
+      }
+    },
+    "/api/v1/rules/{ruleId}": {
+      "get": {
+        "tags": [
+          "mms"
+        ],
+        "operationId": "getRule",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ruleId"
+          }
+        ],
+        "summary": "제어 규칙 1건",
+        "responses": {
+          "200": {
+            "description": "정상",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rule"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/api/v1/rules/{ruleId}/approve": {
+      "post": {
+        "tags": [
+          "mms"
+        ],
+        "operationId": "approveRule",
+        "summary": "승인 게이트 - 사람이 최종 결정한다",
+        "description": "TTAK.KO-10.0937 부속서 A 3.2 절차 3 '사용자는 최종 의사결정 후 제어 조건 조정을 한다'.\n\n조건식/명령/대상/승인자/승인시각을 **한 번의 UPDATE 로 동시에** 채운다. 승인 스냅샷이 부분적으로 채워진 상태는 DB CHECK 가 허용하지 않는다. 승인 후에는 다섯 필드 전부 불변이다.\n\n요청 본문의 action 에 대상 장치를 넣지 않는다 - '어느 장치를'은 target_install_id 가 유일한 출처다.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ruleId"
+          },
+          {
+            "$ref": "#/components/parameters/userId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApproveRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "승인됨",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rule"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "이미 승인된 규칙. 승인은 철회도 재승인도 되지 않는다 - 새 규칙을 만든다.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "UserIdHeader": []
+          }
+        ]
+      }
+    },
+    "/api/v1/rules/{ruleId}/execute": {
+      "post": {
+        "tags": [
+          "fcs"
+        ],
+        "operationId": "executeRule",
+        "summary": "승인된 규칙 실행 (origin=RULE)",
+        "description": "TTAK.KO-10.0937 6.5 '사용자가 지정한 명령을 구동기가 실행하도록 제어 명령을 전달'.\n\n**요청 본문이 없다.** 명령과 대상은 승인 스냅샷에서 서버가 읽는다. 클라이언트가 무엇도 지정할 수 없으므로, 승인된 내용과 다른 제어가 나갈 경로가 API 표면에 존재하지 않는다.\n\n순서: control_execution 기록 성공 -> 그 다음에만 프레임 송신. DB 트리거가 송신의 선행 조건이다.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ruleId"
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "실행 기록 후 송신함. result_rsc 는 노드 응답 수신 시 채워진다.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Execution"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "미승인 규칙. DB 트리거 trg_exec_requires_approval 이 차단한 결과를 그대로 옮긴다.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "504": {
+            "$ref": "#/components/responses/NodeTimeout"
+          }
+        }
+      }
+    },
+    "/api/v1/control": {
+      "post": {
+        "tags": [
+          "fcs"
+        ],
+        "operationId": "manualControl",
+        "summary": "수동/원격 제어 (origin=MANUAL)",
+        "description": "TTAK.KO-10.0937 부속서 A 1·2 수동제어/원격제어 시나리오. 권한 출처가 규칙이 아니라 지시한 사용자이므로 X-User-Id 가 필수이며, 승인 규칙의 대상 제약을 받지 않는다.\n\nTTAK.KO-10.0943 8.1.5 REQ_SET_DEVICE_CONTROL 로 나간다.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/userId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManualControlRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "실행 기록 후 송신함",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Execution"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "504": {
+            "$ref": "#/components/responses/NodeTimeout"
+          }
+        },
+        "security": [
+          {
+            "UserIdHeader": []
+          }
+        ]
+      }
+    },
+    "/api/v1/executions": {
+      "get": {
+        "tags": [
+          "fcs"
+        ],
+        "operationId": "listExecutions",
+        "summary": "제어 실행 이력",
+        "description": "TTAK.KO-10.0937 6.5 '제어 명령, 구동 시간 등 제어 이력 정보를 조회할 수 있어야 한다'. 모든 행에 origin(RULE/MANUAL)과 권한 출처가 남는다 - 권한 없는 실행 레코드는 DB 제약상 존재할 수 없다.",
+        "parameters": [
+          {
+            "name": "origin",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "RULE",
+                "MANUAL"
+              ]
+            }
+          },
+          {
+            "$ref": "#/components/parameters/installId"
+          },
+          {
+            "$ref": "#/components/parameters/since"
+          },
+          {
+            "$ref": "#/components/parameters/until"
+          },
+          {
+            "$ref": "#/components/parameters/limit"
+          },
+          {
+            "$ref": "#/components/parameters/offset"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "정상",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExecutionPage"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/device-property": {
+      "patch": {
+        "tags": [
+          "ems"
+        ],
+        "operationId": "setDeviceProperty",
+        "summary": "디바이스 속성 설정 (수집 주기 · 이벤트 임계값 · 전송 모드)",
+        "description": "TTAK.KO-10.0937 6.4-2 '데이터 수집 주기 및 구역을 지정하여 환경 데이터를 수집할 수 있어야 한다', 부속서 A 1.3 '사용자가 데이터 수집 주기를 지정할 수 있어야 하며', '알림 설정 조건(기준값 초과/미달)을 지정할 수 있어야 한다'에 대응한다.\n\nTTAK.KO-10.0943 8.1.3.2 REQ_SET_DEVICE_PROPERTY 로 나간다. 표 7-15 의 8개 필드 중 Transfer Mode · Period · Lower Value · Upper Value 네 개만 쓴다.\n\nselector 로 개별(install_id) 또는 구역 일괄(greenhouse_id, 선택적으로 install_location · subtype 으로 좁힘)을 모두 덮는다. 둘은 배타이며 구역의 기본 의미는 온실 전체다 (F-093). 쓰기 경로가 늘어날수록 승인 게이트 주변의 검증 표면이 넓어지므로 경로를 하나로 유지한다.\n\n**이 경로는 Value 를 쓰지 않는다.** 구동기 제어값은 오직 POST /api/v1/control 과 POST /api/v1/rules/{ruleId}/execute 로만 나간다 — 승인 게이트를 우회하는 제어 경로를 만들지 않는다.\n\n구역 일괄에서 대상 중 하나라도 Value Type 이 맞지 않으면 **전량 거부(422)** 한다. 부분 적용은 어느 장치까지 적용됐는지를 화면이 되물을 수단이 없다 (F-088 · F-093).",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/userId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DevicePropertyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "적용된 디바이스 목록",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DevicePage"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableTarget"
+          },
+          "504": {
+            "$ref": "#/components/responses/NodeTimeout"
+          }
+        },
+        "security": [
+          {
+            "UserIdHeader": []
+          }
+        ]
+      }
+    },
+    "/api/v1/rules/{ruleId}/reject": {
+      "post": {
+        "tags": [
+          "mms"
+        ],
+        "operationId": "rejectRule",
+        "summary": "규칙 초안 거부 (사람 검토 지점)",
+        "description": "TTAK.KO-10.0937 부속서 A 3.2 절차 3 — '사용자는 최종 의사결정 후 제어 조건 조정을 한다'. 거부는 영속 상태이며 되돌릴 수 없다. 되살리려면 새 규칙을 만든다.\n\n거부된 규칙은 action_json · target_install_id 를 가질 수 없고 승인으로 전환되지 않는다 — schema.sql 의 CHECK 4종(거부자 동시성 · 사유 동시성 · 사유 공백 금지 · 승인과 배타)과 트리거 1종(trg_rule_reject_immutable)이 강제한다.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/userId"
+          },
+          {
+            "name": "ruleId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RejectRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "거부됨",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rule"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "이미 승인·거부된 규칙",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "UserIdHeader": []
+          }
+        ]
+      }
+    },
+    "/api/v1/sim/inject": {
+      "post": {
+        "tags": [
+          "conformance"
+        ],
+        "operationId": "injectVector",
+        "summary": "위반 프레임 주입 (simulate · replay 모드 전용)",
+        "description": "TTAK.KO-10.0943 7.3.1 위반 판정을 화면에서 실행 가능하게 하는 경로다. 기능 2 의 주입 버튼 8종과 2차 발표의 '심사위원 임의 선택'이 이것을 쓴다.\n\n골든 벡터 X01~X08 은 전부 N->G 수신 방향이라 구동기로 가는 경로가 아니다. 그래도 오용을 막기 위해 **hardware 모드에서는 409** 로 거부한다 — 실물 링크에 조작된 프레임을 흘리면 실측 로그의 신뢰성이 깨진다(CLAUDE.md 1-1).\n\n운영 데이터를 바꾸지 않는다. 수신 경로에 바이트를 넣을 뿐이며 결과는 frame_log · frame_violation 에 다른 프레임과 같은 방식으로 기록된다.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/userId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InjectRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "주입함. 결과는 SSE frame/violation 으로 온다",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Frame"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "409": {
+            "description": "hardware 모드에서는 주입할 수 없다",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "UserIdHeader": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "parameters": {
+      "limit": {
+        "name": "limit",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 500,
+          "default": 100
+        }
+      },
+      "offset": {
+        "name": "offset",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0
+        }
+      },
+      "since": {
+        "name": "since",
+        "in": "query",
+        "description": "이 시각 이후(포함). ISO 8601",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "until": {
+        "name": "until",
+        "in": "query",
+        "description": "이 시각 이전(제외). ISO 8601",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "installId": {
+        "name": "install_id",
+        "in": "query",
+        "description": "장치설치정보 식별자 (1369-P1 7.2.2.5)",
+        "required": false,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "subtype": {
+        "name": "subtype",
+        "in": "query",
+        "description": "측정/장치 항목 이름. 열거하지 않는다 - 레지스트리에 있는 값이면 된다",
+        "required": false,
+        "schema": {
+          "type": "string"
+        },
+        "example": "TEMPERATURE"
+      },
+      "nodeId": {
+        "name": "nodeId",
+        "in": "path",
+        "required": true,
+        "description": "TTAK.KO-10.0943 Node ID (20 bit)",
+        "schema": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1048575
+        }
+      },
+      "ruleId": {
+        "name": "ruleId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "userId": {
+        "name": "X-User-Id",
+        "in": "header",
+        "required": true,
+        "description": "지시/승인한 사용자 식별자 (1369-P1 7.2.2.6 사용자정보). 인증 자체는 이 구현의 범위 밖이며, 표준 3종 어디에도 인증 방식 규정이 없다. 승인 게이트가 '누가'를 기록할 수 있게 하는 최소 장치다.",
+        "schema": {
+          "type": "string"
+        }
+      }
+    },
+    "responses": {
+      "NotFound": {
+        "description": "대상 없음",
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        }
+      },
+      "BadRequest": {
+        "description": "요청 형식 오류 또는 DB 제약 위반",
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        }
+      },
+      "NodeTimeout": {
+        "description": "노드가 Timeout x (Retry Count + 1) 안에 응답하지 않음 (TTAK.KO-10.0943 표 7-18). 실행 이력은 남고 result_rsc 는 비어 있다.",
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        }
+      },
+      "UnprocessableTarget": {
+        "description": "대상 장치의 Value Type 과 임계값이 맞지 않는다. 구역 일괄이면 **전량 거부**한다 - 부분 적용은 화면이 어느 장치에 적용됐는지 되물을 수단이 없다 (F-088 · F-093).",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem"
+            },
+            "examples": {
+              "typeMismatch": {
+                "value": {
+                  "type": "about:blank",
+                  "title": "임계값이 대상 장치의 Value Type 과 맞지 않는다",
+                  "status": 422,
+                  "detail": "install_id=... 의 Value Type 은 UINT 인데 lower_value=-5 를 받았다. 구역 대상 12건 전량 거부.",
+                  "clause": "0943 표 7-14",
+                  "siap_rsc": "INVALID_DATA_TYPE"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "Problem": {
+        "type": "object",
+        "description": "RFC 9457 형식에 clause 를 더했다. 표준에서 유래한 거부는 조항 번호를 함께 돌려준다.",
+        "required": [
+          "title",
+          "status"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "default": "about:blank"
+          },
+          "title": {
+            "type": "string"
+          },
+          "status": {
+            "type": "integer"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "clause": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "근거 표준 조항. 예: 0937 A.3.2",
+            "examples": [
+              "0937 A.3.2",
+              "0943 7.3.1"
+            ]
+          },
+          "constraint": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "차단한 DB 제약/트리거 이름",
+            "examples": [
+              "trg_exec_requires_approval"
+            ]
+          },
+          "siap_rsc": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "INVALID_VERSION",
+              "INVALID_GCG_ID",
+              "INVALID_NODE_ID",
+              "INVALID_DEVICE_ID",
+              "INVALID_MESSAGE_TYPE",
+              "INVALID_DATA_TYPE",
+              "INVALID_DATA_SUBTYPE",
+              "INVALID_TRANSMISSION_TYPE",
+              "INVALID_FORMAT",
+              null
+            ],
+            "description": "F-093 — 0943 표 7-10 Response Status Code. 요청이 표준 인코딩 규칙에 걸려 거부될 때 어느 코드인지 돌려준다."
+          }
+        },
+        "examples": [
+          {
+            "type": "about:blank",
+            "title": "미승인 규칙으로는 제어를 실행할 수 없다",
+            "status": 409,
+            "detail": "control_execution requires an approved rule",
+            "clause": "0937 A.3.2",
+            "constraint": "trg_exec_requires_approval"
+          }
+        ]
+      },
+      "Page": {
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {}
+          },
+          "total": {
+            "type": "integer"
+          },
+          "limit": {
+            "type": "integer"
+          },
+          "offset": {
+            "type": "integer"
+          }
+        }
+      },
+      "Health": {
+        "type": "object",
+        "required": [
+          "status",
+          "run_mode",
+          "proto_mode",
+          "io_thread_alive",
+          "link"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "degraded",
+              "down"
+            ]
+          },
+          "run_mode": {
+            "type": "string",
+            "enum": [
+              "hardware",
+              "replay",
+              "simulate"
+            ]
+          },
+          "proto_mode": {
+            "type": "string",
+            "enum": [
+              "strict",
+              "extended"
+            ],
+            "description": "strict=표준 원문 그대로(0x0800 중복 포함), extended=중복 해소 제안안"
+          },
+          "io_thread_alive": {
+            "type": "boolean"
+          },
+          "public_data_fallback": {
+            "type": "boolean",
+            "description": "true 면 기상청 API 키 부재로 fixtures 목업을 쓰는 중"
+          },
+          "link": {
+            "type": "object",
+            "description": "SiapLink.stats() 그대로",
+            "properties": {
+              "connected": {
+                "type": "boolean"
+              },
+              "url": {
+                "type": "string",
+                "examples": [
+                  "socket://127.0.0.1:5556"
+                ]
+              },
+              "rx": {
+                "type": "integer"
+              },
+              "tx": {
+                "type": "integer"
+              },
+              "violations": {
+                "type": "integer"
+              },
+              "retries": {
+                "type": "integer"
+              },
+              "uptime": {
+                "type": "number"
+              }
+            }
+          }
+        }
+      },
+      "Node": {
+        "type": "object",
+        "description": "TTAK.KO-10.0943 표 7-13 NODE_PROPERTY + 등록 시각. 노드 종류를 나타내는 필드가 없다 - 표준에도 없고, 있으면 '서버 코드 수정 0줄'이 깨진다.",
+        "required": [
+          "node_id",
+          "gcg_id",
+          "status",
+          "device_count"
+        ],
+        "properties": {
+          "node_id": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1048575,
+            "description": "0943 Node ID (20 bit)"
+          },
+          "gcg_id": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1048575,
+            "description": "0943 GCG ID (20 bit)"
+          },
+          "sw_version": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 255
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "NORMAL",
+              "ABNORMAL",
+              "UNKNOWN"
+            ],
+            "description": "0943 표 7-13 Status"
+          },
+          "device_count": {
+            "type": "integer",
+            "description": "0943 표 7-13 Number of Devices"
+          },
+          "connected_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "8.1.1 연결 설정 완료 시각"
+          },
+          "last_seen_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "마지막 프레임 수신 시각. KEEP_ALIVE 포함"
+          }
+        }
+      },
+      "NodePage": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Page"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "items": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/Node"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "Device": {
+        "type": "object",
+        "description": "1369-P1 7.2.2.5 장치설치정보. siap_ 접두사 필드가 0943 연동 지점이며, 두 표준을 잇는 곳은 이 테이블 하나뿐이다.",
+        "required": [
+          "id",
+          "device_name",
+          "siap_device_id",
+          "installed_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "장치설치정보 식별자"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "device_name": {
+            "type": "string"
+          },
+          "installed_at": {
+            "type": "string",
+            "format": "date-time",
+            "minLength": 1,
+            "description": "1369-P1 6.2.5 설치일자 (F-158). required + minLength — 컬럼 존재만으로는 값 보장이 아니다(F-162)"
+          },
+          "install_location": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "install_loc_unit": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "device_info_id": {
+            "type": "string",
+            "description": "1369-P1 7.2.2.4 장치정보 참조"
+          },
+          "device_kind": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "SENSOR",
+              "ACTUATOR",
+              null
+            ],
+            "description": "0943 표 7-14 Device Type"
+          },
+          "siap_node_id": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "siap_device_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 255
+          },
+          "siap_subtype": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 255,
+            "description": "0943 표 7-14 Subtype 코드값"
+          },
+          "subtype": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Subtype 레지스트리 조회 결과 이름. 코드-이름 대응은 docs/subtype-registry.md 가 정본이며 API 스키마에 열거하지 않는다.",
+            "examples": [
+              "TEMPERATURE",
+              "IRRIGATION_VALVE"
+            ]
+          },
+          "unit": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "1369-P1 6.3.2. 프레임에는 실리지 않으므로 데이터 계층이 보관한다"
+          },
+          "lower_limit": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "upper_limit": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "precision_val": {
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        }
+      },
+      "DevicePage": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Page"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "items": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/Device"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "TelemetryPoint": {
+        "type": "object",
+        "description": "1369-P1 6.3.3 환경상태 데이터 + 7.2.4.3 환경측정 관계. 감우(RAIN_DETECTION)는 단위만 가질 수 있고 오차범위/유효범위를 갖지 않는다(6.3.3.8 본문 우선, DB CHECK 로 강제).",
+        "required": [
+          "id",
+          "measured_at",
+          "subtype",
+          "value"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "환경상태 데이터 식별자"
+          },
+          "measured_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "location": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "location_unit": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "install_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "측정한 장치설치정보"
+          },
+          "subtype": {
+            "type": "string",
+            "examples": [
+              "TEMPERATURE"
+            ]
+          },
+          "value": {
+            "type": "number"
+          },
+          "unit": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "error_range": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "lower_limit": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "upper_limit": {
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        }
+      },
+      "TelemetryPage": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Page"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "items": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/TelemetryPoint"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "DeviceState": {
+        "type": "object",
+        "description": "1369-P1 6.3.4 장치상태 데이터. 서브타입별 속성은 attributes 에 그대로 담는다 - 서브타입 테이블의 컬럼명이 곧 키다.",
+        "required": [
+          "id",
+          "reported_at",
+          "subtype",
+          "attributes"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "reported_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "install_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "subtype": {
+            "type": "string",
+            "examples": [
+              "IRRIGATION_VALVE"
+            ]
+          },
+          "attributes": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "예: 창개폐기 {open_level, valid_range} / 관수펌프 {pressure, pressure_valid_range, spray_level, spray_valid_range}",
+            "examples": [
+              {
+                "open_level": 100,
+                "valid_range": "0-100"
+              }
+            ]
+          }
+        }
+      },
+      "DeviceStatePage": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Page"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "items": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/DeviceState"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "Alert": {
+        "type": "object",
+        "required": [
+          "id",
+          "raised_at",
+          "kind",
+          "severity",
+          "message",
+          "install_id",
+          "siap_nec",
+          "frame_id",
+          "ack_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "raised_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "NO_DATA",
+              "NODE_ERROR",
+              "DISCONNECT",
+              "THRESHOLD",
+              "CONTROL_TIMEOUT"
+            ]
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "INFO",
+              "WARN",
+              "CRITICAL"
+            ]
+          },
+          "install_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "siap_nec": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 255,
+            "description": "0943 표 7-12 Notify Error Code"
+          },
+          "message": {
+            "type": "string"
+          },
+          "ack_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "frame_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "F-085 — 이 알림을 유발한 프레임. NEC 알림(X08)을 화면에서 원본 프레임과 결속하려면 필요하다. 임계값·타임아웃 등 프레임이 원인이 아닌 알림은 null"
+          }
+        },
+        "description": "0937 6.4-3 미수집 알림 · 0943 7.3.2 NEC. F-092 — siap_nec 가 있는 알림은 원본 프레임이 존재하므로 frame_id 가 반드시 있다. 임계값·타임아웃처럼 프레임이 원인이 아닌 알림만 null 이다. 속성 존재만 요구하면 구현이 생략해도 계약을 통과한다.",
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "siap_nec": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "siap_nec"
+              ]
+            },
+            "then": {
+              "properties": {
+                "frame_id": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            },
+            "description": "F-092 — NEC 알림(X08)은 프레임에서 유래한다. 화면이 알림에서 프레임 상세로 이동하는 유일한 수단이다."
+          }
+        ]
+      },
+      "AlertPage": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Page"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "items": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/Alert"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "FrameHeader": {
+        "type": "object",
+        "description": "0943 그림 7-1. 전송된 원본 비트값을 그대로 보존한다 - 표준 미정의값(예: Transmission Type=0x03)도 담겨야 위반을 화면에 보여줄 수 있다.",
+        "required": [
+          "version",
+          "msg_type",
+          "trans_type",
+          "msg_id",
+          "payload_len",
+          "gcg_id",
+          "node_id"
+        ],
+        "properties": {
+          "version": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 255
+          },
+          "msg_type": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 16383,
+            "description": "14 bit"
+          },
+          "trans_type": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3,
+            "description": "2 bit. 0x03 은 표 7-6 미정의 - 그대로 보존한다"
+          },
+          "msg_id": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 65535
+          },
+          "payload_len": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 65535
+          },
+          "gcg_id": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1048575
+          },
+          "node_id": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1048575
+          }
+        }
+      },
+      "Violation": {
+        "type": "object",
+        "description": "siap/codec.py 의 판정 결과. 서비스 계층과 화면은 이 값을 렌더링만 한다.",
+        "required": [
+          "code",
+          "code_name",
+          "clause",
+          "detail"
+        ],
+        "properties": {
+          "code": {
+            "type": "integer",
+            "description": "0943 표 7-10 응답 상태 코드"
+          },
+          "code_name": {
+            "type": "string",
+            "examples": [
+              "INVALID_FORMAT"
+            ]
+          },
+          "clause": {
+            "type": "string",
+            "examples": [
+              "7.3.1"
+            ]
+          },
+          "detail": {
+            "type": "string",
+            "examples": [
+              "Payload Length=24, 실제 수신 18byte"
+            ]
+          }
+        }
+      },
+      "Frame": {
+        "type": "object",
+        "required": [
+          "id",
+          "t",
+          "direction",
+          "raw_hex",
+          "is_valid",
+          "fields",
+          "judgement"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "t": {
+            "type": "number",
+            "description": "수신 시각 (epoch seconds)"
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "rx",
+              "tx"
+            ]
+          },
+          "raw_hex": {
+            "type": "string",
+            "pattern": "^[0-9A-F]*$",
+            "examples": [
+              "120000000100000000100003"
+            ]
+          },
+          "header": {
+            "$ref": "#/components/schemas/FrameHeader"
+          },
+          "kind": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "해석된 논리 메시지 종류. 0x0800 중복은 페이로드 길이로 판별한 결과이며, 판별 불가면 null 이다.",
+            "examples": [
+              "NOTI_DEVICE_VALUE"
+            ]
+          },
+          "element_count": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "가변 요소 개수 N. 표준이 전달 필드를 정의하지 않아 Payload Length 에서 역산한다"
+          },
+          "is_valid": {
+            "type": "boolean"
+          },
+          "violations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Violation"
+            }
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FieldSlice"
+            },
+            "description": "F-085 — 헤더 7필드 + 고정부 + 가변 요소 N개분의 전체 분해. 기능 2 화면의 필드 분해 패널이 이것만 읽는다."
+          },
+          "judgement": {
+            "type": "string",
+            "enum": [
+              "normal",
+              "violation",
+              "alert"
+            ],
+            "description": "F-060 — 정상 NEC 알림은 위반이 아니다. is_valid 만으로는 alert 를 구분할 수 없다. 골든 벡터의 judgement 와 같은 값이다."
+          }
+        }
+      },
+      "FramePage": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Page"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "items": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/Frame"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "StreamEvent": {
+        "description": "SSE 이벤트의 data 필드. event 이름에 따라 스키마가 달라진다.",
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/Node"
+          },
+          {
+            "$ref": "#/components/schemas/Frame"
+          },
+          {
+            "$ref": "#/components/schemas/Alert"
+          },
+          {
+            "$ref": "#/components/schemas/Execution"
+          }
+        ]
+      },
+      "PublicDataSource": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "provider"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "registered_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "source_url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "license": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "scope": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "PublicDataSourcePage": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Page"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "items": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/PublicDataSource"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "PublicDataRecord": {
+        "type": "object",
+        "required": [
+          "id",
+          "source_id",
+          "fetched_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "source_id": {
+            "type": "string"
+          },
+          "fetched_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "period_from": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "period_to": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "region": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "item": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "payload": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": true,
+            "description": "출처 응답 원문. 구조를 강제하지 않는다"
+          }
+        }
+      },
+      "PublicDataRecordPage": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Page"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "items": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/PublicDataRecord"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "ControlAction": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "제어 명령의 '무엇을'. **대상 장치를 담지 않는다** - '어느 장치를'은 RULE 이면 control_rule.target_install_id, MANUAL 이면 ManualControlRequest.install_id 가 유일한 출처다. 두 곳에 두면 어긋난다 (F-049).\n\nF-051 - 이 객체는 닫혀 있다. additionalProperties 를 생략하면 JSON Schema 기본값이 '허용'이라 install_id 를 몰래 실을 수 있었다.\n\nF-054 - value 의 허용 범위는 value_type 에 따라 달라진다. TTAK.KO-10.0943 표 7-14 의 Value 는 32 bit 이고 INT/UNSIGNED INT/FLOAT 를 구분한다. 범위 밖 값은 SIAP 빌더에서 늦게 실패하는 대신 요청 단계에서 거부한다.\\n\\nF-055 - FLOAT 도 범위가 있다. type: number 만 두면 1e39 처럼 single precision 으로 패킹할 수 없는 값이 승인 스냅샷까지 들어간 뒤 전송 단계에서 늦게 실패한다.",
+        "required": [
+          "value",
+          "value_type"
+        ],
+        "properties": {
+          "value": {
+            "type": "number",
+            "description": "0943 표 7-14 Value (32 bit). 정수 범위는 아래 allOf 가 value_type 별로 좁힌다"
+          },
+          "value_type": {
+            "type": "string",
+            "enum": [
+              "INT",
+              "UINT",
+              "FLOAT"
+            ],
+            "description": "0943 표 7-14. 0x03 은 Reserved 이므로 받지 않는다"
+          },
+          "duration_sec": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0,
+            "description": "구동 시간. 0937 6.5 '구동 시간 등 제어 이력'"
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "value_type": {
+                  "const": "INT"
+                }
+              },
+              "required": [
+                "value_type"
+              ]
+            },
+            "then": {
+              "properties": {
+                "value": {
+                  "type": "integer",
+                  "minimum": -2147483648,
+                  "maximum": 2147483647
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "value_type": {
+                  "const": "UINT"
+                }
+              },
+              "required": [
+                "value_type"
+              ]
+            },
+            "then": {
+              "properties": {
+                "value": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 4294967295
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "value_type": {
+                  "const": "FLOAT"
+                }
+              },
+              "required": [
+                "value_type"
+              ]
+            },
+            "then": {
+              "properties": {
+                "value": {
+                  "type": "number",
+                  "minimum": -3.4028234663852886e+38,
+                  "maximum": 3.4028234663852886e+38,
+                  "description": "F-055 - IEEE-754 single precision 의 유한 표현 범위. 표 7-14 의 Value 는 32 bit 이고 FLOAT 의 표현 방식은 표준 미규정이라 single precision 으로 결정했다(SIAP 명세서 7). 이 범위를 넘으면 패킹 자체가 불가능하므로 요청 단계에서 거부한다. 범위 안의 반올림(정밀도 손실)은 float32 의 성질이므로 오류가 아니다."
+                }
+              }
+            }
+          }
+        ],
+        "examples": [
+          {
+            "value": 1,
+            "value_type": "UINT",
+            "duration_sec": 1200
+          }
+        ]
+      },
+      "Rule": {
+        "type": "object",
+        "description": "1369-P1 외 0937 6.3 제어 규칙. 승인 전에는 action 과 target_install_id 가 반드시 null 이고, 승인 후에는 둘 다 반드시 존재하며 불변이다.\n\nF-091 — generation 과 승인·거부 증거는 nullable 이지만 **필수**다. 속성을 통째로 생략하면 화면이 '생성 경로 미상'과 '값이 null'을 구별할 수 없고, 구현이 필드를 빠뜨려도 계약 위반이 되지 않는다.",
+        "required": [
+          "id",
+          "created_at",
+          "origin",
+          "draft_text",
+          "approved",
+          "generation",
+          "approved_at",
+          "approved_by",
+          "rejected_at",
+          "rejected_by",
+          "reject_reason"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "model_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "0937 6.3 제어 모델 메타정보 참조"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "origin": {
+            "type": "string",
+            "enum": [
+              "AI_DRAFT",
+              "WIZARD",
+              "SCRIPT"
+            ]
+          },
+          "draft_text": {
+            "type": "string",
+            "description": "AI 초안 또는 사용자 입력 원문(자연어)"
+          },
+          "condition_expr": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "action": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ControlAction"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "target_install_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "승인된 제어 대상. 승인 스냅샷의 일부이며 승인 후 불변"
+          },
+          "approved": {
+            "type": "boolean"
+          },
+          "approved_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "approved_by": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "승인한 사용자. 승인 후 위조 불가"
+          },
+          "generation": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "AI",
+              "THRESHOLD_FALLBACK",
+              "WIZARD",
+              "SCRIPT",
+              null
+            ],
+            "description": "F-083 — 초안이 실제로 어느 경로로 만들어졌는가. AI 제공자 부재로 threshold 로 폴백했으면 THRESHOLD_FALLBACK. 화면이 이 값을 표시한다"
+          },
+          "rejected_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "rejected_by": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reject_reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "origin": {
+                  "const": "AI_DRAFT"
+                }
+              },
+              "required": [
+                "origin"
+              ]
+            },
+            "then": {
+              "properties": {
+                "generation": {
+                  "type": "string",
+                  "enum": [
+                    "AI",
+                    "THRESHOLD_FALLBACK"
+                  ]
+                }
+              }
+            },
+            "description": "F-091 · F-083 — AI 초안이면 서버가 실행한 경로가 반드시 남는다. control_rule 의 CHECK 와 같은 의미."
+          },
+          {
+            "if": {
+              "properties": {
+                "rejected_at": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "rejected_at"
+              ]
+            },
+            "then": {
+              "required": [
+                "reject_reason"
+              ],
+              "properties": {
+                "reject_reason": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "rejected_by": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            },
+            "description": "F-091 — 거부에는 사유와 거부자가 반드시 남는다(0937 부속서 A 3.2 절차 3). 사유 없는 거부는 '사람이 검토했다'의 증거가 되지 못한다."
+          }
+        ]
+      },
+      "RulePage": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Page"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "items": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/Rule"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "RuleDraftRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "F-083 — 초안 본문을 클라이언트가 보내지 않는다. origin=AI_DRAFT 면 서버가 mms.run_model() 로 모델을 돌려 draft_text 를 만든다. 클라이언트가 쓴 문장을 AI_DRAFT 로 저장하면 실제 AI 실행 증거가 사라진다.\n\naction / target_install_id 는 어느 경우에도 받지 않는다 — 생성형 AI 출력이 실행 가능한 형태로 저장될 경로를 만들지 않는다(0937 부속서 A 3.2).\n\nF-091 — required 만으로는 null 을 막지 못한다. JSON Schema 에서 required 는 '키가 있는가'만 보고 값이 null 이어도 통과한다. 분기마다 타입까지 좁힌다.",
+        "required": [
+          "origin"
+        ],
+        "properties": {
+          "origin": {
+            "type": "string",
+            "enum": [
+              "AI_DRAFT",
+              "WIZARD",
+              "SCRIPT"
+            ]
+          },
+          "model_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "control_model.id. AI_DRAFT 면 필수"
+          },
+          "inputs": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": true,
+            "description": "모델 입력. public_data_record_id 등 (0937 6.3-3·6.3-4)"
+          },
+          "draft_text": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "WIZARD/SCRIPT 일 때만. AI_DRAFT 면 서버가 만든다"
+          },
+          "condition_expr": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "origin": {
+                  "const": "AI_DRAFT"
+                }
+              },
+              "required": [
+                "origin"
+              ]
+            },
+            "then": {
+              "required": [
+                "model_id"
+              ],
+              "properties": {
+                "draft_text": {
+                  "type": "null"
+                },
+                "model_id": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "origin": {
+                  "const": "WIZARD"
+                }
+              },
+              "required": [
+                "origin"
+              ]
+            },
+            "then": {
+              "required": [
+                "draft_text"
+              ],
+              "properties": {
+                "draft_text": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "origin": {
+                  "const": "SCRIPT"
+                }
+              },
+              "required": [
+                "origin"
+              ]
+            },
+            "then": {
+              "required": [
+                "draft_text"
+              ],
+              "properties": {
+                "draft_text": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          }
+        ]
+      },
+      "ApproveRequest": {
+        "type": "object",
+        "description": "승인 스냅샷 전체를 한 번에 확정한다. 부분 승인이 없다.",
+        "required": [
+          "condition_expr",
+          "action",
+          "target_install_id"
+        ],
+        "properties": {
+          "condition_expr": {
+            "type": "string"
+          },
+          "action": {
+            "$ref": "#/components/schemas/ControlAction"
+          },
+          "target_install_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "examples": [
+          {
+            "condition_expr": "forecast.tmax > 33",
+            "action": {
+              "value": 1,
+              "value_type": "UINT",
+              "duration_sec": 1200
+            },
+            "target_install_id": "inst-valve-01"
+          }
+        ]
+      },
+      "ManualControlRequest": {
+        "type": "object",
+        "required": [
+          "install_id",
+          "action"
+        ],
+        "properties": {
+          "install_id": {
+            "type": "string"
+          },
+          "action": {
+            "$ref": "#/components/schemas/ControlAction"
+          }
+        },
+        "additionalProperties": false,
+        "examples": [
+          {
+            "install_id": "inst-valve-01",
+            "action": {
+              "value": 0,
+              "value_type": "UINT"
+            }
+          }
+        ]
+      },
+      "Execution": {
+        "type": "object",
+        "description": "0937 6.5 제어 이력. origin 이 RULE 이면 rule_id 가, MANUAL 이면 issued_by 가 채워진다 - 둘 다 비어 있는 행은 DB CHECK 상 존재할 수 없다.",
+        "required": [
+          "id",
+          "origin",
+          "install_id",
+          "issued_at",
+          "command"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "origin": {
+            "type": "string",
+            "enum": [
+              "RULE",
+              "MANUAL"
+            ]
+          },
+          "rule_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "issued_by": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "install_id": {
+            "type": "string"
+          },
+          "issued_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "command": {
+            "$ref": "#/components/schemas/ControlAction"
+          },
+          "siap_msg_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 65535,
+            "description": "0943 Message Identifier. 응답 매칭 키의 일부"
+          },
+          "result_rsc": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 255,
+            "description": "0943 표 7-10. 노드 응답 수신 전에는 null"
+          },
+          "result_rsc_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "examples": [
+              "SUCCESS"
+            ]
+          },
+          "responded_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
+      "ExecutionPage": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Page"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "items": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/Execution"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "DevicePropertySelector": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "F-088 · F-093 — 개별(install_id) 과 구역(greenhouse_id) 은 배타다. 둘 다 없거나 둘 다 있으면 400.\n\n구역의 기본 의미는 **온실 전체**이며 install_location · subtype 은 그것을 좁히는 선택 항목이다 (0937 6.4-2 '구역을 지정하여'). 온실 전체 일괄이 정당한 사용이므로 install_location 을 필수로 하지 않는다.\n\nF-093 — 모든 선택자 필드에서 null 을 제거했다. nullable 이면 {\"install_id\": null} 이 required 와 minProperties 를 모두 통과해 대상 없는 요청이 전송 단계까지 내려간다.",
+        "properties": {
+          "install_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "device_install_info.id - 개별 지정"
+          },
+          "greenhouse_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "greenhouse_info.id - 구역 일괄 (온실 전체)"
+          },
+          "install_location": {
+            "type": "string",
+            "minLength": 1,
+            "description": "device_install_info.install_location - 구역을 좁히는 선택 항목"
+          },
+          "subtype": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 255,
+            "description": "0943 표 7-14 Subtype. 같은 종류만 일괄 적용할 때"
+          }
+        },
+        "minProperties": 1,
+        "oneOf": [
+          {
+            "required": [
+              "install_id"
+            ],
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "greenhouse_id"
+                  ]
+                },
+                {
+                  "required": [
+                    "install_location"
+                  ]
+                },
+                {
+                  "required": [
+                    "subtype"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "required": [
+              "greenhouse_id"
+            ],
+            "not": {
+              "required": [
+                "install_id"
+              ]
+            }
+          }
+        ]
+      },
+      "DevicePropertyPatch": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "0943 표 7-15 DEVICE_PROPERTY 중 사용자가 정하는 4개 필드. F-088 — 최소 한 개는 있어야 한다. 임계값은 표 7-15 USER DEPENDENT 이며 CLAUDE.md 3.5 에 따라 DEVICE_MAIN_INFO.Value Type 을 따른다. 스키마에서는 32bit 표현 범위를 강제하고, 대상 장치의 Value Type 별 정합은 서버가 검사해 400 으로 거부한다.\n\nF-093 — 대상 장치의 Value Type 불일치는 스키마로 표현할 수 없다. 서버가 검사해 422(siap_rsc=INVALID_DATA_TYPE)로 거부하며, 구역 일괄은 대상 중 하나라도 실패하면 전량 거부한다.",
+        "properties": {
+          "transfer_mode": {
+            "type": "string",
+            "enum": [
+              "PERIODIC",
+              "EVENT",
+              "BOTH"
+            ],
+            "description": "표 7-15 Transfer Mode (2bit) — Periodic 0x00 / Event 0x01 / Both 0x02"
+          },
+          "period_sec": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 16383,
+            "description": "표 7-15 Period (14bit, sec)"
+          },
+          "lower_value": {
+            "type": "number",
+            "description": "표 7-15 Lower Value (32bit) — Event/Both 일 때 이하면 전송",
+            "minimum": -3.4028234663852886e+38,
+            "maximum": 3.4028234663852886e+38
+          },
+          "upper_value": {
+            "type": "number",
+            "description": "표 7-15 Upper Value (32bit) — Event/Both 일 때 초과면 전송",
+            "minimum": -3.4028234663852886e+38,
+            "maximum": 3.4028234663852886e+38
+          }
+        },
+        "minProperties": 1
+      },
+      "DevicePropertyRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "selector",
+          "property"
+        ],
+        "properties": {
+          "selector": {
+            "$ref": "#/components/schemas/DevicePropertySelector"
+          },
+          "property": {
+            "$ref": "#/components/schemas/DevicePropertyPatch"
+          }
+        }
+      },
+      "FieldSlice": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "프로토콜 계층(siap/codec.py)이 판독한 필드 하나. 화면은 이것을 렌더링만 한다 — 화면이 비트를 다시 자르면 표준 해석이 두 곳에 생긴다(CLAUDE.md 3.4).",
+        "required": [
+          "name",
+          "bit_offset",
+          "bit_width",
+          "raw"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "표준 표기 그대로. 예: Message Type · Subtype"
+          },
+          "bit_offset": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "프레임 선두로부터의 비트 오프셋"
+          },
+          "bit_width": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 32
+          },
+          "raw": {
+            "type": "integer",
+            "description": "원시 비트열을 부호 없는 정수로"
+          },
+          "display": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "서버가 만든 표시 문자열. 없으면 raw 를 그대로 보인다"
+          },
+          "element": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "가변 요소 인덱스. 헤더·고정부는 null"
+          },
+          "clause": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "이 필드를 정의한 표준 조항. 예: 표 7-14"
+          }
+        }
+      },
+      "RejectRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "reason"
+        ],
+        "description": "F-083 — 거부는 영속 상태다(control_rule.rejected_at). 거부 사실이 남지 않으면 초안 생성 직후와 거부 후가 구별되지 않아 '사람 검토 지점'이 기록으로 증명되지 않는다.",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "InjectRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "vector_id"
+        ],
+        "description": "F-084 — 임의 hex 를 받지 않는다. 골든 벡터 ID 열거만 받으며 바이트는 contracts/vectors/golden.jsonl 에서 온다. 영상 속 hex 와 제출 벡터가 같아야 공고문의 '진위·창작성' 조항을 통과한다.",
+        "properties": {
+          "vector_id": {
+            "type": "string",
+            "enum": [
+              "X01",
+              "X02",
+              "X03",
+              "X04",
+              "X05",
+              "X06",
+              "X07",
+              "X08"
+            ]
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "UserIdHeader": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-User-Id",
+        "description": "**이것은 인증이 아니다.** 호출자가 스스로 주장하는 사용자 식별자이며, 서버는 그 문자열이 1369-P1 7.2.2.6 사용자정보에 실재하는지만 확인한다.\n\n표준 3종(0943 / 1369-Part1 / 0937) 어디에도 인증 방식 규정이 없어 범위 밖으로 두었다. 따라서 승인 기록이 보장하는 것은 '이 식별자가 제출되었고 이후 위조되지 않았다'까지이며, '그 사람이 실제로 최종 결정했다'는 신원 보장이 아니다 (F-052).\n\nlocalhost 단일 사용자 데모 범위의 결정이다. 실서비스로 넘어가려면 세션 기반 사용자 확인이 필요하다."
+      }
+    }
+  },
+  "security": []
+}
