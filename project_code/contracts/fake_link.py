@@ -70,6 +70,8 @@ class FakeSiapLink:
     def send(self, frame: Frame, timeout: float | None = None) -> Frame | None:
         """대응 관계만 흉내낸다: 등록된 Request 에는 즉시 SUCCESS Response,
         Notify 에는 None. 페이로드는 만들지 않는다 — RSC 뿐이다."""
+        if frame.header is None:
+            return None
         self._stats["tx"] += 1
         res_kind = RESPONSE_OF.get(frame.kind) if frame.kind else None
         if res_kind is None:
@@ -125,6 +127,8 @@ class FakeFrameBuilder:
                       gcg_id=self._gcg_id, node_id=node_id)
 
     def _reply_header(self, req: Frame, payload_len: int) -> Header:
+        if req.header is None:
+            raise ValueError("header 가 없는 불완전 Frame 에는 회신할 수 없다")
         return Header(version=0x12, msg_type=0, trans_type=req.header.trans_type,
                       msg_id=req.header.msg_id, payload_len=payload_len,
                       gcg_id=req.header.gcg_id, node_id=req.header.node_id)
@@ -171,6 +175,8 @@ class FakeFrameBuilder:
     def res_set_connection(self, req: Frame, rsc: RSC,
                             node: NodeProperty | None = None,
                             devices: tuple[DeviceProperty, ...] = ()) -> Frame:
+        if req.header is None:
+            raise ValueError("header 가 없는 불완전 Frame 에는 회신할 수 없다")
         use_node = node or NodeProperty(sw_version=0, gcg_id=req.header.gcg_id,
                                          node_id=req.header.node_id, status=Status.UNKNOWN,
                                          num_devices=0)

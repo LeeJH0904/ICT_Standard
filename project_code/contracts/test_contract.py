@@ -100,6 +100,9 @@ v=Violation(RSC.INVALID_FORMAT, "INVALID_FORMAT", "7.3.1", "len mismatch")
 f2=Frame(header=h, violations=(v,))
 t("violations 있으면 invalid", not f2.is_valid)
 t("Violation에 조항번호 보존", f2.violations[0].clause=="7.3.1")
+f3=Frame(header=None, raw=b"\x12\x00", violations=(v,))
+t("F-215 불완전 헤더는 합성 없이 None+invalid", f3.header is None and not f3.is_valid)
+t("F-215 불완전 프레임 원본 보존", f3.raw==b"\x12\x00")
 try:
     f.header = h; ok=False
 except Exception: ok=True
@@ -231,7 +234,7 @@ t("F-086 두지 않은 게이트웨이발 빌더 8종의 사유가 계약에 적
                               "REQ_SET_MSG_FLOW_CONTROL_PROFILE", "REQ_GET_DEVICE_PROPERTY")))
 
 # 17. F-106 회귀 — fake_link.FakeSiapLink 가 SiapLink Protocol 을 실제로
-#     만족하는가 (개발_착수_지시서 §3.1 GPT 검증 포인트). "메서드 이름이
+#     만족하는가 (개발_착수_지시서 §3.1 검증자 검증 포인트). "메서드 이름이
 #     hasattr 로 있다"가 아니라 실제 import → 인스턴스화 → 최소 정상 입력
 #     호출 → 반환형 확인까지 간다(CLAUDE.md §6.2 F-091 "호출해서 반환값을
 #     본다" 원칙). 빈 클래스(`class FakeSiapLink: pass`)나 문법 오류로

@@ -47,6 +47,14 @@ def check(name: str, ok: bool, detail: str = "") -> None:
     print(f"  [{mark}] {name}" + (f"  {detail}" if detail and not ok else ""))
 
 
+def _check_no_tx(name: str, link: FakeSiapLink, before: int) -> None:
+    """F-225 — HTTP/DB 거부만으로는 구동기 무동작을 증명하지 못한다.
+    거부 요청 직전의 실제 link TX 계수와 직후 값을 독립 대조한다."""
+    after = int(link.stats().get("tx", -1))
+    check(f"{name}: 거부 전후 제어 TX 증가 0건(F-225)", after == before,
+          f"tx before={before}, after={after}")
+
+
 def _fresh_app(tmp_dir: Path):
     tmp_dir.mkdir(parents=True, exist_ok=True)
     db_path = tmp_dir / "gate_e2e.db"
@@ -83,7 +91,9 @@ def scenario_unapproved_rule_blocked(tmp_dir: Path) -> None:
     check("규칙 초안 생성 201", r.status_code == 201, str(r.status_code))
     rule_id = r.json()["id"]
 
+    tx_before = int(link.stats()["tx"])
     re_ = call(app, "POST", f"/api/v1/rules/{rule_id}/execute")
+    _check_no_tx("미승인 규칙 execute", link, tx_before)
     check("미승인 규칙 execute -> 409", re_.status_code == 409, str((re_.status_code, re_.text)))
     body = re_.json()
     check("409 본문에 constraint=trg_exec_requires_approval",
@@ -104,12 +114,16 @@ def scenario_rejected_rule_blocked(tmp_dir: Path) -> None:
     check("거부 200", rr.status_code == 200, str(rr.status_code))
 
     install_id = _register_install(db_path, 3, 1, 0x85, builder)
+    tx_before = int(link.stats()["tx"])
     ra = call(app, "POST", f"/api/v1/rules/{rule_id}/approve",
               json={"condition_expr": "x", "action": {"value": 1, "value_type": "UINT"},
                     "target_install_id": install_id}, headers={"X-User-Id": "demo-user-1"})
+    _check_no_tx("거부된 규칙 승인 시도", link, tx_before)
     check("거부된 규칙 승인 시도 -> 409", ra.status_code == 409, str((ra.status_code, ra.text)))
 
+    tx_before = int(link.stats()["tx"])
     re_ = call(app, "POST", f"/api/v1/rules/{rule_id}/execute")
+    _check_no_tx("거부된 규칙 execute", link, tx_before)
     check("거부된 규칙 execute -> 409(여전히 미승인)", re_.status_code == 409, str(re_.status_code))
 
 
@@ -129,9 +143,11 @@ def scenario_approved_target_immutable(tmp_dir: Path) -> None:
                     "target_install_id": install_a}, headers={"X-User-Id": "demo-user-1"})
     check("규칙을 대상 A 로 승인 200", ra.status_code == 200, str(ra.status_code))
 
+    tx_before = int(link.stats()["tx"])
     ra2 = call(app, "POST", f"/api/v1/rules/{rule_id}/approve",
                json={"condition_expr": "x", "action": {"value": 1, "value_type": "UINT"},
                      "target_install_id": install_b}, headers={"X-User-Id": "demo-user-1"})
+    _check_no_tx("승인 대상 변조 시도", link, tx_before)
     check("같은 규칙을 대상 B 로 재승인 -> 409(변조 거부)", ra2.status_code == 409, str(ra2.status_code))
 
     re_ = call(app, "POST", f"/api/v1/rules/{rule_id}/execute")
@@ -146,10 +162,12 @@ def scenario_control_action_extra_field_rejected(tmp_dir: Path) -> None:
     install_id = _register_install(db_path, 3, 1, 0x85, builder)
     r = call(app, "POST", "/api/v1/rules", json={"origin": "WIZARD", "draft_text": "x"})
     rule_id = r.json()["id"]
+    tx_before = int(link.stats()["tx"])
     ra = call(app, "POST", f"/api/v1/rules/{rule_id}/approve",
               json={"condition_expr": "x",
                     "action": {"value": 1, "value_type": "UINT", "install_id": "다른-장치"},
                     "target_install_id": install_id}, headers={"X-User-Id": "demo-user-1"})
+    _check_no_tx("action 대상 은닉 승인", link, tx_before)
     check("action 에 install_id 를 넣으면 400(F-051)", ra.status_code == 400, str(ra.status_code))
 
 
@@ -180,9 +198,11 @@ def scenario_manual_control_requires_known_user(tmp_dir: Path) -> None:
     """시나리오 6 — 수동 제어는 실재하는 사용자만 지시할 수 있다."""
     app, db_path, link, builder = _fresh_app(tmp_dir / "s6")
     install_id = _register_install(db_path, 5, 1, 0x83, builder)
+    tx_before = int(link.stats()["tx"])
     r = call(app, "POST", "/api/v1/control",
              json={"install_id": install_id, "action": {"value": 1, "value_type": "UINT"}},
              headers={"X-User-Id": "ghost-user-unregistered"})
+    _check_no_tx("미실재 사용자 수동제어", link, tx_before)
     check("미실재 사용자 수동제어 -> 400", r.status_code == 400, str(r.status_code))
 
 
@@ -196,15 +216,19 @@ def scenario_null_action_approval_rejected(tmp_dir: Path) -> None:
     r = call(app, "POST", "/api/v1/rules", json={"origin": "WIZARD", "draft_text": "x"})
     rule_id = r.json()["id"]
 
+    tx_before = int(link.stats()["tx"])
     ra = call(app, "POST", f"/api/v1/rules/{rule_id}/approve",
               json={"condition_expr": "x", "action": None, "target_install_id": install_id},
               headers={"X-User-Id": "demo-user-1"})
+    _check_no_tx("action=NULL 승인", link, tx_before)
     check("action=NULL 승인 시도 -> 400", ra.status_code == 400, str((ra.status_code, ra.text)))
 
     rule = call(app, "GET", f"/api/v1/rules/{rule_id}").json()
     check("거부된 승인 시도가 규칙을 승인 상태로 만들지 않았다", rule.get("approved_at") is None, str(rule))
 
+    tx_before = int(link.stats()["tx"])
     re_ = call(app, "POST", f"/api/v1/rules/{rule_id}/execute")
+    _check_no_tx("action=NULL 뒤 미승인 execute", link, tx_before)
     check("승인되지 않았으므로 execute 도 여전히 409", re_.status_code == 409, str(re_.status_code))
 
 

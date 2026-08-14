@@ -12,7 +12,7 @@ import pathlib
 
 import pytest
 
-from contracts.frame import RSC
+from contracts.frame import Frame, Header, MsgKind, RSC
 from siap import codec
 
 GOLDEN_PATH = pathlib.Path(__file__).resolve().parent.parent.parent / "contracts" / "vectors" / "golden.jsonl"
@@ -58,24 +58,50 @@ def test_golden_vector(vec):
         pytest.fail(f"{vec['id']}: 알 수 없는 judgement {vec['judgement']!r}")
 
 
-def test_incomplete_header_raises():
-    with pytest.raises(codec.IncompleteFrameError):
-        codec.decode_frame(b"\x12\x00", "strict")
+def test_incomplete_header_returns_violation_frame_f215():
+    data = b"\x12\x00"
+    frame = codec.decode_frame(data, "strict")
+    assert frame.header is None
+    assert frame.kind is None
+    assert frame.raw == data
+    assert not frame.is_valid
+    assert [v.code_name for v in frame.violations] == ["INVALID_FORMAT"]
+    assert frame.violations[0].clause == "7.3.1"
 
 
-def test_decode_never_raises_other_than_incomplete():
-    """헤더는 있지만 페이로드가 덜 온 경우도 IncompleteFrameError 여야
-    한다 — 그 외에는 decode_frame() 이 예외를 던지지 않는다(계약)."""
+def test_incomplete_payload_returns_violation_frame_f215():
+    """완전한 헤더는 원본 의미값을 보존하되 없는 payload는 만들지 않는다."""
     # RES_SET_CONNECTION, N=1(payload_len=9+30=39, 유효한 N) 로 선언했지만
-    # 실제로는 헤더 12byte 뿐이다 — element_count() 는 통과하므로 위반이
-    # 아니라 "아직 덜 왔다"로 판정돼야 한다.
-    from contracts.frame import Header
+    # 실제로는 헤더 12byte 뿐이다 — element_count() 는 통과하지만 공개
+    # 단발 디코드는 누락된 payload를 INVALID_FORMAT Frame으로 반환해야 한다.
     header = codec.encode_header(
         Header(version=0x12, msg_type=0x0400, trans_type=0, msg_id=1,
                payload_len=39, gcg_id=1, node_id=3)
     )
-    with pytest.raises(codec.IncompleteFrameError):
-        codec.decode_frame(header, "strict")
+    frame = codec.decode_frame(header, "strict")
+    assert frame.header is not None and frame.header.payload_len == 39
+    assert frame.kind is MsgKind.RES_SET_CONNECTION
+    assert frame.raw == header
+    assert [v.code_name for v in frame.violations] == ["INVALID_FORMAT"]
+
+
+def test_streaming_decoder_waits_for_incomplete_frame_f215():
+    header = Header(version=0x12, msg_type=0x0C00, trans_type=0, msg_id=1,
+                    payload_len=0, gcg_id=1, node_id=3)
+    wire = codec.encode_header(header)
+    decoder = codec.Decoder("strict")
+    assert list(decoder.feed(wire[:2])) == []
+    frames = list(decoder.feed(wire[2:]))
+    assert len(frames) == 1
+    assert frames[0].header == header
+    assert frames[0].kind is MsgKind.ACK
+    assert frames[0].is_valid
+
+
+def test_encode_rejects_headerless_frame_f215():
+    frame = Frame(header=None, kind=MsgKind.ACK, raw=b"\x12")
+    with pytest.raises(codec.ValueRangeError):
+        codec.encode_frame(frame)
 
 
 # ── pack_value / unpack_value 경계값 (F-044/047/055/058) ───────────────
@@ -97,6 +123,14 @@ def test_pack_uint_boundaries():
         codec.pack_uint(-1)
     with pytest.raises(codec.ValueRangeError):
         codec.pack_uint(2 ** 32)
+
+
+def test_pack_integer_rejects_fractional_values_f214():
+    for value in (1.5, -1.5):
+        with pytest.raises(codec.ValueRangeError):
+            codec.pack_int(value)
+    with pytest.raises(codec.ValueRangeError):
+        codec.pack_uint(1.5)
 
 
 def test_pack_float_boundaries():

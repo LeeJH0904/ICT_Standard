@@ -115,7 +115,7 @@ t("상세 파일 누락 없음", not missing, str(missing))
 t("인덱스 ↔ 상세 헤더 일치 (심각도·분류·상태)", not drift, "; ".join(drift))
 
 # 역방향(F-193) — 인덱스에 없는 상세 파일(고아)이 없는가. 위 검사는
-# "인덱스 행 -> 상세 파일 존재"만 보고 반대 방향은 보지 않아, GPT가 상세
+# "인덱스 행 -> 상세 파일 존재"만 보고 반대 방향은 보지 않아, 검증자가 상세
 # 파일만 만들고 인덱스 행을 빠뜨려도(또는 행이 실수로 지워져도) 잡지
 # 못했다 — F-187·F-188 두 건이 이 틈으로 실제로 누락된 채 102/102를
 # 통과했다.
@@ -136,7 +136,10 @@ for fid, row in sorted(rows.items()):
     cand = list(HERE.glob(f"{fid}_*.md"))
     if not cand:
         continue
-    tail = read(cand[0]).split("Claude 처리 기록")[-1]
+    # 역할 중립화 이후 신규 파일은 "작업자 처리 기록"을 쓴다. 기존 209개 기록의
+    # 역사적 제목 "Claude 처리 기록"도 보존하므로 두 제목을 모두 인식한다.
+    tail = re.split(r"^## (?:작업자|Claude) 처리 기록\s*$",
+                    read(cand[0]), flags=re.M)[-1]
     dated = re.findall(r"^\|\s*(\d{4}-\d{2}-\d{2})\s*\|", tail, re.M)
     if not dated:
         no_record.append(fid)
@@ -204,6 +207,25 @@ found_ids = set(re.findall(r"F-\d{3}", findings_text))
 extra_in_findings = sorted(found_ids - set(migrated))
 t("docs/standard-findings.md 가 언급하는 F-ID 가 인덱스의 '이관' 표준결함과 정확히 일치",
   not extra_in_findings, str(extra_in_findings))
+
+# F-208 — 연결 오류 응답은 다른 RSC-only Response와 달리 9byte 고정부를
+# 유지한다. Protocol의 두 설명이 구현과 반대로 회귀하지 않게 직접 읽는다.
+_iface = read(ROOT / "project_code" / "contracts" / "siap_iface.py")
+t("FrameBuilder 연결 오류 설명이 9byte 고정부 계약과 일치 (F-208)",
+  "9byte 고정부(RSC + 자리표시 NODE_PROPERTY, N=0)는 유지" in _iface
+  and "RES_SET_CONNECTION은 LAYOUT의 9byte 고정부를 유지" in _iface
+  and "rsc != SUCCESS 이면 node·devices 는 생략하고 RSC 만 싣는다" not in _iface)
+
+# F-209 — 미규정 구현 결정은 §3.5와 관련 설계 문서에 남기고, 표준 자체 결함
+# 19건 전용 정본으로 이관하지 않는다. 지적된 두 문맥만 좁혀 검사한다.
+_frame_contract = read(ROOT / "project_code" / "contracts" / "frame.py")
+_frame_spec = read(find("Frame_구조_명세서.md"))
+_reply_doc = _frame_contract.partition("def reply_kind")[2].partition("\n    if kind is None:")[0]
+_reply_spec = _frame_spec.partition("### 5.2")[2].partition("\n## 6.")[0]
+t("위반 Notify 미규정 결정이 §3.5·관련 명세만 참조 (F-209)",
+  "CLAUDE.md §3.5" in _reply_doc and "`CLAUDE.md` §3.5" in _reply_spec
+  and "docs/standard-findings.md 참조" not in _reply_doc
+  and "`docs/standard-findings.md`에 등재" not in _reply_spec)
 
 # ═══════════════════════════════════════════════════════════════
 #  4. DDL 객체 수 ↔ 설계 문서 서술
@@ -628,6 +650,35 @@ if m:
     t("합계 산식 = 분류별 실제 수 = 테이블 수",
       parts == real and sum(parts) == int(m.group(2)) == len(TABLES),
       f"산식={parts} 실제={real} 표기합={m.group(2)} 테이블={len(TABLES)}")
+
+# F-223 — 표 아래 요약이 표와 반대인 회귀를 막는다. 실제 구현도 같은 API
+# 호출 스레드에서 send() 반환값으로 결과를 갱신해야 세 근거가 닫힌다.
+_fcs = read(ROOT / "project_code" / "backend" / "services" / "fcs.py")
+t("실행 결과 UPDATE 소유자가 표·요약·구현 모두 API 스레드 (F-223)",
+  "API 스레드가 INSERT하고 같은 API 요청 안에서" in own_sec
+  and "I/O 스레드가 나중에 응답 필드만 UPDATE" not in own_sec
+  and "result_rsc=int(resp.rsc)" in _fcs and "responded_at=repository.now_iso()" in _fcs)
+
+# F-224 — F-176/F-182 설명과 repository의 등록 주석은 디바이스 속성을 실제로
+# 싣는 두 메시지만 가리켜야 한다. 연결 요청은 LAYOUT (0,0)이므로 대상이 아니다.
+_repo = read(ROOT / "project_code" / "backend" / "repository.py")
+_f176 = own_sec.partition("> **F-176**")[2].partition("\n>")[0]
+_f182 = own_sec.partition("> **F-182**")[2].partition("\n>")[0]
+_device_triggers = ("REQ_SET_DEVICE_PROPERTY", "REQ_SET_NODE_DEVICE_PROPERTY_ALL")
+t("F-176·F-182 등록 트리거가 실제 디바이스 속성 메시지와 일치 (F-224)",
+  all(all(k in block for k in _device_triggers) and "_handle_device_property" in block
+      and "_handle_connection" not in block and "`REQ_SET_CONNECTION`" not in block
+      for block in (_f176, _f182)))
+_stale_repo = (
+    "변경 대부분은 런타임에 `REQ_SET_CONNECTION`",
+    "— REQ_SET_CONNECTION 결과",
+    '"""재연결(REQ_SET_CONNECTION',
+    '"첫 REQ_SET_CONNECTION 등록"',
+    "장차 api.py",
+)
+t("repository 등록·소유권 주석에 폐기된 트리거·단계 문구 없음 (F-224)",
+  not any(x in _repo for x in _stale_repo),
+  str([x for x in _stale_repo if x in _repo]))
 
 # ═══════════════════════════════════════════════════════════════
 #  4-b. F-090 — 설계 산출물의 수치가 문서마다 갈리지 않는가

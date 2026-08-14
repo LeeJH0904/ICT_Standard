@@ -11,6 +11,8 @@
      같은 메시지의 페이로드 바이트가 일치해야 한다. 두 번 타이핑한 레이아웃이
      같은 바이트를 내놓는지가 사람 오독을 잡는 유일한 장치다.
   4) CLAUDE.md 6.3 — 위반 케이스 8종 표와 벡터가 정확히 대응하는가.
+  5) 골든벡터_명세서.md — 문서가 선언한 총 벡터 수와 판정 분포가 실제와
+     일치하는가. 실행 코드만 맞고 심사 기준 문서가 낡는 회귀도 실패시킨다(F-207).
 
 실행:  python project_docs/contracts/vectors/golden_verify.py
 종료코드: 0 = 전부 일치, 1 = 불일치 있음
@@ -21,6 +23,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent          # .../contracts/vectors/
 ROOT = HERE.parent.parent.parent                # 저장소 루트 (project_docs/ 의 부모)
+DOC = (HERE / "골든벡터_명세서.md").read_text(encoding="utf-8")
 
 if sys.stdout.encoding and sys.stdout.encoding.lower().replace("-", "") != "utf8":
     try: sys.stdout.reconfigure(errors="replace")
@@ -76,6 +79,13 @@ for v in GOLD: cat[v["category"]] = cat.get(v["category"], 0) + 1
 t(f"골든 벡터 53건 · 구성 {cat}", len(GOLD) == 53 and cat == {"정상": 34, "경계": 11, "위반": 8})  # F-120: 52 -> 53 (B11)
 t("벡터 ID 고유", len({v["id"] for v in GOLD}) == len(GOLD))
 t("extended 벡터 5건", len(EXT) == 5)
+
+# F-207 — 명세서 §6의 독립 헤더 리더 총계도 실물 두 파일에서 재산출한다.
+# 검증기가 자기 코드의 53/5만 확인하면 문서가 57건으로 낡아도 계속 통과한다.
+_doc_total = re.search(r"독립 헤더 리더[^\n]*?\|\s*(\d+)건\s*×\s*7필드", DOC)
+t("명세서 §6 독립 헤더 리더 건수 = golden + extended (F-207)",
+  bool(_doc_total) and int(_doc_total.group(1)) == len(GOLD) + len(EXT),
+  f"문서={_doc_total.group(1) if _doc_total else '?'} 실제={len(GOLD) + len(EXT)}")
 
 badhex = [v["id"] for v in GOLD + EXT
           if not re.fullmatch(r"[0-9A-F]*", v["hex"]) or len(v["hex"]) != v["len"] * 2]
@@ -219,6 +229,22 @@ t("판정 분류: violation 9 / alert 1 / normal 43 (F-060, F-116, F-120)",
   len(byjudge.get("violation", [])) == 9 and len(byjudge.get("alert", [])) == 1
   and len(byjudge.get("normal", [])) == 43,
   {k: len(v) for k, v in byjudge.items()})
+
+# F-207 — §3.1 표와 §6 요약을 각각 읽는다. 두 곳 중 하나만 고쳐도 실패한다.
+_actual_j = {k: len(byjudge.get(k, [])) for k in ("violation", "alert", "normal")}
+_doc_table_j = {k: int(n) for k, n in
+                re.findall(r"^\|\s*`(violation|alert|normal)`\s*\|\s*(\d+)\s*\|", DOC, re.M)}
+_doc_summary = re.search(
+    r"판정 분리 \(F-060\).*?`violation`\s*(\d+)\s*/\s*"
+    r"`alert`\s*(\d+)\s*/\s*`normal`\s*(\d+)", DOC)
+_doc_summary_j = ({"violation": int(_doc_summary.group(1)),
+                   "alert": int(_doc_summary.group(2)),
+                   "normal": int(_doc_summary.group(3))}
+                  if _doc_summary else {})
+t("명세서 §3.1 판정 건수 = 실제 JSONL 판정 (F-207)",
+  _doc_table_j == _actual_j, f"문서={_doc_table_j} 실제={_actual_j}")
+t("명세서 §6 판정 요약 = 실제 JSONL 판정 (F-207)",
+  _doc_summary_j == _actual_j, f"문서={_doc_summary_j} 실제={_actual_j}")
 
 # F-116 — n=None(가변부만 있는 메시지에서 element_count() 가 형식 오류로 판정한
 # 것) 인데 judgement 가 normal/alert 이면 그 자체로 모순이다("N을 못 구했다"와

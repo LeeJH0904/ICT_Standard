@@ -5,8 +5,8 @@
   주장을 기계로 판정하는 지점이다(개발_착수_지시서 §3.3 신설 검증기).
 
 판정 두 가지:
-  1. core/ 의 .c/.h 파일이 플랫폼 헤더(Arduino.h · avr/* · esp* · <stdio.h>)를
-     include 하지 않는다.
+  1. core/ 의 .c/.h 파일은 설계서 §2.1의 시스템 헤더 3종과 core/ 내부
+     프로젝트 헤더만 include 한다.
   2. core/ 안에 보드 판별 매크로(#if defined(ARDUINO), #ifdef __AVR__ 등)가
      0개다 — 조건부 컴파일로 갈라치기하지 않는다.
 
@@ -57,6 +57,14 @@ F-128 — F-122 의 (a')·(b') 는 여전히 "알려진 보드 이름 목록"이
       위반이다 — (a)/(b) 두 겹은 여전히 "무엇을 숨겼는가"를 설명하는
       부가 증거로 남긴다.
 
+F-211 — 플랫폼 헤더 블랙리스트는 `string.h`와 알려지지 않은 SDK 헤더를
+통과시켰다. include 경계도 반대 방향으로 판정한다 — 화이트리스트:
+  (a) 소스 지시문은 <stdint.h>·<stddef.h>·<stdbool.h>, 또는 실제 core/
+      안에 존재하는 따옴표 헤더만 허용한다.
+  (b) gcc -H trace의 직접 include(depth 1)도 같은 목록과 대조한다. 허용된
+      표준 헤더가 구현 내부에서 끌어오는 전이 헤더는 core의 직접 의존이
+      아니므로 이 판정에서 제외한다.
+
 실행: python tools/core_purity_verify.py   (저장소 루트에서)
 종료 코드: 0 = 위반 없음, 1 = 위반 있음
 """
@@ -74,15 +82,14 @@ if sys.stdout.encoding and sys.stdout.encoding.lower().replace("-", "") != "utf8
 ROOT = Path(__file__).resolve().parent.parent
 CORE_DIR = ROOT / "project_code" / "firmware" / "core"
 
-# 금지 include — 대소문자 무시(파일명 관례가 플랫폼마다 다를 수 있다).
-_FORBIDDEN_INCLUDE_EXACT = {"stdio.h"}
-_FORBIDDEN_INCLUDE_PREFIX = ("arduino", "esp")
+# 펌웨어 설계서 §2.1의 완전한 시스템 헤더 허용 목록.
+_ALLOWED_SYSTEM_HEADERS = frozenset({"stdint.h", "stddef.h", "stdbool.h"})
 
 # 금지 보드 판별 매크로 — #if/#ifdef/#elif 조건절 안에서 찾는다.
 _BOARD_MACRO_RE = re.compile(
     r"\b(ARDUINO\w*|__AVR__?|__AVR\w*|ESP32\w*|ESP8266\w*|__XTENSA__|PLATFORMIO)\b"
 )
-_INCLUDE_RE = re.compile(r'^\s*#\s*include\s*[<"]([^">]+)[">]')
+_INCLUDE_RE = re.compile(r'^\s*#\s*include\s*([<"])([^">]+)[">]')
 _IFDIRECTIVE_RE = re.compile(r"^\s*#\s*(if|ifdef|elif)\b(.*)$")
 # F-128 (c) — 화이트리스트 판정용.
 _IFNDEF_RE = re.compile(r"^\s*#\s*ifndef\s+(\w+)\s*$")
@@ -109,18 +116,41 @@ def _source_files() -> list[Path]:
     return sorted(p for p in CORE_DIR.rglob("*") if p.suffix in (".c", ".h"))
 
 
-def _is_forbidden_header(name_or_path: str) -> bool:
-    """헤더 이름/경로 하나가 금지 목록에 해당하는가. 경로 구분자와 대소문자를
-    정규화해 `avr/pgmspace.h` 든 `AVR\\pgmspace.h` 든 같게 본다."""
-    posix = name_or_path.replace("\\", "/").lower()
-    base = posix.rsplit("/", 1)[-1]
-    if base in _FORBIDDEN_INCLUDE_EXACT:
+def _is_within_core(path: Path) -> bool:
+    try:
+        path.resolve().relative_to(CORE_DIR.resolve())
         return True
-    if base.startswith(_FORBIDDEN_INCLUDE_PREFIX):
-        return True
-    if posix.startswith("avr/") or "/avr/" in posix:
-        return True
-    return False
+    except ValueError:
+        return False
+
+
+def _source_include_violation(source: Path, opener: str, header: str) -> str | None:
+    """소스 include 하나를 설계서 §2.1의 완전한 허용 목록과 대조한다."""
+    header = header.strip()
+    if opener == "<":
+        if header in _ALLOWED_SYSTEM_HEADERS:
+            return None
+        return f"비허용 시스템 헤더 <{header}>"
+
+    target = (source.parent / header).resolve()
+    if _is_within_core(target) and target.is_file():
+        return None
+    return f"core/ 내부에 존재하지 않는 프로젝트 헤더 '{header}'"
+
+
+def _compiler_include_violation(name_or_path: str) -> str | None:
+    """gcc -H가 보여 준 직접 include의 해석 결과를 같은 허용 목록과 대조한다."""
+    path = Path(name_or_path.strip()).resolve()
+    if _is_within_core(path) and path.is_file():
+        return None
+    if path.name in _ALLOWED_SYSTEM_HEADERS:
+        return None
+    return f"비허용 직접 include {name_or_path.strip()}"
+
+
+def _is_disallowed_compiler_header(name_or_path: str) -> bool:
+    """F-122 전처리 실패 경로와 호환되는 F-211 허용 목록 판정 wrapper."""
+    return _compiler_include_violation(name_or_path) is not None
 
 
 def _strip_comments_and_joins(text: str) -> str:
@@ -134,11 +164,11 @@ def _strip_comments_and_joins(text: str) -> str:
     return text
 
 
-_HEADER_LITERAL_RE = re.compile(r'[<"]([^">]+\.h)[">]')
+_HEADER_LITERAL_RE = re.compile(r'([<"])([^">]+\.h)[">]')
 
 
 def _check_includes_textual(files: list[Path]) -> list[str]:
-    """(a) 정규화된 텍스트에 대한 regex 스캔.
+    """(a) 정규화된 텍스트의 include를 명시적 허용 목록으로 스캔.
 
     F-122 — `#include SIAP_PLATFORM_HEADER` 처럼 헤더 이름을 매크로로
     간접화하면 `_INCLUDE_RE`(직접 `<..>`/`"..."` 만 매치)를 피해간다. 그래서
@@ -151,26 +181,32 @@ def _check_includes_textual(files: list[Path]) -> list[str]:
         for lineno, line in enumerate(normalized.splitlines(), 1):
             m = _INCLUDE_RE.match(line)
             if m:
-                header = m.group(1).strip()
-                if _is_forbidden_header(header):
-                    bad.append(f"{f.relative_to(ROOT)}:~{lineno}(정규화 후): #include <{header}>")
+                opener, header = m.group(1), m.group(2).strip()
+                reason = _source_include_violation(f, opener, header)
+                if reason:
+                    bad.append(
+                        f"{f.relative_to(ROOT)}:~{lineno}(정규화 후): "
+                        f"{line.strip()} ({reason})"
+                    )
                 continue
             dm = _DEFINE_RE.match(line)
             if dm:
-                for lit in _HEADER_LITERAL_RE.findall(dm.group(2)):
-                    if _is_forbidden_header(lit):
+                for lit in _HEADER_LITERAL_RE.finditer(dm.group(2)):
+                    opener, header = lit.group(1), lit.group(2)
+                    reason = _source_include_violation(f, opener, header)
+                    if reason:
                         bad.append(
                             f"{f.relative_to(ROOT)}:~{lineno}(정규화 후): {line.strip()}  "
-                            f"(간접 정의: 치환 목록에 금지 헤더 {lit})"
+                            f"(간접 정의: {reason})"
                         )
     return bad
 
 
 def _preprocess_includes(f: Path, defines: tuple[str, ...] = ()) -> tuple[list[str] | None, str]:
-    """(b) 실제 gcc -E 로 전처리해 이 파일이 진짜로 끌어들이는 헤더 전부를
-    얻는다. gcc 가 없거나 전처리가 실패하면 (None, stderr) 를 돌려준다.
+    """(b) gcc -E -H로 전처리해 이 파일의 직접 include(depth 1)를 얻는다.
+    gcc 가 없거나 전처리가 실패하면 (None, stderr) 를 돌려준다.
     `defines` 는 `-D이름=값` 형태로 미리 켜 둘 매크로들이다(F-122)."""
-    cmd = ["gcc", "-E", "-x", "c"]
+    cmd = ["gcc", "-E", "-H", "-x", "c"]
     for d in defines:
         cmd += ["-D", d]
     cmd += ["-I", str(CORE_DIR), str(f)]
@@ -181,10 +217,10 @@ def _preprocess_includes(f: Path, defines: tuple[str, ...] = ()) -> tuple[list[s
     except OSError as exc:
         return None, f"gcc 실행 실패: {exc}"
     included: list[str] = []
-    for line in proc.stdout.splitlines():
-        m = re.match(r'^#\s+\d+\s+"([^"]+)"', line)
-        if m:
-            included.append(m.group(1))
+    for line in proc.stderr.splitlines():
+        m = re.match(r"^([.]+)\s+(.+?)\s*$", line)
+        if m and len(m.group(1)) == 1:
+            included.append(m.group(2))
     if proc.returncode != 0:
         return None, proc.stderr
     return included, ""
@@ -197,7 +233,8 @@ def _check_includes_compiler(files: list[Path]) -> tuple[list[str], list[str]]:
     F-122 (b') — 매크로를 아무것도 정의하지 않은 baseline 한 번만으로는
     `#if SIAP_BOARD`(간접 매크로) 뒤에 숨은 `#include` 가 전처리기에 도달하지
     않는다. 실제 보드 빌드가 켜고 시작하는 판별 매크로를 하나씩 정의해
-    반복하고, baseline 포함 어느 조합에서든 금지 헤더가 나오면 위반이다."""
+    반복하고, baseline 포함 어느 조합에서든 허용 목록 밖 직접 include가 나오면
+    위반이다. 허용 표준 헤더의 전이 include는 depth 2 이상이라 제외한다."""
     bad: list[str] = []
     unknown: list[str] = []
     for f in files:
@@ -205,21 +242,21 @@ def _check_includes_compiler(files: list[Path]) -> tuple[list[str], list[str]]:
             label = "정의 없음(baseline)" if not defines else f"-D{defines[0]}"
             included, err = _preprocess_includes(f, defines)
             if included is None:
-                # 전처리 자체가 실패했다. 실패 사유(못 찾은 헤더 이름)에 금지
-                # 헤더가 있으면 그 자체가 위반 증거다 — 존재하지 않는 avr/esp
-                # 헤더를 찾으려다 실패한 것도 "그걸 include 하려 했다"는 뜻이다.
+                # 전처리 자체가 실패했다. 실패 사유(못 찾은 헤더 이름)에 비허용
+                # 헤더가 있으면 그 자체가 위반 증거다 — 설치되지 않은 SDK도
+                # "그걸 include 하려 했다"는 의도는 확인된다.
                 found = re.findall(r"([\w./\\-]+\.h)", err)
-                forbidden_hits = [h for h in found if _is_forbidden_header(h)]
-                if forbidden_hits:
-                    bad.append(f"{f.relative_to(ROOT)} [{label}]: 전처리 실패 — 금지 헤더 참조 흔적 ({forbidden_hits[0]})")
+                disallowed_hits = [h for h in found if _is_disallowed_compiler_header(h)]
+                if disallowed_hits:
+                    bad.append(f"{f.relative_to(ROOT)} [{label}]: 전처리 실패 — 비허용 헤더 참조 흔적 ({disallowed_hits[0]})")
                 elif not defines:
                     # baseline 전처리 자체가 안 되면 판정 불가다. 매크로를
-                    # 켠 조합에서의 실패는 (금지 헤더가 없는 한) 정상적인
+                    # 켠 조합에서의 실패는 (비허용 헤더가 없는 한) 정상적인
                     # 조건부 분기 결과일 수 있어 판정 불가로 세지 않는다.
                     unknown.append(f"{f.relative_to(ROOT)}: 전처리 자체가 실패했다 (gcc 없음 또는 다른 오류): {err.strip()[-200:]}")
                 continue
             for inc in included:
-                if _is_forbidden_header(inc):
+                if _is_disallowed_compiler_header(inc):
                     bad.append(f"{f.relative_to(ROOT)} [{label}]: 실제 전처리 결과에 {inc} 포함")
     return bad, unknown
 
@@ -309,11 +346,11 @@ def main() -> int:
       if not files else "")
 
     bad_inc_text = _check_includes_textual(files)
-    t("(a) 정규화된 텍스트 스캔 — Arduino.h · avr/* · esp* · <stdio.h> 없음",
+    t("(a) 소스 include 허용 목록 — 표준 타입 헤더 3종 또는 core/ 내부 헤더만 사용 (F-211)",
       not bad_inc_text, "; ".join(bad_inc_text))
 
     bad_inc_cc, unknown_cc = _check_includes_compiler(files)
-    t("(b) gcc -E 실제 전처리 — 위 헤더가 실제로 포함되지 않음 (F-118, 독립 입력 대조)",
+    t("(b) gcc -H 직접 include 허용 목록 — 매크로 간접화도 동일 경계 적용 (F-118·F-211)",
       not bad_inc_cc, "; ".join(bad_inc_cc))
     t("(b) gcc -E 전처리가 전 파일에서 실행 가능했다 (판정 불가 0건)",
       not unknown_cc, "; ".join(unknown_cc))

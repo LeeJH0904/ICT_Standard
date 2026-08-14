@@ -5,8 +5,8 @@ backend/repository.py — SQL 담당. `schema.sql`이 정본이고 트리거·CH
 조립하지 않는다.
 
 쓰기 소유권은 테이블 단위다(아키텍처 설계서 §4.4-a). 이 파일의 함수들은
-"어느 스레드가 부르는가"를 모른다 — 소유권은 **호출자**(ingest.py = I/O
-스레드, 장차 api.py = API 스레드)가 지킨다. 이 파일은 SQL만 안다.
+"어느 스레드가 부르는가"를 모른다 — 소유권은 **호출자**(`ingest.py` =
+I/O 스레드, `api.py`와 그 서비스 = API 스레드)가 지킨다. 이 파일은 SQL만 안다.
 
 식별자는 UUID4(TEXT), 시간은 ISO 8601(TEXT) — 1369-P1 6.1, 설계 원칙 §1-3.
 """
@@ -46,11 +46,12 @@ def record_config_change(conn: sqlite3.Connection, *, table_name: str, row_id: s
     """F-182 — 1369-P1 6.2.1 "설정형 데이터는... 변경(생성, 수정, 삭제)에
     대해 이력이 관리되어야 한다". 시드 로더(`fixtures/seed.sql`)만 이
     테이블을 쓴다고 알려져 있었으나(아키텍처 §4.4-a①), 실제 설정형 데이터
-    변경 대부분은 런타임에 `REQ_SET_CONNECTION`으로 일어난다 — 그 경로가
-    이 함수를 부르지 않아 동적 등록·재연결의 변경 이력이 항상 0건이었다
-    (재현 확인). `user_id`는 nullable — 이 경로(Plug & Play 등록)는 사람이
-    아니라 노드가 유발한 변경이라 항상 None이다(사람이 유발한 변경은
-    `api.py`가 자기 스레드에서 직접 이 함수를 부르게 될 것이다, 단계 6).
+    변경 대부분은 런타임의 `REQ_SET_DEVICE_PROPERTY`·
+    `REQ_SET_NODE_DEVICE_PROPERTY_ALL` 디바이스 선언으로 일어난다 — 이
+    경로가 함수를 부르지 않아 동적 등록·재선언의 변경 이력이 항상 0건이었다
+    (재현 확인). `user_id`는 nullable — 노드발 Plug & Play 경로는 사람이
+    유발하지 않아 None이고, 사용자발 설정은 `api.py`가 호출한 서비스가
+    API 스레드에서 실제 사용자 ID를 넘긴다(F-221).
     `version`은 DEFAULT 1을 그대로 쓴다 — 이 참조 구현은 행 단위 버전
     카운터를 별도로 올리지 않는다(표준 미규정, 필요 시 CLAUDE.md §3.5
     갱신 대상)."""
@@ -76,7 +77,8 @@ def get_by_id(conn: sqlite3.Connection, table: str, id_: str):
 
 # ═══════════════════════════════════════════════════════════════
 #  A/B — device_info · device_install_info · device_install
-#         (SIAP I/O 스레드 소유, 아키텍처 §4.4-a②) — REQ_SET_CONNECTION 결과
+#         (노드발 등록은 SIAP I/O 스레드, 아키텍처 §4.4-a②·④)
+#         — REQ_SET_DEVICE_PROPERTY / REQ_SET_NODE_DEVICE_PROPERTY_ALL 결과
 # ═══════════════════════════════════════════════════════════════
 
 def get_or_create_device_info(conn: sqlite3.Connection, *, device_kind: str,
@@ -127,15 +129,18 @@ def upsert_device_install_info(conn: sqlite3.Connection, *, device_info_id: str,
                                 siap_node_id: int, siap_device_id: int, siap_subtype: int,
                                 installed_at: str | None = None,
                                 install_location: str | None = None, install_loc_unit: str | None = None,
+                                transfer_mode: str | None = None, period_sec: int | None = None,
                                 unit: str | None = None, lower_limit: float | None = None,
                                 upper_limit: float | None = None, precision_val: float | None = None) -> str:
-    """재연결(REQ_SET_CONNECTION 재수신) 시 같은 (node_id, device_id) 행을
-    갱신한다 — `id`·`created_at`은 트리거로 불변이라 건드리지 않는다.
+    """디바이스 속성 재선언 시 같은 (node_id, device_id) 행을 갱신한다.
+    트리거는 `REQ_SET_DEVICE_PROPERTY` 또는
+    `REQ_SET_NODE_DEVICE_PROPERTY_ALL`이며, `id`·`created_at`은
+    불변이라 건드리지 않는다.
 
     F-158 — `installed_at`(6.2.5 설치일자)도 최초 설치 시점의 사실이므로
     재연결 UPDATE 에서는 건드리지 않는다(의미상 `created_at`과 같은 부류).
     호출자가 넘기지 않으면 최초 등록 시각(`now_iso()`)을 그대로 쓴다 —
-    이 참조 구현에서 "설치"는 곧 "첫 REQ_SET_CONNECTION 등록"이다.
+    이 참조 구현에서 "설치"는 곧 "첫 디바이스 속성 선언 등록"이다.
 
     F-169 — 재연결로 장치 종류(subtype)가 바뀌면 `device_info_id`도 함께
     갱신해야 한다. 이전에는 UPDATE 절에서 이 컬럼이 빠져 있어 `siap_subtype`
@@ -168,31 +173,35 @@ def upsert_device_install_info(conn: sqlite3.Connection, *, device_info_id: str,
             "UPDATE device_install_info SET updated_at=?, device_name=?, device_info_id=?, "
             "install_location=COALESCE(?, install_location), "
             "install_loc_unit=COALESCE(?, install_loc_unit), siap_subtype=?, "
+            "transfer_mode=COALESCE(?, transfer_mode), period_sec=COALESCE(?, period_sec), "
             "unit=COALESCE(?, unit), lower_limit=?, upper_limit=?, precision_val=? "
             "WHERE id=?",
             (now, device_name, device_info_id, install_location, install_loc_unit, siap_subtype,
-             unit, lower_limit, upper_limit, precision_val, existing["id"]),
+             transfer_mode, period_sec, unit, lower_limit, upper_limit, precision_val, existing["id"]),
         )
         # F-182 — 재연결도 6.2.1의 "수정" 이다. 이 UPDATE가 실제로 무엇을
         # 바꿨는지(예: siap_subtype)를 남긴다 — 재연결 자체가 이력이다.
         record_config_change(conn, table_name="device_install_info", row_id=existing["id"], operation="UPDATE",
                               changes={"device_name": device_name, "device_info_id": device_info_id,
-                                       "siap_subtype": siap_subtype})
+                                       "siap_subtype": siap_subtype,
+                                       "transfer_mode": transfer_mode, "period_sec": period_sec})
         return existing["id"]
     id_ = new_id()
     conn.execute(
         "INSERT INTO device_install_info(id,created_at,updated_at,device_name,installed_at,"
         "install_location,install_loc_unit,device_info_id,siap_node_id,siap_device_id,siap_subtype,"
-        "unit,lower_limit,upper_limit,precision_val)"
-        " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "transfer_mode,period_sec,unit,lower_limit,upper_limit,precision_val)"
+        " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (id_, now, now, device_name, installed_at or now, install_location, install_loc_unit,
-         device_info_id, siap_node_id, siap_device_id, siap_subtype, unit, lower_limit,
+         device_info_id, siap_node_id, siap_device_id, siap_subtype, transfer_mode, period_sec,
+         unit, lower_limit,
          upper_limit, precision_val),
     )
     record_config_change(conn, table_name="device_install_info", row_id=id_, operation="CREATE",
                           changes={"device_name": device_name, "device_info_id": device_info_id,
                                    "siap_node_id": siap_node_id, "siap_device_id": siap_device_id,
-                                   "siap_subtype": siap_subtype})
+                                   "siap_subtype": siap_subtype,
+                                   "transfer_mode": transfer_mode, "period_sec": period_sec})
     return id_
 
 
@@ -700,19 +709,56 @@ def list_device_installs_by_selector(conn: sqlite3.Connection, *, greenhouse_id:
 
 
 def update_device_property(conn: sqlite3.Connection, install_id: str, *,
-                            unit: str | None = None, lower_limit: float | None = None,
-                            upper_limit: float | None = None) -> None:
-    """`PATCH /device-property`의 임계값(Lower/Upper Value, 표 7-15) 저장.
-    `COALESCE`는 `unit`에만 건다 — `lower_limit`/`upper_limit`은 이 참조
-    구현에서 이벤트 임계값 자체가 요청의 목적이라 넘긴 값(None 포함, 예:
-    상한만 지정)을 그대로 반영한다(`upsert_device_install_info`의 F-170과는
-    반대 방향 — 그쪽은 재연결이 값을 지우면 안 되고, 이쪽은 사용자가 값을
-    지우려는 의도를 존중해야 한다)."""
+                            property_patch: dict, user_id: str) -> bool:
+    """사용자발 `PATCH /device-property`의 ACK 성공 결과를 저장한다.
+
+    F-220 — 누락 필드는 UPDATE 대상에서 빼 기존값을 보존한다. API 계약은
+    명시적 null을 허용하지 않으므로 여기까지 오는 키는 모두 실제 값이다.
+    F-221 — 실제로 바뀐 설정 필드와 사용자를 같은 트랜잭션의
+    `config_change_log`에 남긴다. 호출자가 이 UPDATE와 이력 INSERT를 함께
+    commit하므로 둘 중 하나만 영속되는 상태가 없다. 반환값은 실질 변경
+    여부다."""
+    row = conn.execute(
+        "SELECT transfer_mode,period_sec,lower_limit,upper_limit "
+        "FROM device_install_info WHERE id=?", (install_id,),
+    ).fetchone()
+    if row is None:
+        return False
+    column_for = {
+        "transfer_mode": "transfer_mode",
+        "period_sec": "period_sec",
+        "lower_value": "lower_limit",
+        "upper_value": "upper_limit",
+    }
+    changes: dict[str, dict] = {}
+    new_values: dict[str, object] = {}
+    for api_name, column in column_for.items():
+        if api_name not in property_patch:
+            continue
+        value = property_patch[api_name]
+        if row[column] == value:
+            continue
+        new_values[column] = value
+        changes[column] = {"from": row[column], "to": value}
+    if not new_values:
+        return False
     conn.execute(
-        "UPDATE device_install_info SET updated_at=?, unit=COALESCE(?, unit),"
-        " lower_limit=?, upper_limit=? WHERE id=?",
-        (now_iso(), unit, lower_limit, upper_limit, install_id),
+        "UPDATE device_install_info SET "
+        "transfer_mode=CASE WHEN ? THEN ? ELSE transfer_mode END,"
+        "period_sec=CASE WHEN ? THEN ? ELSE period_sec END,"
+        "lower_limit=CASE WHEN ? THEN ? ELSE lower_limit END,"
+        "upper_limit=CASE WHEN ? THEN ? ELSE upper_limit END, updated_at=? WHERE id=?",
+        ("transfer_mode" in new_values, new_values.get("transfer_mode"),
+         "period_sec" in new_values, new_values.get("period_sec"),
+         "lower_limit" in new_values, new_values.get("lower_limit"),
+         "upper_limit" in new_values, new_values.get("upper_limit"),
+         now_iso(), install_id),
     )
+    record_config_change(
+        conn, table_name="device_install_info", row_id=install_id,
+        operation="UPDATE", changes=changes, user_id=user_id,
+    )
+    return True
 
 
 # ── 환경상태 조회 — 0937 6.4 FMS `GET /telemetry` ──────────────────────────

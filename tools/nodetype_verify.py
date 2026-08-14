@@ -16,7 +16,7 @@ CLAUDE.md §0 이 증명하라는 것은 "새 MCU 보드를 추가해도 backend
      문자열이다 — openapi.json(F-030 근거)과 실제 FastAPI 시그니처 양쪽.
   ③ `backend/**`에 특정 `node_id` 정수 리터럴을 조건으로 분기하는 코드가
      없다 — 있으면 "그 노드"를 위한 특례가 서버 코드에 박힌 것이다.
-  ④ `backend/services/**`에 액추에이터 종류 이름(1369-P1 6.3.4 / 물리
+  ④ `backend/**` 제품 코드에 액추에이터 종류 이름(1369-P1 6.3.4 / 물리
      장치명)이 문자열 리터럴로 없다(F-190) — 있으면 "그 장치"를 위한
      문구가 서비스 코드에 박힌 것이다. ①~③은 보드·노드 하드코딩만
      보고 장치 종류 하드코딩은 놓쳤다(F-190 재현: 기존 코드가 그대로
@@ -67,7 +67,7 @@ _BOARD_TOKENS = ("arduino", "uno", "mega2560", "esp32", "esp-32", "esp8266",
 #: (docstring 제외)에 등장하면 그 장치를 위한 문구가 서비스 코드에 박힌
 #: 것이다 — 장치별 문구는 `control_model.output_spec`(DB, 데이터)에서만
 #: 나와야 한다(§3.5 결정표).
-_DEVICE_KIND_TOKENS = ("창 개폐", "보온덮개", "송풍기", "관수", "냉난방", "차광")
+_DEVICE_KIND_TOKENS = ("창 개폐", "보온덮개", "송풍기", "관수", "냉난방", "차광", "환기팬")
 
 
 def _docstring_const_ids(tree: ast.AST) -> set[int]:
@@ -140,14 +140,15 @@ def _check_node_id_literal_branch(files: list[Path]) -> list[str]:
 
 
 def _check_device_kind_literal(files: list[Path]) -> list[str]:
-    """`backend/services/**/*.py`의 문자열 리터럴(독스트링 제외 — f-string
-    리터럴 조각도 `ast.Constant`로 잡힌다)에 액추에이터 명칭이 있는가
-    (F-190). `backend/services/` 바깥은 보지 않는다 — 테스트 픽스처의
-    자유 문장(WIZARD 초안 예시 등)과 repository.py 독스트링의 서술은
-    "서버가 생성하는 문구"가 아니라 오탐이기 때문이다(F-190 근거)."""
+    """F-226 — `backend/**/*.py` 제품 코드 전체에서 장치 종류 하드코딩을
+    찾는다. 테스트 픽스처는 서버 코드가 아니므로 제외하고, 독스트링도
+    설계 설명이라 제외한다. 알려진 물리 장치 토큰뿐 아니라 이름에
+    ``device_kind``/``device_type``이 들어간 상수 대입도 구조적으로 잡아
+    목록 밖 장치명이 API·repository 등에 상수로 들어오는 우회를 막는다.
+    프로토콜의 일반 범주 SENSOR/ACTUATOR는 허용한다."""
     failures = []
     for f in files:
-        if SERVICES_DIR not in f.parents:
+        if "tests" in f.parts:
             continue
         tree = ast.parse(f.read_text(encoding="utf-8"), filename=str(f))
         doc_ids = _docstring_const_ids(tree)
@@ -161,6 +162,26 @@ def _check_device_kind_literal(files: list[Path]) -> list[str]:
                     failures.append(
                         f"{f.relative_to(REPO_ROOT)}:{node.lineno}: "
                         f"장치 종류 문자열 하드코딩 의심 - {token!r} in {node.value!r}"
+                    )
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Assign):
+                targets, value = node.targets, node.value
+            elif isinstance(node, ast.AnnAssign):
+                targets, value = [node.target], node.value
+            else:
+                continue
+            if not isinstance(value, ast.Constant) or not isinstance(value.value, str):
+                continue
+            if value.value in {"SENSOR", "ACTUATOR"}:
+                continue
+            for target in targets:
+                if not isinstance(target, ast.Name):
+                    continue
+                normalized = target.id.lower()
+                if "device_kind" in normalized or "device_type" in normalized:
+                    failures.append(
+                        f"{f.relative_to(REPO_ROOT)}:{node.lineno}: "
+                        f"{target.id} 장치 종류 상수 하드코딩 의심 - {value.value!r}"
                     )
     return failures
 
@@ -267,7 +288,7 @@ def main() -> int:
     if device_failures:
         failures.extend(device_failures)
     else:
-        print("[OK] backend/services/** 장치 종류 문자열 하드코딩 0건 (F-190)")
+        print("[OK] backend/** 제품 코드 장치 종류 문자열/상수 하드코딩 0건 (F-190/F-226)")
 
     dynamic_failures = _check_threshold_draft_is_data_driven()
     if dynamic_failures:

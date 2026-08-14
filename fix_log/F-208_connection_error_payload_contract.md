@@ -6,7 +6,7 @@
 | 분류 | 문서불일치 |
 | 대상 | `project_code/contracts/siap_iface.py:L111` · `project_code/siap/build.py:L158` · `project_code/contracts/fake_link.py:L171` |
 | 발견일 | 2026-08-12 |
-| 상태 | 신규 |
+| 상태 | 수정완료 |
 
 ## 근거
 
@@ -40,4 +40,5 @@ Protocol 설명을 표준과 고정 `LAYOUT`에 맞추고 성공·실패 모두 
 
 | 일시 | 상태 | 내용 |
 |---|---|---|
-
+| 2026-08-14 | 확인 | `RSC.INVALID_NODE_ID` 연결 응답을 두 빌더에서 독립 생성했다. `FakeFrameBuilder`와 `FrameBuilderImpl` 모두 `payload_len=9`, `node_property` 존재, 디바이스 0건이며 `encode_frame()`의 실제 payload도 9byte였다. Protocol docstring의 “RSC만” 설명만 반대임을 확인했다. `project_code/contracts/` 편집은 계약 변경 승인 전까지 보류한다. |
+| 2026-08-14 | 수정완료 | 사용자 승인 후 `FrameBuilder`의 연결·오류 회신 설명을 “실패에도 자리표시 `NODE_PROPERTY`, N=0의 9byte 고정부 유지”로 정정했다. 타입·wire 동작은 바꾸지 않았다. `test_build.py`에 Fake/실제 빌더의 SUCCESS·오류 payload byte 동등성 2경로를 추가해 16/16 통과했고, 옛 “RSC만” 문구 재주입은 meta 검증에서 FAIL로 반전했다. |

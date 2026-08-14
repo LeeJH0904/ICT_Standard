@@ -8,9 +8,12 @@ sim/golden_log.py — 실측 로그가 없는 단계에서 `replay` 모드가 �
 그대로 따른다.
 
 합성 금지(CLAUDE.md §1-1)는 **페이로드 바이트**(센서값 등)에 적용된다.
-이 로그의 `hex`는 전부 `golden.jsonl` 원본 그대로이며, 새로 만드는 값은
-재생 간격(`t`, 균일 카운터)뿐이다 — 실측 로그가 없어 원본 타이밍 정보
-자체가 없으므로 균일 간격으로 대체했다는 점을 여기 명시한다. `dir`이
+이 로그의 수신 payload는 전부 `golden.jsonl` 원본 그대로다. 기대 응답은
+골든 응답 payload를 쓰되 Message Identifier·GCG ID·Node ID를 바로 앞 RX와
+결속한다(7.2.2). 서로 무관한 골든 Request/Response의 헤더를 그대로 나열하면
+세션으로서는 성립하지 않기 때문이다. 새로 만드는 값은 재생 간격(`t`, 균일
+카운터)뿐이다 — 실측 로그가 없어 원본 타이밍 정보 자체가 없으므로 균일
+간격으로 대체했다는 점을 여기 명시한다. `dir`이
 "양방향"(REQ_SET_NODE_PROPERTY 류, 표준상 방향이 고정되지 않은 8종)인
 벡터는 rx/tx 어느 쪽으로 단정할 근거가 없어 기본 로그에서 제외한다.
 """
@@ -36,7 +39,6 @@ _DIR_MAP = {"N->G": "rx", "G->N": "tx"}
 #: 으로 전량을 생성할 수 있다.
 DEFAULT_VECTOR_IDS = [
     "N01",  # REQ_SET_CONNECTION — 노드 연결 요청
-    "N27",  # RES_SET_CONNECTION — 게이트웨이 응답 (RSC+NODE_PROPERTY+DEVICE_PROPERTY)
     "N34",  # NOTI_DEVICE_VALUE — 센서값 통지 (DEVICE_MAIN_INFO x2)
     "N09",  # NOTI_KEEP_ALIVE
     "N33",  # NOTI_ERROR — 정상 오류 알림(위반 아님)
@@ -46,13 +48,62 @@ DEFAULT_VECTOR_IDS = [
 ]
 
 
+def _default_session(by_id: dict[str, dict], interval: float) -> list[dict]:
+    """기본 벡터를 실제 양방향 세션으로 결속한다(F-218).
+
+    연결 응답의 본문은 런타임 기본 계약(Software Version=1, GCG/Node ID는
+    요청값, NORMAL, N=0)으로 독립 구성하고 헤더는 N01과 상관관계를 맞춘다.
+    이는 센서 합성값이 아니라 게이트웨이 회신의 고정 메타데이터다.
+    Notify의 기대 출력은 같은 헤더 식별자를 가진 ACK다."""
+    from sim import _wire as wire
+
+    records: list[dict] = []
+    t = 0.0
+    for vid in DEFAULT_VECTOR_IDS:
+        vector = by_id[vid]
+        direction = _DIR_MAP.get(vector.get("dir"))
+        if direction is None:
+            continue
+        records.append({"t": round(t, 3), "dir": direction, "hex": vector["hex"].upper()})
+        t += interval
+        if direction != "rx":
+            continue
+
+        header = vector["header"]
+        response: bytes | None = None
+        if vector["kind"] == "REQ_SET_CONNECTION":
+            body = bytes([wire.RSC_SUCCESS]) + wire.encode_np(wire.WireNP(
+                sw_version=1, gcg_id=header["GCG ID"], node_id=header["Node ID"],
+                status=wire.STATUS_NORMAL, num_devices=0,
+            ))
+            response = wire.encode_header(wire.WireHeader(
+                version=0x12, msg_type=wire.MT_RES_SET_CONNECTION,
+                trans_type=header["Transmission Type"],
+                msg_id=header["Message Identifier"], payload_len=len(body),
+                gcg_id=header["GCG ID"], node_id=header["Node ID"],
+            )) + body
+        elif vector["kind"].startswith("NOTI_"):
+            response = wire.encode_header(wire.WireHeader(
+                version=0x12, msg_type=wire.MT_ACK,
+                trans_type=header["Transmission Type"],
+                msg_id=header["Message Identifier"], payload_len=0,
+                gcg_id=header["GCG ID"], node_id=header["Node ID"],
+            ))
+        if response is not None:
+            records.append({"t": round(t, 3), "dir": "tx", "hex": response.hex().upper()})
+            t += interval
+    return records
+
+
 def build(vector_ids: list[str] | None = DEFAULT_VECTOR_IDS, interval: float = 1.0) -> list[dict]:
     """judgement=normal/alert 골든 벡터를 세션 로그 레코드 목록으로
     변환한다. `vector_ids=None` 이면 대상 전체(위반 8종 제외)를 쓴다."""
     with open(GOLDEN_PATH, encoding="utf-8") as f:
         vectors = [json.loads(line) for line in f if line.strip()]
+    by_id = {v["id"]: v for v in vectors}
+    if vector_ids == DEFAULT_VECTOR_IDS:
+        return _default_session(by_id, interval)
     if vector_ids is not None:
-        by_id = {v["id"]: v for v in vectors}
         vectors = [by_id[vid] for vid in vector_ids if vid in by_id]
 
     records: list[dict] = []

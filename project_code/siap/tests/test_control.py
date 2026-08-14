@@ -4,7 +4,7 @@
 """
 from __future__ import annotations
 
-from contracts.frame import MsgControlProfile, MsgKind
+from contracts.frame import Frame, MsgControlProfile, MsgKind, Violation
 from siap.build import FrameBuilderImpl
 from siap.control import PendingTable
 
@@ -31,6 +31,16 @@ def test_register_returns_none_for_no_reply_expected():
     from contracts.frame import Frame, Header, RSC
     res = b.res_set_node_property(req, RSC.SUCCESS)
     assert pt.register(res) is None
+    assert len(pt) == 0
+
+
+def test_headerless_violation_never_enters_pending_table_f215():
+    pt = PendingTable(_profile(), now_fn=FakeClock())
+    frame = Frame(header=None, raw=b"\x12", violations=(
+        Violation(9, "INVALID_FORMAT", "7.3.1", "header incomplete"),
+    ))
+    assert pt.register(frame) is None
+    assert pt.match(frame) is False
     assert len(pt) == 0
 
 
@@ -128,3 +138,16 @@ def test_wait_upper_bound_is_timeout_times_retry_plus_one_f041():
     pt.wait(pend, timeout=None)
     elapsed = time.monotonic() - t0
     assert elapsed < 0.5                    # 이미 set() 됐으니 상한까지 기다리지 않는다
+
+
+def test_update_profile_applies_to_new_pending_f213():
+    clock = FakeClock()
+    pt = PendingTable(_profile(timeout=2, retry=2), now_fn=clock)
+    changed = _profile(timeout=9, retry=4)
+    pt.update_profile(changed)
+    assert pt.profile() == changed
+
+    req = FrameBuilderImpl(gcg_id=1).get_node_property(node_id=3)
+    pend = pt.register(req)
+    assert pend is not None
+    assert pend.deadline == 9.0

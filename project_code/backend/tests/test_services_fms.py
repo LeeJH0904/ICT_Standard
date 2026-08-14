@@ -64,8 +64,7 @@ def _future_iso(seconds: int) -> str:
 
 def test_check_stale_devices_creates_no_data_alert_f191(conn):
     install_id = _connect_and_report_temperature(conn)
-    threshold = fms.DEFAULT_PERIOD_SEC * fms.STALE_RETRY_MULTIPLIER
-    judged_at = _future_iso(threshold + 60)   # 임계값을 60초 넘긴 시점에서 판정
+    judged_at = _future_iso(181)   # F-227: Period 60 × 3 = 180, 독립 기대값
 
     created = fms.check_stale_devices(conn, judged_at)
     assert len(created) == 1
@@ -79,8 +78,7 @@ def test_check_stale_devices_creates_no_data_alert_f191(conn):
 
 def test_check_stale_devices_does_not_duplicate_unacked_alert(conn):
     _connect_and_report_temperature(conn)
-    threshold = fms.DEFAULT_PERIOD_SEC * fms.STALE_RETRY_MULTIPLIER
-    judged_at = _future_iso(threshold + 60)
+    judged_at = _future_iso(181)   # F-227: Period 60 × 3 = 180
 
     first = fms.check_stale_devices(conn, judged_at)
     second = fms.check_stale_devices(conn, judged_at)
@@ -94,3 +92,15 @@ def test_check_stale_devices_fresh_data_creates_no_alert(conn):
     created = fms.check_stale_devices(conn, repository.now_iso())
     assert created == []
     assert repository.list_alerts(conn) == []
+
+
+def test_check_stale_devices_uses_each_device_period_f227(conn):
+    fast_id = _connect_and_report_temperature(conn, device_id=1)
+    slow_id = _connect_and_report_temperature(conn, device_id=2)
+    conn.execute("UPDATE device_install_info SET period_sec=300 WHERE id=?", (slow_id,))
+    conn.commit()
+
+    created = fms.check_stale_devices(conn, _future_iso(181))
+    assert len(created) == 1
+    alerts = repository.list_alerts(conn)
+    assert [alert.install_id for alert in alerts] == [fast_id]

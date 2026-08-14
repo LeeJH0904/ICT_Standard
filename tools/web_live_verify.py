@@ -31,6 +31,18 @@ import re
 import sys
 from pathlib import Path
 
+from web_source_checks import (
+    approved_has_execute_path,
+    bit_unpack_sources,
+    external_css_references,
+    extract_inline_scripts,
+    numeric_korean_map_sources,
+    pending_execute_paths,
+    recovery_cursor_issues,
+    recovery_pagination_issues,
+    status_cue_issues,
+)
+
 if sys.stdout.encoding and sys.stdout.encoding.lower().replace("-", "") != "utf8":
     try:
         sys.stdout.reconfigure(errors="replace")
@@ -65,8 +77,12 @@ if not WEB_DIR.is_dir() or not list(WEB_DIR.glob("*.html")):
 
 HTML_FILES = sorted(WEB_DIR.glob("*.html"))
 JS_FILES = sorted(STATIC_DIR.glob("*.js")) if STATIC_DIR.is_dir() else []
+CSS_FILES = sorted(STATIC_DIR.glob("*.css")) if STATIC_DIR.is_dir() else []
 HTML_TXT = {p.name: p.read_text(encoding="utf-8") for p in HTML_FILES}
 JS_TXT = {p.name: p.read_text(encoding="utf-8") for p in JS_FILES}
+CSS_TXT = {p.name: p.read_text(encoding="utf-8") for p in CSS_FILES}
+INLINE_JS_TXT = extract_inline_scripts(HTML_TXT)
+SCRIPT_TXT = {**JS_TXT, **INLINE_JS_TXT}
 ALL_TXT = {**HTML_TXT, **JS_TXT}
 
 # ═══════════════════════════════════════════════════════════════
@@ -177,6 +193,13 @@ if not re.search(r"\bsince\s*[:,]", verify_html):
 t("재연결 시 listFrames?since= 로 누락 프레임을 복구하는 결선이 있다 (F-200)",
   not missing_recovery, str(missing_recovery))
 
+recovery_issues = recovery_pagination_issues(api_js, verify_html)
+t("재연결 누락 복구가 until 스냅샷의 total까지 모든 offset 페이지를 소비한다 (F-205)",
+  not recovery_issues, str(recovery_issues))
+cursor_issues = recovery_cursor_issues(stream_js, verify_html)
+t("폴링 중에도 최초 SSE 단절의 연속 커서를 복구 성공까지 보존한다 (F-233)",
+  not cursor_issues, str(cursor_issues))
+
 # ── F-197 — 위 두 검사는 api.js 의 request() 래퍼 정의만 본다. 화면이나
 #    다른 정적 모듈이 그 래퍼를 거치지 않고 직접 fetch() 를 부르면(존재하지
 #    않는 라우트든 외부 URL 이든) 위 "일치" 판정 자체가 그 호출을 아예 보지
@@ -203,7 +226,9 @@ t("fetch() 에 외부 절대 URL 리터럴을 직접 넘기지 않는다 (F-197)
 # ═══════════════════════════════════════════════════════════════
 #  2. 화면_설계서.md §10 금지 6종
 # ═══════════════════════════════════════════════════════════════
-ext_ref = [f"{f}" for f, txt in ALL_TXT.items() if re.search(r'(src|href)\s*=\s*["\']https?://', txt)]
+ext_ref = [f for f, txt in ALL_TXT.items()
+           if re.search(r'(src|href)\s*=\s*["\']https?://', txt)]
+ext_ref.extend(external_css_references(CSS_TXT))
 t("외부 스크립트·폰트·CDN 참조 0건", not ext_ref, str(ext_ref))
 
 bundler = [f for f, txt in ALL_TXT.items() if re.search(r"node_modules|webpack|vite|rollup|package\.json", txt)]
@@ -216,19 +241,23 @@ t("localStorage·sessionStorage 사용 0건 (재현성)", not storage_use, str(s
 # web_verify.py 의 자동 검사(JS 한정)와 같은 패턴을 HTML 인라인 스크립트까지 넓혀 다시 본다.
 CODE_MAP_PATTERN = re.compile(r"INVALID_(VERSION|FORMAT|NODE_ID|GCG_ID|DEVICE_ID|DATA_TYPE|DATA_SUBTYPE|TRANSMISSION_TYPE)"
                                r"|ERROR_BATTERY|ERROR_PWR|0x8[0-9A-F]\b")
-code_hits = [f for f, txt in ALL_TXT.items() if CODE_MAP_PATTERN.search(txt)]
+code_hits = [f for f, txt in SCRIPT_TXT.items() if CODE_MAP_PATTERN.search(txt)]
 t("RSC·NEC 코드 상수가 화면 코드에 없다 (CLAUDE.md 3.4)", not code_hits, str(code_hits))
 
 # Subtype 코드값(siap_subtype 같은 필드 접근이 아니라, 리터럴 0x.. 스위치)이 없는가.
 # 필드 접근(dev.siap_subtype)은 허용 — 화면이 스스로 코드를 만들지 않으면 된다.
 SWITCH_SUBTYPE = re.compile(r"switch\s*\([^)]*subtype[^)]*\)", re.I)
-subtype_switch = [f for f, txt in ALL_TXT.items() if SWITCH_SUBTYPE.search(txt)]
+subtype_switch = [f for f, txt in SCRIPT_TXT.items() if SWITCH_SUBTYPE.search(txt)]
 t("Subtype 코드를 분기(switch)로 재해석하지 않는다 (§1-6)", not subtype_switch, str(subtype_switch))
 
-# 비트 언팩 — 시프트 연산자 존재 여부(명시적 한계: & 단독 문자는 오탐 위험이 커 검사하지 않는다)
-SHIFT_RE = re.compile(r"<<|>>>?")
-shift_hits = [f for f, txt in JS_TXT.items() if SHIFT_RE.search(txt)]
-t("static/*.js 에 비트 시프트 연산자가 없다 (코덱은 siap/ 하나, §10)", not shift_hits, str(shift_hits))
+# F-231 — 정적 모듈뿐 아니라 실제 HTML 인라인 모듈도 같은 코드 입력이다.
+# 시프트와 숫자 마스크, 숫자 키 기반 한국어 코드 매핑을 함께 금지한다.
+bit_hits = bit_unpack_sources(SCRIPT_TXT)
+t("화면 스크립트 전체에 시프트·숫자 마스크 언팩이 없다 (코덱은 siap/ 하나, §10)",
+  not bit_hits, str(bit_hits))
+numeric_map_hits = numeric_korean_map_sources(SCRIPT_TXT)
+t("화면 스크립트에 숫자 코드→한국어 매핑 객체가 없다 (CLAUDE.md 3.4)",
+  not numeric_map_hits, str(numeric_map_hits))
 
 # F-199 — rule.draft_text·condition_expr·reject_reason 을 escapeHtml() 없이
 # 템플릿 리터럴에 그대로 보간하면 innerHTML 렌더 시 저장형 DOM 주입이
@@ -243,17 +272,19 @@ unsafe_interp = {f: v for f, v in unsafe_interp.items() if v}
 t("rule.draft_text·condition_expr·reject_reason 이 escapeHtml() 없이 보간되지 않는다 (F-199)",
   not unsafe_interp, str(unsafe_interp))
 
-# 미승인 규칙의 실행 경로 — rules.html 의 "미승인 카드" 렌더 함수 안에 실행 버튼 마크업이 없어야 한다.
+# F-204 — pendingCardHtml 한 함수만 자르지 않고 호출 가능한 로컬 헬퍼를
+# 끝까지 따라간다. 실행 버튼, 실행 form action, /execute 경로가 하나라도
+# 도달 가능하면 미승인 카드의 실행 경로 부재 계약을 위반한다.
 rules_txt = HTML_TXT.get("rules.html", "")
-pending_fn = re.search(r"function pendingCardHtml\([^)]*\)\s*\{(.*?)\n\}", rules_txt, re.S)
-exec_in_pending = bool(pending_fn) and re.search(r"run-rule|실행</button>|class=\"[^\"]*run-rule", pending_fn.group(1))
+pending_exec = pending_execute_paths(rules_txt)
 t("미승인 규칙 카드에 실행 버튼 마크업이 없다 (disabled 아니라 부재, §6.2)",
-  bool(pending_fn) and not exec_in_pending,
-  "pendingCardHtml 못 찾음" if not pending_fn else "실행 버튼 발견")
-approved_fn = re.search(r"function approvedCardHtml\([^)]*\)\s*\{(.*?)\n\}", rules_txt, re.S)
+  not pending_exec, str(pending_exec))
 t("승인된 규칙 카드에만 실행 버튼이 있다",
-  bool(approved_fn) and "run-rule" in approved_fn.group(1),
-  "approvedCardHtml 못 찾음" if not approved_fn else "")
+  approved_has_execute_path(rules_txt))
+
+status_issues = status_cue_issues(verify_html)
+t("프레임 정상·위반·알림 상태가 색 외 아이콘과 문자로 함께 표시된다 (F-232)",
+  not status_issues, str(status_issues))
 
 # ═══════════════════════════════════════════════════════════════
 #  3. 명도대비 — app.css 의 CONTRAST-PAIRS 를 실제로 계산한다 (§8.3 8번)

@@ -83,6 +83,8 @@ class FrameBuilderImpl:
         """F-040 — msg_id·GCG ID·Node ID 를 원본에서 복사한다(7.2.2). 새로
         발번하면 노드가 중복 요청으로 처리한다(표준 미규정 → 자체 결정,
         CLAUDE.md §3.5)."""
+        if req.header is None:
+            raise ValueError("header 가 없는 불완전 Frame 에는 회신할 수 없다")
         return Header(version=SIAP_VERSION, msg_type=self._wire(kind),
                       trans_type=req.header.trans_type, msg_id=req.header.msg_id,
                       payload_len=payload_len, gcg_id=req.header.gcg_id,
@@ -158,6 +160,8 @@ class FrameBuilderImpl:
     def res_set_connection(self, req: Frame, rsc: RSC,
                             node: NodeProperty | None = None,
                             devices: tuple[DeviceProperty, ...] = ()) -> Frame:
+        if req.header is None:
+            raise ValueError("header 가 없는 불완전 Frame 에는 회신할 수 없다")
         if rsc == RSC.SUCCESS:
             if node is None:
                 raise ValueError("RSC.SUCCESS 인 RES_SET_CONNECTION 은 NodeProperty 가 필요하다")

@@ -6,7 +6,7 @@
 | 분류 | 코드버그 |
 | 대상 | `tools/xcodec_verify.py:L148` · `project_code/firmware/tests/dump_golden.c:L210` |
 | 발견일 | 2026-08-12 |
-| 상태 | 신규 |
+| 상태 | 수정완료 |
 
 ## 근거
 
@@ -56,3 +56,5 @@ raise SystemExit(runpy.run_path(str(p/'tools/xcodec_verify.py'))['main']())
 
 | 일시 | 상태 | 내용 |
 |---|---|---|
+| 2026-08-13 | 확인 | Python 코덱의 GCG ID와 Node ID 인코드·디코드 위치를 메모리에서 함께 교환했다. 첫 골든 벡터의 의미값이 실제 `3, 1`로 뒤바뀌어 정본 `1, 3`과 달랐지만 `xcodec_verify.py`는 9/9·종료코드 0으로 통과해 자기 왕복 사각지대를 재현했다. |
+| 2026-08-13 | 수정완료 | C 덤프가 정상·알림 44건의 디코드 구조체를 wire 순서 `bits:value` 의미 서명으로 출력하고, Python 검증기도 명명된 Frame 구조체에서 같은 서명을 독립 산출해 `golden.jsonl.fields`와 3자 대조하도록 강화했다. 기존 바이트 3자 대조와 위반 9건 판정 대조는 유지했다. 정상 11/11, GCG/Node encode·decode 동시 교환 재주입은 의미값 대조가 실패해 10/11·종료코드 1이었다. SIAP 전체 108/108을 통과했다. |

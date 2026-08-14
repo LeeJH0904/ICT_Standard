@@ -1,13 +1,14 @@
 """개발_착수_지시서.md 검증 — 설계 산출물·규약·실측과의 대조
 
 이 스크립트는 지시서 한 파일의 내부 일관성만 보지 않는다(CLAUDE.md 6.2 · F-080).
-독립 입력 다섯을 읽어 대조한다.
+독립 입력 여섯을 읽어 대조한다.
 
-  1. CLAUDE.md                      : 성립해야 하는 주장 4개 · 금지 9종 · 디렉터리 트리
-  2. project_docs/**                : 지시서가 '읽을 문서'로 지정한 설계서의 실재
-  3. 기존 검증기 9종의 실제 실행 결과 : 출구 조건이 인용한 통과 건수
-  4. 진행보고서.md                  : 마감일
-  5. GPT.md                         : GPT 한계 서술의 정합
+  1. ROLES.md                       : 작업자·검증자 역할과 권한 분리
+  2. CLAUDE.md                      : 성립해야 하는 주장 4개 · 금지 9종 · 디렉터리 트리
+  3. project_docs/**                : 지시서가 '읽을 문서'로 지정한 설계서의 실재
+  4. 기존 검증기 9종의 실제 실행 결과 : 출구 조건이 인용한 통과 건수
+  5. 진행보고서.md                  : 마감일
+  6. GPT.md                         : 검증 능력 한계 서술의 정합
 
 실행:  python project_docs/dev/dev_verify.py
 종료코드: 0 = 전부 일치, 1 = 불일치 있음
@@ -60,17 +61,19 @@ GUIDE = _gp.read_text(encoding="utf-8") if _gp.exists() else ""
 def read(p: Path | None) -> str:
     return p.read_text(encoding="utf-8", errors="replace") if p else ""
 
+ROLES  = read(find("ROLES.md", must="역할 운영 정본"))
 CLAUDE = read(find("CLAUDE.md", must="절대 금지"))
 idx0   = read(find("bug_fix_list.md"))
 GPTMD  = read(find("GPT.md"))
 REPORT = read(find("진행보고서.md", must="마감"))
 
+t("ROLES.md 적재", all(k in ROLES for k in ("작업자", "검증자", "역할 분리")), f"{len(ROLES)}자")
 t("CLAUDE.md 적재", len(CLAUDE) > 5000, f"{len(CLAUDE)}자")
 t("사람용 운영 가이드가 별도 파일로 존재", len(GUIDE) > 2000, f"{len(GUIDE)}자")
-t("지시서가 에이전트 전용임을 선언",
-  "개발 에이전트가 읽는다" in DOC and "에이전트는 읽지 않는다" in DOC)
+t("지시서가 작업자 전용임을 선언",
+  "이 문서는 작업자가 읽는다" in DOC and "에이전트는 읽지 않는다" in DOC)
 t("가이드가 사람 전용임을 선언",
-  "사람" in GUIDE[:400] and "에이전트는 읽지 않는다" in GUIDE)
+  "사람" in GUIDE[:400] and "작업자는 읽지 않는다" in GUIDE)
 #    분리가 유지되는가 — 운영 판단이 지시서로 되돌아오면 에이전트가 읽을 양이 늘고
 #    같은 내용이 두 곳에 생긴다(설계 단계 문서불일치 46건이 전부 그 형태였다).
 #    가이드를 가리키는 포인터 줄은 내용이 아니다. 그 줄은 제외하고 본다.
@@ -129,9 +132,9 @@ for _, sid in detail_ids:
 for sid in det_ids:
     m = re.search(rf"### 3\.\w+ 단계 {re.escape(sid)} .*?(?=\n### |\n## )", DOC, re.S)
     blk = m.group(0) if m else ""
-    for key in ("**범위**", "**읽을 문서**", "**출구**", "**GPT 검증**", "**하지 않을 것**"):
+    for key in ("**범위**", "**읽을 문서**", "**출구**", "**검증자 검증**", "**하지 않을 것**"):
         if key not in blk: missing.append(f"{sid}:{key}")
-t("상세 절이 전부 범위/읽을문서/출구/GPT검증/하지않을것 을 갖는다",
+t("상세 절이 전부 범위/읽을문서/출구/검증자검증/하지않을것 을 갖는다",
   not missing, str(missing[:4]))
 
 # ═══════════════════════════════════════════════════════════════
@@ -317,16 +320,17 @@ if _md:
     t("모든 단계가 일정표에 배정됨", not unassigned, str(unassigned))
 
 # ═══════════════════════════════════════════════════════════════
-#  7. GPT 검증 프로토콜 — 한계 명시가 GPT.md 와 어긋나지 않는가
+#  7. 검증자 프로토콜 — 능력 확인이 GPT.md 와 어긋나지 않는가
 # ═══════════════════════════════════════════════════════════════
-t("가이드가 Codex 의 한계를 표로 명시 (그림 · 하드웨어 · 렌더링 · C 컴파일)",
+t("가이드가 검증 환경의 능력 확인을 명시 (그림 · 하드웨어 · 렌더링 · C 컴파일)",
+  "현재 검증 환경의 능력 확인" in GUIDE and
   all(k in GUIDE for k in ("C 컴파일", "하드웨어 접근", "브라우저 렌더링")))
-t("가이드의 이미지 한계 서술이 GPT.md 와 정합",
-  ("그림" in GUIDE or "이미지" in GUIDE) and "이미지" in GPTMD)
+t("가이드의 이미지 능력 서술이 GPT.md 와 정합",
+  "이미지 해석" in GUIDE and "이미지 해석" in GPTMD and "제품명으로 가정하지 마라" in GPTMD)
 t("지시서가 제출물에 실행 로그·컴파일 로그를 포함하도록 지정",
   "실행 로그" in DOC and "컴파일 로그" in DOC)
-t("가이드가 상태 전이 규약을 재확인 (GPT 는 신규만)",
-  "신규" in GUIDE and "상태 전이는 Claude" in GUIDE)
+t("가이드가 상태 전이 규약을 재확인 (검증자는 신규만)",
+  "신규" in GUIDE and "상태 전이는 작업자" in GUIDE)
 
 # 신설 검증기에 결함 주입을 요구하는가 — 이것이 없으면 F-095 가 재발한다
 t("종료 체크리스트가 신설 검증기의 결함 주입을 요구",
@@ -390,10 +394,10 @@ for name, rel in DOCMAP.items():
 t("경로표의 분량 표기가 실측과 일치 (오차 10%)", not drift_sz, str(drift_sz[:3]))
 
 # ═══════════════════════════════════════════════════════════════
-#  7-a. GPT 검증 프롬프트 — 단계 집합·규약 참조가 어긋나지 않는가
+#  7-a. 검증자 프롬프트 — 단계 집합·규약 참조가 어긋나지 않는가
 # ═══════════════════════════════════════════════════════════════
-PROMPT_P = HERE / "GPT_검증_프롬프트.md"
-t("GPT 검증 프롬프트가 존재", PROMPT_P.exists(), PROMPT_P.name)
+PROMPT_P = HERE / "검증자_프롬프트.md"
+t("검증자 프롬프트가 존재", PROMPT_P.exists(), PROMPT_P.name)
 if PROMPT_P.exists():
     PR = PROMPT_P.read_text(encoding="utf-8")
     # 단계별 추가 지시가 지시서의 단계 집합과 같은가
@@ -401,12 +405,12 @@ if PROMPT_P.exists():
     t(f"프롬프트의 단계별 지시가 지시서 단계와 같은 집합 ({len(pr_stages)}개)",
       pr_stages == det_ids, f"프롬프트={pr_stages} 지시서={det_ids}")
     # 검사 대상은 §2 의 붙여넣기 블록이다. 해설 산문에 같은 문구가 있어도
-    # 프롬프트에서 빠졌으면 Codex 는 그 지시를 받지 못한다.
+    # 프롬프트에서 빠졌으면 검증자는 그 지시를 받지 못한다.
     _mp = re.search(r"## 2\. 붙여넣기용 프롬프트.*?```text\n(.*?)```", PR, re.S)
     BLK = _mp.group(1) if _mp else ""
     t("붙여넣기용 프롬프트 블록을 찾았다", len(BLK) > 800, f"{len(BLK)}자")
     # 정본 문서를 읽으라고 지정했는가 — 프롬프트가 규약을 다시 쓰면 정본이 둘이 된다
-    for must in ("GPT.md", "fix_log/README.md", "CLAUDE.md", "개발_착수_지시서.md",
+    for must in ("ROLES.md", "GPT.md", "fix_log/README.md", "CLAUDE.md", "개발_착수_지시서.md",
                  "bug_fix_list.md"):
         t(f"프롬프트가 {must} 를 읽게 한다", must in BLK)
     t("프롬프트가 상태를 `신규` 로만 두게 한다", "신규" in BLK and "상태를 바꾸거나" in BLK)
@@ -416,11 +420,11 @@ if PROMPT_P.exists():
       "직접 실행하라" in BLK and "제출된 로그를 믿지 마라" in BLK)
     t("프롬프트가 검증기의 결함을 최우선으로 지시한다 (F-074 · F-080 · F-089 · F-095)",
       "이 검사를 통과하면서 틀린 코드" in BLK)
-    t("프롬프트가 이미지 근거를 추측하지 말라고 지시한다 (GPT.md 3)",
+    t("프롬프트가 이미지 능력·접근 부재 시 추측하지 말라고 지시한다 (GPT.md 3)",
       "이미지" in BLK and "추측" in BLK and "검증 불가" in BLK,
       "이미지+추측+검증 불가 3어가 프롬프트 블록 안에")
     #    표준 원문의 위치를 프롬프트가 정확히 말하는가. 저장소 안으로 옮겨졌으므로
-    #    "저장소 밖에 있다"고 적혀 있으면 Codex 가 폴더를 따로 찾게 된다.
+    #    "저장소 밖에 있다"고 적혀 있으면 검증자가 폴더를 따로 찾게 된다.
     _std = [q for q in ROOT.iterdir() if q.is_dir() and q.name.startswith("표준 문서")]
     t("프롬프트가 표준 원문의 위치를 명시", "표준 문서 md 파일" in PR)
     t("표준 원문이 프롬프트가 적은 경로에 실재 (저장소에 있을 때만 검사)",

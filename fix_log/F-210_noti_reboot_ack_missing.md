@@ -6,7 +6,7 @@
 | 분류 | 코드버그 |
 | 대상 | `project_code/firmware/core/node_state.c:L716-L768` · `project_code/firmware/tests/test_node_state.c:L483-L499` · F-071 |
 | 발견일 | 2026-08-12 |
-| 상태 | 신규 |
+| 상태 | 수정완료 |
 
 ## 근거
 
@@ -48,4 +48,5 @@
 
 | 일시 | 상태 | 내용 |
 |---|---|---|
-
+| 2026-08-13 | 확인 | 공식 `test_node_state`는 91/91·종료코드 0이었으나, 기존 수신 Notify 테스트의 종류를 `SIAP_NOTI_REBOOT`로 바꾸고 상태 유지 기대를 RUNNING으로 맞춘 독립 반례는 ACK 검사만 실패해 90/91·종료코드 1이었다. `_on_end()`에 `SIAP_NOTI_REBOOT` 수신 분기가 없어 설계서 §6.2-a와 불일치함을 재현했다. |
+| 2026-08-13 | 수정완료 | `node_state.c::_on_end()`에 정상 수신 `SIAP_NOTI_REBOOT`의 즉시 ACK 분기를 추가했다. 이 알림은 게이트웨이 자신의 리부팅 통지이므로 노드 상태와 기존 송신 `pending`은 유지하고, 기존 HALTED 선행 가드로 무응답 예외를 보존했다. `test_node_state.c`에 CONNECTING·RUNNING·FAULT·REBOOTING·DISCONNECTED의 ACK wire code·`msg_id`·빈 payload와 상태 보존, HALTED 무응답을 고정했다. 수정 분기 제거 재주입은 다섯 ACK 검사가 실패해 98/103·종료코드 1, 복원 후 103/103이었다. `firmware_verify.py` 51/51, `core_purity_verify.py` 7/7, `tools/run_all.py` 20/20을 통과했다. |

@@ -74,8 +74,7 @@ def test_handle_logs_every_frame(conn):
 
 def test_handle_violation_frame_isolates_and_logs_violation(conn):
     """위반 프레임은 frame_log+frame_violation만 남기고 비즈니스 테이블은
-    건드리지 않는다 — codec.py가 위반 시 kind=None·구조 필드 전부 비움을
-    보장하므로 반영할 데이터 자체가 없다."""
+    건드리지 않는다."""
     frame = Frame(
         header=_header(msg_type=0xFFFF), kind=None, t=6.0,
         violations=(Violation(code=1, code_name="INVALID_VERSION", clause="7.3.1", detail="x"),),
@@ -88,6 +87,22 @@ def test_handle_violation_frame_isolates_and_logs_violation(conn):
     assert len(violations) == 1
     assert violations[0].code_name == "INVALID_VERSION"
     assert conn.execute("SELECT COUNT(*) FROM device_install_info").fetchone()[0] == 0
+
+
+def test_handle_headerless_violation_preserves_raw_and_null_header_f215(conn):
+    frame = Frame(
+        header=None, raw=b"\x12\x00", t=6.5,
+        violations=(Violation(code=9, code_name="INVALID_FORMAT",
+                              clause="7.3.1", detail="header incomplete"),),
+    )
+    ingest.handle(frame, conn)
+    log = repository.list_frame_log(conn)[0]
+    assert log.raw_hex == "1200"
+    assert log.is_valid is False
+    assert (log.version, log.msg_type, log.trans_type, log.msg_id,
+            log.payload_len, log.gcg_id, log.node_id) == (None,) * 7
+    violations = repository.list_frame_violations(conn, log.id)
+    assert [v.code_name for v in violations] == ["INVALID_FORMAT"]
 
 
 # ── REQ_SET_NODE_DEVICE_PROPERTY_ALL → device_install_info + device_install (F-198) ────

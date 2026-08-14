@@ -39,7 +39,9 @@ DESIGN_SCHEMA = ROOT / "project_docs" / "db" / "schema.sql"
 sys.path.insert(0, str(PROJECT_CODE))
 
 
-def _collect_sqlite_connect_aliases(tree: ast.AST) -> tuple[set[str], set[str]]:
+def _collect_sqlite_connect_aliases(
+        tree: ast.AST,
+) -> tuple[set[str], set[str], set[str], set[str]]:
     """`sqlite3.connect`를 가리킬 수 있는 모든 이름을 고정점까지 모은다 —
     `module_aliases`(그 이름.connect() 형태로 쓰는 모듈 바인딩, 리터럴
     `sqlite3` 자신도 포함)와 `func_aliases`(그 이름() 만으로 바로 호출하는
@@ -90,18 +92,31 @@ def _collect_sqlite_connect_aliases(tree: ast.AST) -> tuple[set[str], set[str]]:
     인식하고, ① `.connect` 속성 판정(대입 우변·직접 호출 양쪽) ②
     `getattr(__import__('sqlite3'), "connect")`의 첫 인자 ③
     `x = __import__('sqlite3')` 뒤 `x.connect(...)`(대입으로 모듈 별칭이
-    되는 경우, `import sqlite3 as x`와 같은 자격) 세 자리 모두에 반영한다."""
+    되는 경우, `import sqlite3 as x`와 같은 자격) 세 자리 모두에 반영한다.
+
+    F-222 — `importlib.import_module("sqlite3")`도 `sqlite3` 모듈을 반환하지만
+    기존 수집기는 반환 모듈을 추적하지 못했다. `importlib` 모듈 별칭과
+    `import_module` 함수 별칭, 그 대입 사슬도 고정점까지 추적한다."""
     module_aliases: set[str] = set()
     func_aliases: set[str] = set()
+    importlib_aliases: set[str] = set()
+    import_module_aliases: set[str] = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
                 if alias.name == "sqlite3":
                     module_aliases.add(alias.asname or alias.name)
-        elif isinstance(node, ast.ImportFrom) and node.module == "sqlite3":
-            for alias in node.names:
-                if alias.name == "connect":
-                    func_aliases.add(alias.asname or alias.name)
+                elif alias.name == "importlib":
+                    importlib_aliases.add(alias.asname or alias.name)
+        elif isinstance(node, ast.ImportFrom):
+            if node.module == "sqlite3":
+                for alias in node.names:
+                    if alias.name == "connect":
+                        func_aliases.add(alias.asname or alias.name)
+            elif node.module == "importlib":
+                for alias in node.names:
+                    if alias.name == "import_module":
+                        import_module_aliases.add(alias.asname or alias.name)
 
     # F-161/F-165/F-181 — 대입 별칭(모듈 별칭·함수 별칭 둘 다)을 고정점까지
     # 전파한다. 매 라운드마다 새로 잡히는 이름이 없을 때까지 반복 —
@@ -123,15 +138,32 @@ def _collect_sqlite_connect_aliases(tree: ast.AST) -> tuple[set[str], set[str]]:
                  and (
                      (isinstance(value.value, ast.Name) and value.value.id in module_aliases)
                      or _is_dunder_import_sqlite(value.value)   # F-181
+                     or _is_import_module_sqlite(
+                         value.value, importlib_aliases, import_module_aliases
+                     )   # F-222
                  ))
                 or (isinstance(value, ast.Name) and value.id in func_aliases)
-                or _is_getattr_connect(value, module_aliases)   # F-179
+                or _is_getattr_connect(
+                    value, module_aliases, importlib_aliases, import_module_aliases
+                )   # F-179/F-222
             )
             # F-181 — `x = __import__('sqlite3')` 자체는 `.connect`가 아니라
             # 모듈 자신을 가리킨다. `import sqlite3 as x`와 같은 자격의
             # 모듈 별칭으로 취급해야 이후 `x.connect(...)`가 잡힌다.
-            is_module_alias_value = _is_dunder_import_sqlite(value)
-            if not (is_func_alias_value or is_module_alias_value):
+            is_module_alias_value = (
+                _is_dunder_import_sqlite(value)
+                or _is_import_module_sqlite(
+                    value, importlib_aliases, import_module_aliases
+                )
+            )
+            is_import_module_alias_value = (
+                (isinstance(value, ast.Attribute) and value.attr == "import_module"
+                 and isinstance(value.value, ast.Name)
+                 and value.value.id in importlib_aliases)
+                or (isinstance(value, ast.Name) and value.id in import_module_aliases)
+            )
+            if not (is_func_alias_value or is_module_alias_value
+                    or is_import_module_alias_value):
                 continue
             for target in targets:
                 if not isinstance(target, ast.Name):
@@ -142,7 +174,11 @@ def _collect_sqlite_connect_aliases(tree: ast.AST) -> tuple[set[str], set[str]]:
                 if is_module_alias_value and target.id not in module_aliases:
                     module_aliases.add(target.id)
                     changed = True
-    return module_aliases, func_aliases
+                if (is_import_module_alias_value
+                        and target.id not in import_module_aliases):
+                    import_module_aliases.add(target.id)
+                    changed = True
+    return module_aliases, func_aliases, importlib_aliases, import_module_aliases
 
 
 def _is_dunder_import_sqlite(node: ast.expr) -> bool:
@@ -157,7 +193,36 @@ def _is_dunder_import_sqlite(node: ast.expr) -> bool:
     )
 
 
-def _is_getattr_connect(node: ast.expr, module_aliases: set[str]) -> bool:
+def _is_import_module_sqlite(
+        node: ast.expr,
+        importlib_aliases: set[str],
+        import_module_aliases: set[str],
+) -> bool:
+    """F-222 — `importlib.import_module("sqlite3")` 또는 그 별칭 호출인가.
+    실제 sqlite3 모듈을 반환하는 리터럴 입력만 인정해 다른 동적 import를
+    연결 모듈로 오탐하지 않는다."""
+    if not isinstance(node, ast.Call):
+        return False
+    fn = node.func
+    calls_import_module = (
+        (isinstance(fn, ast.Attribute) and fn.attr == "import_module"
+         and isinstance(fn.value, ast.Name) and fn.value.id in importlib_aliases)
+        or (isinstance(fn, ast.Name) and fn.id in import_module_aliases)
+    )
+    if not calls_import_module:
+        return False
+    name_arg: ast.expr | None = node.args[0] if node.args else None
+    if name_arg is None:
+        name_arg = next((kw.value for kw in node.keywords if kw.arg == "name"), None)
+    return isinstance(name_arg, ast.Constant) and name_arg.value == "sqlite3"
+
+
+def _is_getattr_connect(
+        node: ast.expr,
+        module_aliases: set[str],
+        importlib_aliases: set[str],
+        import_module_aliases: set[str],
+) -> bool:
     """F-179 — `getattr(<module_aliases 중 하나 또는 __import__('sqlite3')>,
     "connect")` 형태인가. `sqlite3.connect`와 같은 값을 가리키지만
     `ast.Attribute`가 아니라 `ast.Call`이라 별도로 판정해야 한다."""
@@ -168,12 +233,21 @@ def _is_getattr_connect(node: ast.expr, module_aliases: set[str]) -> bool:
         and (
             (isinstance(node.args[0], ast.Name) and node.args[0].id in module_aliases)
             or _is_dunder_import_sqlite(node.args[0])   # F-181
+            or _is_import_module_sqlite(
+                node.args[0], importlib_aliases, import_module_aliases
+            )   # F-222
         )
         and isinstance(node.args[1], ast.Constant) and node.args[1].value == "connect"
     )
 
 
-def _is_sqlite_connect_call(node: ast.Call, module_aliases: set[str], func_aliases: set[str]) -> bool:
+def _is_sqlite_connect_call(
+        node: ast.Call,
+        module_aliases: set[str],
+        func_aliases: set[str],
+        importlib_aliases: set[str],
+        import_module_aliases: set[str],
+) -> bool:
     """`node`가 (별칭을 포함해) `sqlite3.connect(...)`를 부르는 호출인가."""
     fn = node.func
     return (
@@ -181,9 +255,14 @@ def _is_sqlite_connect_call(node: ast.Call, module_aliases: set[str], func_alias
          and (
              (isinstance(fn.value, ast.Name) and fn.value.id in module_aliases)
              or _is_dunder_import_sqlite(fn.value)   # F-181 — __import__('sqlite3').connect(...)
+             or _is_import_module_sqlite(
+                 fn.value, importlib_aliases, import_module_aliases
+             )   # F-222
          ))
         or (isinstance(fn, ast.Name) and fn.id in func_aliases)
-        or _is_getattr_connect(fn, module_aliases)   # F-179 — getattr(...)(...) 직접 호출
+        or _is_getattr_connect(
+            fn, module_aliases, importlib_aliases, import_module_aliases
+        )   # F-179/F-222
     )
 
 
@@ -199,9 +278,14 @@ def _find_sqlite_connect_bypasses(backend_dir: Path) -> list[str]:
             tree = ast.parse(f.read_text(encoding="utf-8", errors="replace"), filename=str(f))
         except SyntaxError:
             continue
-        module_aliases, func_aliases = _collect_sqlite_connect_aliases(tree)
+        (module_aliases, func_aliases,
+         importlib_aliases, import_module_aliases) = _collect_sqlite_connect_aliases(tree)
         for node in ast.walk(tree):
-            if isinstance(node, ast.Call) and _is_sqlite_connect_call(node, module_aliases, func_aliases):
+            if (isinstance(node, ast.Call)
+                    and _is_sqlite_connect_call(
+                        node, module_aliases, func_aliases,
+                        importlib_aliases, import_module_aliases
+                    )):
                 try:
                     found.append(str(f.relative_to(ROOT)))
                 except ValueError:
@@ -235,10 +319,14 @@ def _db_factory_functions(db_py_path: Path) -> list[str]:
     이런 이름에 대해 항상 `False`를 내는 것 자체가 올바른 판정이다 —
     별도 분기를 추가하지 않는다."""
     tree = ast.parse(db_py_path.read_text(encoding="utf-8"), filename=str(db_py_path))
-    module_aliases, func_aliases = _collect_sqlite_connect_aliases(tree)
+    (module_aliases, func_aliases,
+     importlib_aliases, import_module_aliases) = _collect_sqlite_connect_aliases(tree)
 
     def _calls_sqlite_connect(subtree: ast.AST) -> bool:
-        return any(isinstance(sub, ast.Call) and _is_sqlite_connect_call(sub, module_aliases, func_aliases)
+        return any(isinstance(sub, ast.Call) and _is_sqlite_connect_call(
+                       sub, module_aliases, func_aliases,
+                       importlib_aliases, import_module_aliases
+                   )
                    for sub in ast.walk(subtree))
 
     names: list[str] = []

@@ -6,7 +6,7 @@
 | 분류 | 코드버그 |
 | 대상 | `project_code/siap/link.py:L257` · `project_code/siap/registry.py:L90` |
 | 발견일 | 2026-08-12 |
-| 상태 | 신규 |
+| 상태 | 수정완료 |
 
 ## 근거
 
@@ -58,3 +58,5 @@ SUCCESS 응답을 확정한 한 경로에서 메시지별 설정 상태를 원�
 
 | 일시 | 상태 | 내용 |
 |---|---|---|
+| 2026-08-13 | 확인 | 등록 노드에 역방향 설정 요청 3종을 넣어 `_default_reply()`와 `_apply_registry_effects()`를 연속 호출했다. 세 응답은 모두 SUCCESS였으나 노드는 `sw_version=1/status=NORMAL/num_devices=0`, 링크와 PendingTable 프로파일은 기본값으로 유지돼 미반영을 재현했다. |
+| 2026-08-13 | 수정완료 | SUCCESS가 확정된 단일 `_apply_registry_effects()` 경로에서 `REQ_SET_NODE_PROPERTY`는 노드 속성을, `REQ_SET_NODE_DEVICE_PROPERTY_ALL`은 노드와 전체 디바이스를 registry 한 잠금으로, `REQ_SET_MSG_FLOW_CONTROL_PROFILE`은 link와 PendingTable 프로파일을 같은 갱신점에서 반영하도록 수정했다. `send()`의 프로파일 읽기도 잠금으로 직렬화하고 새 pending deadline 적용 테스트를 추가했다. 상태 반영 분기 제거 재주입에서 전용 테스트가 실패했으며 복원 후 관련 94/94, SIAP 전체 108/108을 통과했다. |

@@ -7,7 +7,7 @@ C 와 Python 두 코덱이 같은 골든 벡터에서 같은 판정을 내리는
 절차:
   1. `firmware/tests/dump_golden.c` 를 빌드해 실행한다 — 골든 벡터 53건 **전량**을
      C 디코더에 먹인다.
-       · judgement=normal/alert → 디코드 후 재인코딩한 hex 를 낸다
+       · judgement=normal/alert → 디코드 후 재인코딩한 hex와 명명된 의미값 서명을 낸다
        · judgement=violation    → 거부 판정(RSC+clause)을 낸다(F-136)
      judgement(normal/alert/violation)는 category(정상/경계값/위반)와 축이
      다르다 — 경계값 11건 중 2건(N 상한 초과 등)은 judgement=violation 이고,
@@ -15,7 +15,8 @@ C 와 Python 두 코덱이 같은 골든 벡터에서 같은 판정을 내리는
      같은 고정 개수를 쓰지 않고 golden.jsonl 에서 매번 다시 센다.
   2. 같은 53건을 Python `siap/codec.py::decode_frame()` 으로 판정한다 —
      normal/alert 는 `encode_frame()` 까지, violation 은 `violations[0]` 을 본다.
-  3. **재인코딩 대상**은 C 출력 · Python 출력 · golden.jsonl 원본 hex 세 값이,
+  3. **재인코딩 대상**은 C 출력 · Python 출력 · golden.jsonl 원본 hex 세 값과
+     C/Python 디코드 의미값 · golden.jsonl 독립 fields 세 값이 각각 일치하는지,
      **위반 대상**은 C 판정 · Python 판정 · golden.jsonl 이 적어 둔 기대값
      세 값이 전부 일치하는지 대조한다 — 파일 하나만 보고 판정하지 않는다
      (F-080, 독립 입력 최소 2개: C 실행 결과와 golden.jsonl 원본).
@@ -23,6 +24,10 @@ C 와 Python 두 코덱이 같은 골든 벡터에서 같은 판정을 내리는
 F-136 — 이전 버전은 violation 9건(judgement 기준)을 아예 건너뛰고 "44+9=53"
 이라는 항등식에만 포함시켜, "53건 전량 대조"라는 출구 문구를 실제로는
 충족하지 못했다. 위반 판정까지 양쪽 언어에서 독립적으로 재구성해 대조한다.
+
+F-212 — 바이트 왕복만 보면 각 언어의 인코더·디코더가 같은 필드를 함께
+맞바꾼 오류를 놓친다. 정상·알림 44건은 C/Python이 디코드한 명명 구조체를
+wire 순서 의미값 서명으로 펴서 골든 fields와 별도로 대조한다.
 
 실행: python tools/xcodec_verify.py   (저장소 루트에서)
 종료 코드: 전부 통과 0 / 하나라도 실패 1
@@ -53,9 +58,11 @@ def _load_golden() -> list[dict]:
         return [json.loads(line) for line in f if line.strip()]
 
 
-def _build_and_run_c_dump() -> tuple[dict[str, str], dict[str, tuple[int, str]], str, int]:
+def _build_and_run_c_dump() -> tuple[
+        dict[str, str], dict[str, str], dict[str, tuple[int, str]], str, int]:
     """dump_golden 을 빌드·실행한다.
-    돌려주는 값: (재인코딩 hex, {id: (rsc, clause)} 위반 판정, stderr 로그, 종료코드).
+    돌려주는 값: (재인코딩 hex, 의미값 서명, {id: (rsc, clause)} 위반 판정,
+    stderr 로그, 종료코드).
 
     CLAUDE.md §1-3 — 실행파일을 커밋하지 않는다. `make clean` 이 걸릴 때까지
     기다리지 않고, 이 함수가 끝나기 전에 스스로 빌드 산출물을 지운다 — 그래야
@@ -70,7 +77,7 @@ def _build_and_run_c_dump() -> tuple[dict[str, str], dict[str, tuple[int, str]],
     build = subprocess.run(["make", "dump_golden"], cwd=FW_TESTS,
                             capture_output=True, text=True)
     if build.returncode != 0:
-        return {}, {}, f"빌드 실패: {build.stdout}\n{build.stderr}", build.returncode
+        return {}, {}, {}, f"빌드 실패: {build.stdout}\n{build.stderr}", build.returncode
 
     exe = FW_TESTS / "dump_golden.exe"
     if not exe.exists():
@@ -88,6 +95,7 @@ def _build_and_run_c_dump() -> tuple[dict[str, str], dict[str, tuple[int, str]],
                 p.unlink()
 
     hex_out: dict[str, str] = {}
+    semantic_out: dict[str, str] = {}
     violation_out: dict[str, tuple[int, str]] = {}
     for line in run.stdout.splitlines():
         line = line.strip()
@@ -102,10 +110,73 @@ def _build_and_run_c_dump() -> tuple[dict[str, str], dict[str, tuple[int, str]],
                 continue
             clause = " ".join(parts[3:])
             violation_out[vid] = (rsc, clause)
+        elif len(parts) == 3 and parts[1] == "SEMANTIC":
+            semantic_out[parts[0]] = parts[2]
         elif len(parts) == 2:
             vid, hexstr = parts
             hex_out[vid] = hexstr.upper()
-    return hex_out, violation_out, run.stderr, run.returncode
+    return hex_out, semantic_out, violation_out, run.stderr, run.returncode
+
+
+def _golden_semantic_signature(vector: dict) -> str:
+    """골든 생성기의 독립 의미값(fields)을 wire 순서의 서명으로 만든다.
+    hex를 다시 해석하지 않으므로 코덱과 같은 오류를 공유하지 않는다(F-212)."""
+    return ",".join(f"{field['bits']}:{field['value']}" for field in vector["fields"])
+
+
+def _frame_semantic_signature(frame, codec) -> str:
+    """Python 디코더가 만든 명명된 구조체를 골든 fields와 같은 순서로 편다.
+    원시 바이트가 아니라 구조체 속성을 읽어 양쪽 변환의 같은 오류를 드러낸다."""
+    values: list[tuple[int, int]] = []
+
+    def add(bits: int, value) -> None:
+        values.append((bits, int(value)))
+
+    def add_dmi(dmi) -> None:
+        add(8, dmi.device_id)
+        add(1, dmi.dev_type)
+        add(8, dmi.subtype)
+        add(2, dmi.value_type)
+        add(5, 0)
+        add(32, codec.pack_value(dmi.value, dmi.value_type))
+
+    def add_dp(dp) -> None:
+        add_dmi(dp.main)
+        add(2, dp.transfer_mode)
+        add(14, dp.period)
+        add(32, codec.pack_value(dp.lower_value, dp.main.value_type))
+        add(32, codec.pack_value(dp.upper_value, dp.main.value_type))
+        add(32, codec.pack_value(dp.lower_limit, dp.main.value_type))
+        add(32, codec.pack_value(dp.upper_limit, dp.main.value_type))
+        add(32, codec.pack_value(dp.precision, dp.main.value_type))
+        add(8, dp.status)
+
+    h = frame.header
+    for bits, value in (
+            (8, h.version), (14, h.msg_type), (2, h.trans_type),
+            (16, h.msg_id), (16, h.payload_len), (20, h.gcg_id), (20, h.node_id)):
+        add(bits, value)
+    if frame.nec is not None:
+        add(8, frame.nec)
+    if frame.rsc is not None:
+        add(8, frame.rsc)
+    if frame.node_property is not None:
+        np = frame.node_property
+        for bits, value in ((8, np.sw_version), (20, np.gcg_id), (20, np.node_id),
+                            (8, np.status), (8, np.num_devices)):
+            add(bits, value)
+    if frame.profile is not None:
+        mcp = frame.profile
+        for bits, value in ((16, mcp.recv_timeout), (8, mcp.num_retry),
+                            (16, mcp.noti_error_interval), (16, mcp.keep_alive_interval)):
+            add(bits, value)
+    for device_id in frame.device_ids:
+        add(8, device_id)
+    for dmi in frame.device_main_infos:
+        add_dmi(dmi)
+    for dp in frame.device_properties:
+        add_dp(dp)
+    return ",".join(f"{bits}:{value}" for bits, value in values)
 
 
 def main() -> int:
@@ -127,7 +198,7 @@ def main() -> int:
       f"위반 판정 대상(judgement=violation) {len(violation_vecs)}건 = 53건",
       len(reencodable) + len(violation_vecs) == 53, "")
 
-    c_hex, c_violations, c_stderr, c_returncode = _build_and_run_c_dump()
+    c_hex, c_semantics, c_violations, c_stderr, c_returncode = _build_and_run_c_dump()
     # F-142 — 종료코드를 출력 건수와 독립적으로 먼저 본다. 예전에는 이
     # 검사가 없어, stdout 이 완전해도(53건 다 찍은 뒤 죽어도) 8/8 로
     # 통과했다 — 종료코드만 강제로 바꿔 재현해도 검출되지 않았다.
@@ -138,12 +209,17 @@ def main() -> int:
     t(f"C 출력이 재인코딩 대상 {len(reencodable)}건 전량을 냈다 (실제 {len(c_hex)}건)",
       len(c_hex) == len(reencodable),
       "" if len(c_hex) == len(reencodable) else f"C stderr: {c_stderr[:300]}")
+    t(f"C 출력이 의미값 서명 {len(reencodable)}건 전량을 냈다 "
+      f"(실제 {len(c_semantics)}건) (F-212)",
+      len(c_semantics) == len(reencodable),
+      "" if len(c_semantics) == len(reencodable) else f"C stderr: {c_stderr[:300]}")
     t(f"C 출력이 위반 판정 대상 {len(violation_vecs)}건 전량을 냈다 (실제 {len(c_violations)}건) (F-136)",
       len(c_violations) == len(violation_vecs),
       "" if len(c_violations) == len(violation_vecs) else f"C stderr: {c_stderr[:300]}")
 
     # ── 재인코딩 대상 — C hex ↔ Python hex ↔ golden hex ──────────
     mismatches: list[str] = []
+    semantic_mismatches: list[str] = []
     py_fail: list[str] = []
     for v in reencodable:
         vid = v["id"]
@@ -155,6 +231,7 @@ def main() -> int:
                 py_fail.append(f"{vid}: 예상치 못한 위반 {frame.violations}")
                 continue
             py_hex = codec.encode_frame(frame, "strict").hex().upper()
+            py_semantic = _frame_semantic_signature(frame, codec)
         except Exception as e:                              # noqa: BLE001 — 검증기는 원인을 그대로 보고한다
             py_fail.append(f"{vid}: 예외 {e!r}")
             continue
@@ -166,9 +243,20 @@ def main() -> int:
         if not (c_h == py_hex == golden_hex):
             mismatches.append(f"{vid}: C={c_h} PYTHON={py_hex} GOLDEN={golden_hex}")
 
+        golden_semantic = _golden_semantic_signature(v)
+        c_semantic = c_semantics.get(vid)
+        if not (c_semantic == py_semantic == golden_semantic):
+            semantic_mismatches.append(
+                f"{vid}: C={c_semantic} PYTHON={py_semantic} GOLDEN={golden_semantic}")
+
     t(f"Python 인코더가 {len(reencodable)}건 전량 예외 없이 재인코딩", not py_fail, "; ".join(py_fail[:5]))
     t(f"C 출력 ↔ Python 출력 ↔ golden.jsonl 원본 hex — {len(reencodable)}건 전량 바이트 일치",
       not mismatches, "; ".join(mismatches[:5]) + (f" 외 {len(mismatches) - 5}건" if len(mismatches) > 5 else ""))
+    t(f"C 디코드 의미값 ↔ Python 디코드 의미값 ↔ golden.jsonl fields — "
+      f"{len(reencodable)}건 전량 일치 (F-212)",
+      not semantic_mismatches,
+      "; ".join(semantic_mismatches[:3])
+      + (f" 외 {len(semantic_mismatches) - 3}건" if len(semantic_mismatches) > 3 else ""))
 
     # ── 위반 판정 대상 — C 판정 ↔ Python 판정 ↔ golden 기대값 (F-136) ──
     violation_mismatches: list[str] = []

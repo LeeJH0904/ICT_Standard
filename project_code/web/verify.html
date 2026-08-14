@@ -56,7 +56,7 @@
 <div id="live" aria-live="polite" class="sr-only"></div>
 
 <script type="module">
-import { api, ApiError, describeProblem } from "./static/api.js";
+import { api, ApiError, collectAllPages, describeProblem } from "./static/api.js";
 import { connectStream } from "./static/stream.js";
 import { announce, setConnStatus, setViewState, focusFirst } from "./static/a11y.js";
 import { hexBytes, hexLines, nibbleRange, hex, formatDateTime, epochToIso } from "./static/fmt.js";
@@ -83,7 +83,14 @@ const INJECT_BUTTONS = [
   { id: "X08", label: "8. NEC 배터리 저전력" },
 ];
 
-const state = { frames: [], byId: new Map(), alertsByFrame: new Map(), selectedId: null, selectedFieldIdx: null };
+const state = {
+  frames: [],
+  byId: new Map(),
+  alertsByFrame: new Map(),
+  selectedId: null,
+  selectedFieldIdx: null,
+  recoverySince: undefined,
+};
 
 function judgementMeta(j) {
   if (j === "violation") return { cls: "violation", icon: "⚠", text: "위반" };
@@ -240,23 +247,36 @@ function upsertFrame(frame) {
 // F-200 — 화면_설계서.md §3.2 "누락 보정": 폴백 중 놓친 프레임은 재연결
 // 직후 listFrames?since= 로 채운다. onPollTick(loadFrames)은 폴백 중 매초
 // 최신 100건만 다시 그려 대체로 화면을 살아있게 유지하지만, 그 창(100건)을
-// 넘는 프레임이 끊긴 동안 도착했으면 poll 만으로는 영영 복구되지 않는다 —
-// 재연결 시점에 "마지막으로 확인한 프레임 이후 전부"를 since= 로 정확히
-// 조회해 그 창을 없앤다.
+// 넘는 프레임이 끊긴 동안 도착했으면 poll 만으로는 영영 복구되지 않는다.
+// F-205 — 재연결 시각(until)을 스냅샷으로 고정하고 total까지 offset 페이지를
+// 모두 소비해 "마지막으로 확인한 프레임 이후 전부"를 복구한다. 스냅샷 뒤
+// 프레임은 이미 다시 열린 SSE가 전달하므로 페이지 이동 중 삽입에도 흔들리지 않는다.
+// F-233 — 최초 단절 순간의 마지막 연속 커서를 폴링 표시 목록과 분리한다.
+// 재연결 복구가 실패하면 다음 재연결에서도 같은 커서를 다시 사용한다.
+function pinRecoveryCursor() {
+  if (state.recoverySince !== undefined) return;
+  state.recoverySince = epochToIso(state.frames.length ? state.frames[0].t : null);
+}
+
 async function recoverMissedFrames() {
-  const since = epochToIso(state.frames.length ? state.frames[0].t : null);
+  const since = state.recoverySince;
   if (!since) {
     await loadFrames();
+    state.recoverySince = undefined;
     return;
   }
   const violationsOnly = document.getElementById("violations-only").checked;
-  const page = violationsOnly
-    ? await api.listViolations({ since, limit: 100 })
-    : await api.listFrames({ since, limit: 100 });
+  const until = new Date().toISOString();
+  const listPage = violationsOnly ? api.listViolations : api.listFrames;
+  const beforeIds = new Set(state.byId.keys());
+  const recovered = await collectAllPages(listPage, { since, until }, 100);
+  const unique = [...new Map(recovered.map((frame) => [frame.id, frame])).values()];
   // 오래된 것부터 upsertFrame(unshift) 해야 배치 안에서도 최신이 맨 위로 온다.
-  const missed = page.items.slice().sort((a, b) => a.t - b.t);
+  const missed = unique.sort((a, b) => a.t - b.t);
   for (const f of missed) upsertFrame(f);
-  if (missed.length) announce(`재연결 — 놓친 프레임 ${missed.length}건을 복구했습니다.`);
+  const added = missed.filter((f) => !beforeIds.has(f.id)).length;
+  state.recoverySince = undefined;
+  if (added) announce(`재연결 — 놓친 프레임 ${added}건을 복구했습니다.`);
 }
 
 connectStream({
@@ -272,6 +292,7 @@ connectStream({
     }
   },
   onPollTick: loadFrames,
+  onDisconnect: pinRecoveryCursor,
   onReconnect: recoverMissedFrames,
 });
 

@@ -6,7 +6,7 @@
 | 분류 | 코드버그 |
 | 대상 | `project_code/backend/services/ems.py:130-133` · `project_code/backend/repository.py:702-716` |
 | 발견일 | 2026-08-13 |
-| 상태 | 신규 |
+| 상태 | 수정완료 |
 
 ## 근거
 
@@ -46,5 +46,6 @@ property_patch = {period_sec: 60}
 
 | 일시 | 상태 | 내용 |
 |---|---|---|
+| 2026-08-13 | 확인 | 실제 HTTP 경로에서 기존 임계값 `(2.0, 8.0)`인 장치에 `{period_sec: 60}`만 PATCH했다. 응답은 200이었지만 DB 임계값은 `(None, None)`으로 바뀌었다. |
+| 2026-08-14 | 수정완료 | `device_install_info`에 `transfer_mode`·`period_sec`를 영속하고, repository UPDATE가 요청에 포함된 고정 4필드만 CASE로 갱신하도록 바꿨다. 누락 필드는 전송 프레임과 DB 모두 기존값을 유지하며, OpenAPI가 금지하는 명시적 null은 HTTP 400으로 거부한다. 보존 로직을 옛 동작으로 주입하자 F-220 회귀 1건이 `(None,60,None,None)`으로 실패했고 원복 후 통과했다. |
 | | | |
-

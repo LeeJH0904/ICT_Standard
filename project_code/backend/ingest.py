@@ -127,25 +127,26 @@ def handle(frame: Frame, conn: sqlite3.Connection) -> None:
     전체를 `try/except`로 감싸 예외 시 `rollback()`한 뒤 그대로 재전파한다
     — 호출자가 실패를 알아야 하므로 삼키지 않는다."""
     try:
+        header = frame.header
         frame_id = repository.insert_frame_log(
             conn,
             t=frame.t,
             direction="rx",
             raw_hex=frame.raw.hex(),
-            version=frame.header.version,
-            msg_type=frame.header.msg_type,
-            trans_type=frame.header.trans_type,
-            msg_id=frame.header.msg_id,
-            payload_len=frame.header.payload_len,
-            gcg_id=frame.header.gcg_id,
-            node_id=frame.header.node_id,
+            version=header.version if header is not None else None,
+            msg_type=header.msg_type if header is not None else None,
+            trans_type=header.trans_type if header is not None else None,
+            msg_id=header.msg_id if header is not None else None,
+            payload_len=header.payload_len if header is not None else None,
+            gcg_id=header.gcg_id if header is not None else None,
+            node_id=header.node_id if header is not None else None,
             is_valid=frame.is_valid,
             elements_json=_serialize_elements(frame),
         )
 
         if not frame.is_valid:
-            # 위반 프레임 — codec.py는 이 경우 kind=None, 구조화 필드 전부 비움을
-            # 보장한다. 반영할 것이 없으므로 위반 내역만 남기고 격리한다.
+            # 위반 프레임은 구조화 필드가 일부 해석됐더라도 비즈니스 데이터로
+            # 반영하지 않는다. 위반 내역과 원본만 남기고 격리한다.
             for v in frame.violations:
                 repository.insert_frame_violation(
                     conn, frame_id=frame_id, code=v.code, code_name=v.code_name,
@@ -290,6 +291,8 @@ def _handle_device_property(conn: sqlite3.Connection, frame: Frame) -> None:
             siap_node_id=node_id,
             siap_device_id=dmi.device_id,
             siap_subtype=dmi.subtype,
+            transfer_mode=dp.transfer_mode.name,
+            period_sec=dp.period,
             install_location=gh_location if is_new else None,
             install_loc_unit=gh_loc_unit if is_new else None,
             unit=None,

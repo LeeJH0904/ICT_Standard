@@ -109,6 +109,66 @@ _UINT_MIN, _UINT_MAX = 0, 4_294_967_295
 _FLOAT_MAX = 3.4028234663852886e38
 
 
+def _validate_device_property_request(body: Any) -> tuple[dict, dict]:
+    """F-228 — `DevicePropertyRequest`·`DevicePropertySelector`·
+    `DevicePropertyPatch`의 닫힌 OpenAPI 입력 계약을 런타임에도 적용한다.
+    FastAPI의 타입 없는 ``dict``는 JSON Schema를 자동 적용하지 않으므로
+    허용 키·필수 키·타입·범위를 명시적으로 같은 값으로 검사한다."""
+    if not isinstance(body, dict):
+        raise ApiProblem(400, "잘못된 요청 형식", detail="요청 본문은 객체여야 한다")
+    extra_body = set(body) - {"selector", "property"}
+    if extra_body or set(body) != {"selector", "property"}:
+        raise ApiProblem(400, "잘못된 요청 형식",
+                          detail=f"본문은 selector·property만 가져야 한다: extra={sorted(extra_body)}")
+
+    selector, prop = body["selector"], body["property"]
+    if not isinstance(selector, dict) or not isinstance(prop, dict) or not prop:
+        raise ApiProblem(400, "잘못된 요청 형식",
+                          detail="selector·property는 객체이며 property는 최소 1개 필드가 있어야 한다")
+
+    selector_keys = {"install_id", "greenhouse_id", "install_location", "subtype"}
+    extra_selector = set(selector) - selector_keys
+    if extra_selector:
+        raise ApiProblem(400, "잘못된 요청 형식",
+                          detail=f"selector에 허용되지 않는 필드가 있다: {sorted(extra_selector)}")
+    has_install = "install_id" in selector
+    has_greenhouse = "greenhouse_id" in selector
+    if has_install == has_greenhouse:
+        raise ApiProblem(400, "잘못된 요청 형식",
+                          detail="selector는 install_id 또는 greenhouse_id 중 정확히 하나여야 한다(F-093)")
+    if has_install and set(selector) != {"install_id"}:
+        raise ApiProblem(400, "잘못된 요청 형식",
+                          detail="install_id 개별 선택에는 구역 필터를 함께 쓸 수 없다")
+    for key in ("install_id", "greenhouse_id", "install_location"):
+        if key in selector and (not isinstance(selector[key], str) or not selector[key]):
+            raise ApiProblem(400, "잘못된 요청 형식", detail=f"selector.{key}는 빈 문자열이 아닌 문자열이어야 한다")
+    if "subtype" in selector:
+        subtype = selector["subtype"]
+        if isinstance(subtype, bool) or not isinstance(subtype, int) or not (0 <= subtype <= 255):
+            raise ApiProblem(400, "잘못된 요청 형식", detail="selector.subtype은 0~255 정수여야 한다")
+
+    property_keys = {"transfer_mode", "period_sec", "lower_value", "upper_value"}
+    extra_property = set(prop) - property_keys
+    if extra_property:
+        raise ApiProblem(400, "잘못된 요청 형식",
+                          detail=f"property에 허용되지 않는 필드가 있다: {sorted(extra_property)}")
+    if "transfer_mode" in prop and prop["transfer_mode"] not in {"PERIODIC", "EVENT", "BOTH"}:
+        raise ApiProblem(400, "잘못된 요청 형식", detail="property.transfer_mode이 허용 열거값이 아니다")
+    if "period_sec" in prop:
+        period = prop["period_sec"]
+        if isinstance(period, bool) or not isinstance(period, int) or not (0 <= period <= 16383):
+            raise ApiProblem(400, "잘못된 요청 형식", detail="property.period_sec은 0~16383 정수여야 한다")
+    for key in ("lower_value", "upper_value"):
+        if key not in prop:
+            continue
+        value = prop[key]
+        if (isinstance(value, bool) or not isinstance(value, (int, float))
+                or not (-_FLOAT_MAX <= float(value) <= _FLOAT_MAX)):
+            raise ApiProblem(400, "잘못된 요청 형식",
+                              detail=f"property.{key}는 float32 범위의 숫자여야 한다")
+    return selector, prop
+
+
 def _validate_control_action(action: Any) -> dict:
     if not isinstance(action, dict):
         raise ApiProblem(400, "잘못된 요청 형식", detail="action 은 객체여야 한다")
@@ -258,6 +318,7 @@ def _device_dict(conn: sqlite3.Connection, install) -> dict:
         "device_info_id": install.device_info_id, "device_kind": device_kind,
         "siap_node_id": install.siap_node_id, "siap_device_id": install.siap_device_id,
         "siap_subtype": install.siap_subtype, "subtype": subtype_name,
+        "transfer_mode": install.transfer_mode, "period_sec": install.period_sec,
         "unit": install.unit, "lower_limit": install.lower_limit, "upper_limit": install.upper_limit,
         "precision_val": install.precision_val,
     }
@@ -450,19 +511,14 @@ def create_app(*, db_path: str | Path, link: SiapLink, builder: FrameBuilder,
 
     @app.patch("/api/v1/device-property")
     def set_device_property(body: dict = Body(...), x_user_id: str = Header(..., alias="X-User-Id")):
-        selector = body.get("selector")
-        prop = body.get("property")
-        if not isinstance(selector, dict) or not isinstance(prop, dict) or not prop:
-            raise ApiProblem(400, "잘못된 요청 형식", detail="selector·property 는 필수이며 property 는 최소 1개 필드가 있어야 한다")
-        if ("install_id" in selector) == ("greenhouse_id" in selector):
-            raise ApiProblem(400, "잘못된 요청 형식",
-                              detail="selector 는 install_id 또는 greenhouse_id 중 정확히 하나여야 한다(F-093)")
+        selector, prop = _validate_device_property_request(body)
         conn = get_conn()
         try:
             _require_user(x_user_id, conn)
             try:
                 installs = ems.set_device_property(conn, link, builder, selector=selector,
-                                                     property_patch=prop, timeout=default_timeout)
+                                                     property_patch=prop, user_id=x_user_id,
+                                                     timeout=default_timeout)
             except ems.DevicePropertyError as e:
                 raise ApiProblem(e.status, "디바이스 속성 설정 실패", detail=str(e), siap_rsc=e.siap_rsc) from e
             devices = [_device_dict(conn, i) for i in installs]

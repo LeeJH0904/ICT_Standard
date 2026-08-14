@@ -320,4 +320,4 @@ DB 트리거가 차단하면 그 사실을 삼키지 않고 그대로 올린다.
 1. 골든 테스트 벡터 53건 (`contracts/vectors/golden.jsonl`)
 2. 펌웨어 설계서 — 노드 상태 머신·비트 패킹·메모리 예산
 3. 시연 시나리오 — 영상 2분 구성
-4. **Claude Code 개발 착수** — `backend/api.py`가 이 명세를 구현하고, FastAPI가 생성하는 `/openapi.json`이 본 문서와 일치하는지 대조하는 테스트를 둔다
+4. **작업자 개발 착수** — `backend/api.py`가 이 명세를 구현하고, FastAPI가 생성하는 `/openapi.json`이 본 문서와 일치하는지 대조하는 테스트를 둔다

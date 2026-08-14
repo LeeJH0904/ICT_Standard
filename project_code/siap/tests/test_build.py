@@ -9,6 +9,7 @@ from contracts.frame import (
     DeviceProperty, DevType, MsgKind, NodeProperty, RSC, Status, Subtype,
     TransferMode, ValueType,
 )
+from contracts.fake_link import FakeFrameBuilder
 from siap import codec
 from siap.build import FrameBuilderImpl, MsgIdAllocator
 
@@ -99,6 +100,30 @@ def test_res_set_connection_error_path_is_valid_wire_frame():
     redecoded = codec.decode_frame(encoded, "strict", node_known=lambda n: True)
     assert not redecoded.violations
     assert redecoded.rsc == RSC.INVALID_GCG_ID
+
+
+@pytest.mark.parametrize("rsc", [RSC.SUCCESS, RSC.INVALID_NODE_ID])
+def test_res_set_connection_fake_and_real_payloads_match_f208(rsc):
+    """F-208 — Protocol 설명을 다시 '오류면 RSC 1byte만'으로 바꾸거나
+    Fake/실제 빌더 중 하나만 고정부를 줄이면 payload byte 대조가 깨진다."""
+    req = codec.decode_frame(
+        bytes.fromhex("120000000100000000100003"),
+        node_known=lambda n: True,
+    )
+    node = (NodeProperty(sw_version=7, gcg_id=1, node_id=3,
+                         status=Status.NORMAL, num_devices=1)
+            if rsc == RSC.SUCCESS else None)
+    devices = (_dp(),) if rsc == RSC.SUCCESS else ()
+    fake = FakeFrameBuilder(gcg_id=1).res_set_connection(
+        req, rsc, node=node, devices=devices)
+    real = FrameBuilderImpl(gcg_id=1).res_set_connection(
+        req, rsc, node=node, devices=devices)
+
+    expected_len = 9 + 30 * len(devices)
+    assert fake.header.payload_len == real.header.payload_len == expected_len
+    assert fake.node_property == real.node_property
+    assert fake.device_properties == real.device_properties
+    assert codec.encode_frame(fake, "strict")[12:] == codec.encode_frame(real, "strict")[12:]
 
 
 def test_error_response_returns_none_for_notify_f040():

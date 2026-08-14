@@ -6,15 +6,17 @@
  * 확인한다). 이 파일이 새로 하는 일은 그 결과를 stdout 으로 내보내는
  * 것뿐이다 — Python(siap/codec.py) 출력과 대조하기 위해서다.
  *
- * F-136 — judgement=normal/alert 는 재인코딩한 hex 를, judgement=violation
- * 은 C 디코더의 거부 판정(RSC+clause)을 낸다. 예전에는 violation 9건을
+ * F-136/F-212 — judgement=normal/alert 는 재인코딩한 hex와 디코드 구조체의
+ * 의미값 서명을, judgement=violation 은 C 디코더의 거부 판정(RSC+clause)을
+ * 낸다. 예전에는 violation 9건을
  * 아예 건너뛰고 "44+9=53"이라는 항등식에만 포함시켜, xcodec_verify.py 가
  * 53건 전량을 대조한다는 개발_착수_지시서 §3.5 출구 문구를 실제로는
  * 충족하지 못했다.
  *
  * 실행: cd project_code/firmware/tests && make dump_golden && ./dump_golden
- * 출력 형식(둘 중 하나, 공백으로 구분):
+ * 출력 형식(셋 중 하나, 공백으로 구분):
  *   "<id> <hex>"                  — normal/alert, 재인코딩된 바이트열
+ *   "<id> SEMANTIC <bits:value,...>" — normal/alert, 디코드 의미값
  *   "<id> VIOLATION <rsc> <clause>" — violation, 거부 판정
  * 실패한 벡터는 stderr 에 "SKIP <id> <이유>" 로 남기고 stdout 에는 내지 않는다.
  */
@@ -189,6 +191,72 @@ static const char *clause_to_str(siap_clause_t c)
     }
 }
 
+/* F-212 — 디코드한 C 구조체의 의미값을 wire 필드 순서의 `bits:value`
+   서명으로 내보낸다. 원본 hex를 다시 인코드하는 것만으로는 C의 encode와
+   decode가 같은 방식으로 틀린 경우를 잡지 못한다. 이 서명은 Python이
+   golden.jsonl의 독립 fields 의미값으로 만든 서명과 대조한다. */
+static void semantic_field(bool *first, unsigned bits, uint32_t value)
+{
+    printf("%s%u:%lu", *first ? "" : ",", bits, (unsigned long)value);
+    *first = false;
+}
+
+static void semantic_dmi(bool *first, const siap_dmi_t *d)
+{
+    semantic_field(first, 8, d->device_id);
+    semantic_field(first, 1, d->dev_type);
+    semantic_field(first, 8, d->subtype);
+    semantic_field(first, 2, d->value_type);
+    semantic_field(first, 5, 0);
+    semantic_field(first, 32, d->value);
+}
+
+static void semantic_dp(bool *first, const siap_dp_t *d)
+{
+    semantic_dmi(first, &d->main);
+    semantic_field(first, 2, d->transfer_mode);
+    semantic_field(first, 14, d->period);
+    semantic_field(first, 32, d->lower_value);
+    semantic_field(first, 32, d->upper_value);
+    semantic_field(first, 32, d->lower_limit);
+    semantic_field(first, 32, d->upper_limit);
+    semantic_field(first, 32, d->precision);
+    semantic_field(first, 8, d->status);
+}
+
+static void dump_semantic(const char *id, const gcollect_t *g)
+{
+    bool first = true;
+    printf("%s SEMANTIC ", id);
+    semantic_field(&first, 8, g->hdr.version);
+    semantic_field(&first, 14, g->hdr.msg_type);
+    semantic_field(&first, 2, g->hdr.trans_type);
+    semantic_field(&first, 16, g->hdr.msg_id);
+    semantic_field(&first, 16, g->hdr.payload_len);
+    semantic_field(&first, 20, g->hdr.gcg_id);
+    semantic_field(&first, 20, g->hdr.node_id);
+    if (g->has_nec) semantic_field(&first, 8, (uint32_t)g->nec);
+    if (g->has_rsc) semantic_field(&first, 8, (uint32_t)g->rsc);
+    if (g->has_np) {
+        semantic_field(&first, 8, g->np.sw_version);
+        semantic_field(&first, 20, g->np.gcg_id);
+        semantic_field(&first, 20, g->np.node_id);
+        semantic_field(&first, 8, g->np.status);
+        semantic_field(&first, 8, g->np.num_devices);
+    }
+    if (g->has_mcp) {
+        semantic_field(&first, 16, g->mcp.recv_timeout);
+        semantic_field(&first, 8, g->mcp.num_retry);
+        semantic_field(&first, 16, g->mcp.noti_error_interval);
+        semantic_field(&first, 16, g->mcp.keep_alive_interval);
+    }
+    for (uint16_t i = 0; i < g->did_count; i++)
+        semantic_field(&first, 8, g->device_ids[i]);
+    for (uint16_t i = 0; i < g->dmi_count; i++) semantic_dmi(&first, &g->dmis[i]);
+    for (uint16_t i = 0; i < g->dp_count; i++) semantic_dp(&first, &g->dps[i]);
+    printf("\n");
+}
+
 static siap_sink_t make_sink(gcollect_t *g)
 {
     siap_sink_t s;
@@ -291,6 +359,7 @@ static void dump_vector(const char *line)
         fprintf(stderr, "SKIP %s 디코드 실패\n", id);
         return;
     }
+    dump_semantic(id, &g);
     accum_t out = {0};
     if (!reencode(&g, &out)) {
         fprintf(stderr, "SKIP %s 재인코딩 실패\n", id);

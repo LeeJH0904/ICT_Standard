@@ -1,4 +1,7 @@
-"""sim/virtual_node.py 검증 — 값 풀 로딩(§5.5 결정), 노드 상태, msg_id 순환."""
+"""sim/virtual_node.py 검증 — 값 풀 로딩(§5.5 결정), 노드 상태, msg_id 순환.
+
+F-217 — 센서·미등록 디바이스 제어 거부와 제어 목록 원자성을 검증한다.
+"""
 from __future__ import annotations
 
 import json
@@ -7,7 +10,7 @@ from pathlib import Path
 from sim import _wire as wire
 from sim.virtual_node import (
     SUBTYPE_HUMIDITY, SUBTYPE_TEMPERATURE, SimNode, SimDevice,
-    GOLDEN_PATH, _default_nodes, _late_node, _load_value_pool,
+    GOLDEN_PATH, VirtualNodeServer, _default_nodes, _late_node, _load_value_pool,
 )
 
 
@@ -82,3 +85,67 @@ def test_msg_id_starts_at_zero_and_wraps():
     n.msg_id = 0xFFFF
     assert n.next_msg_id() == 0xFFFF
     assert n.next_msg_id() == 0
+
+
+class _CaptureSocket:
+    def __init__(self):
+        self.sent: list[bytes] = []
+
+    def sendall(self, data: bytes) -> None:
+        self.sent.append(data)
+
+
+def _control(server: VirtualNodeServer, node_id: int, msg_id: int,
+             commands: list["wire.WireDMI"]) -> int:
+    conn = _CaptureSocket()
+    header = wire.WireHeader(
+        version=0x12, msg_type=wire.MT_REQ_SET_DEVICE_CONTROL,
+        trans_type=wire.TRANS_UNICAST, msg_id=msg_id,
+        payload_len=wire.DMI_BYTES * len(commands), gcg_id=1, node_id=node_id,
+    )
+    server._handle(conn, header, b"".join(wire.encode_dmi(c) for c in commands))
+    assert len(conn.sent) == 1
+    return conn.sent[0][wire.HEADER_BYTES]
+
+
+def test_invalid_device_control_is_rejected_without_mutation_f217():
+    server = VirtualNodeServer(port=0, control_port=None)
+    sensor_node = next(n for n in server._nodes if n.node_id == 3)
+    sensor = sensor_node.devices[0]
+    before = sensor.value
+    sensor_cmd = wire.WireDMI(
+        sensor.device_id, wire.DEV_SENSOR, sensor.subtype,
+        sensor.value_type, wire.float_to_raw(30.0),
+    )
+    assert _control(server, 3, 1, [sensor_cmd]) == wire.RSC_INVALID_DEVICE_TYPE
+    assert sensor.value == before
+
+    missing = wire.WireDMI(99, wire.DEV_ACTUATOR, 0x85, wire.VT_UINT, 1)
+    assert _control(server, 3, 2, [missing]) == wire.RSC_INVALID_DEVICE_ID
+
+
+def test_valid_actuator_control_updates_value_f217():
+    server = VirtualNodeServer(port=0, control_port=None)
+    node = next(n for n in server._nodes if n.node_id == 102)
+    actuator = next(d for d in node.devices if d.dev_type == wire.DEV_ACTUATOR)
+    changed = actuator.value + 1
+    cmd = wire.WireDMI(
+        actuator.device_id, actuator.dev_type, actuator.subtype,
+        actuator.value_type, changed,
+    )
+    assert _control(server, node.node_id, 3, [cmd]) == wire.RSC_SUCCESS
+    assert actuator.value == changed
+
+
+def test_control_list_is_atomic_when_later_device_is_invalid_f217():
+    server = VirtualNodeServer(port=0, control_port=None)
+    node = next(n for n in server._nodes if n.node_id == 102)
+    actuator = next(d for d in node.devices if d.dev_type == wire.DEV_ACTUATOR)
+    before = actuator.value
+    valid = wire.WireDMI(
+        actuator.device_id, actuator.dev_type, actuator.subtype,
+        actuator.value_type, actuator.value + 1,
+    )
+    invalid = wire.WireDMI(99, wire.DEV_ACTUATOR, actuator.subtype, actuator.value_type, 1)
+    assert _control(server, node.node_id, 4, [valid, invalid]) == wire.RSC_INVALID_DEVICE_ID
+    assert actuator.value == before

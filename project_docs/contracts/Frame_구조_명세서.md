@@ -3,7 +3,7 @@
 > **역할**: 계층 간에 오가는 **유일한 타입**을 정의한다. 프로토콜 계층(0943 해석)과 서비스 계층(데이터·화면)은 이 파일 외의 서로의 심볼을 참조하지 않는다.
 > **근거**: TTAK.KO-10.0943 7장 / `SIAP_메시지_명세서.md`
 > **산출물**: `contracts/frame.py`, `contracts/siap_iface.py`, `contracts/test_contract.py` — 단계 1(개발_착수_지시서 §3.1)에서 `project_code/contracts/`로 이관 완료
-> **검증**: 계약 제약 **62/62 통과** (§6, F-106·F-107·F-110 반영 실측치)
+> **검증**: 계약 제약 **64/64 통과** (§6, F-106·F-107·F-110·F-215 반영 실측치)
 
 ---
 
@@ -108,7 +108,7 @@ resolve_kind(msg_type: int, payload_len: int, mode="strict") -> MsgKind | None
 ```python
 @dataclass(frozen=True)
 class Frame:
-    header: Header
+    header: Header | None             # 12byte 헤더 미달일 때만 None
     kind: MsgKind | None            # 해석된 논리 종류
     rsc / nec                       # 단일 코드 필드
     node_property                   # 구조체 (있을 때만)
@@ -120,6 +120,13 @@ class Frame:
     violations: tuple[Violation,...] # 비어 있으면 정상
     t: float                        # 수신 시각 (로그 재생용)
 ```
+
+헤더가 12byte보다 짧으면 알 수 없는 필드 값을 0으로 만들어내지 않고
+`header=None`으로 둔다. 이 경우에도 `raw`에는 수신 조각 전체를, `violations`에는
+`INVALID_FORMAT (0x09, 7.3.1)`을 보존하여 서비스 계층이 저장·표시할 수 있다.
+완전한 헤더가 있고 payload만 부족하면 실제 `Header`와 원본 조각을 그대로
+보존한다. 두 경우 모두 회신·송신·대기 매칭 대상이 아니며, 스트리밍 디코더는
+프레임 경계가 확정될 때까지 조각을 방출하지 않고 다음 바이트를 기다린다.
 
 **표준 외 확장 3개 필드의 근거**
 
@@ -288,7 +295,7 @@ expected_reply(kind)       # 송신 종류 → 되돌아와야 하는 종류   (
 | 게이트웨이발 Request | `None` — 노드가 보낼 수 없다 | 8장 시퀀스 |
 | 해석 불가(`kind is None`) | `None` | — |
 
-**위반 프레임에도 같은 표를 적용한다.** 7.3.1은 요청 처리 실패 시 Response에 오류 RSC를 담아 보내도록 규정하고, 표 7-10의 `INVALID_*` 코드가 그러기 위해 존재한다. 다만 `ACK`는 헤더뿐이라 오류를 실을 수단이 없으므로 **위반 Notify에는 회신하지 않는다** — 표준 미규정 사항에 대한 자체 결정이며 `docs/standard-findings.md`에 등재한다.
+**위반 프레임에도 같은 표를 적용한다.** 7.3.1은 요청 처리 실패 시 Response에 오류 RSC를 담아 보내도록 규정하고, 표 7-10의 `INVALID_*` 코드가 그러기 위해 존재한다. 다만 `ACK`는 헤더뿐이라 오류를 실을 수단이 없으므로 **위반 Notify에는 회신하지 않는다** — 표준 미규정 사항에 대한 자체 결정이며 `CLAUDE.md` §3.5 결정 표와 이 절에 기록한다. `docs/standard-findings.md`는 표준 자체의 결함 19건 전용이므로 이 결정을 이관하지 않는다(F-209).
 
 ---
 

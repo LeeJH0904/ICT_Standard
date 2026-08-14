@@ -6,7 +6,7 @@
 | 분류 | 코드버그 |
 | 대상 | `project_code/web/verify.html:L246` · `tools/web_live_verify.py:L162` · F-200 |
 | 발견일 | 2026-08-12 |
-| 상태 | 신규 |
+| 상태 | 수정완료 |
 
 ## 근거
 
@@ -45,3 +45,5 @@ GET /api/v1/frames?since=<cursor>&limit=100
 
 | 일시 | 상태 | 내용 |
 |---|---|---|
+| 2026-08-14 | 확인 | 임시 DB에 프레임 151건을 넣고 실제 ASGI `GET /api/v1/frames?since=...&limit=100`을 호출해 `total=151`, `items=100`, 미반환 51건을 재현했다. |
+| 2026-08-14 | 수정완료 | `collectAllPages()`가 고정된 `since`·`until` 구간에서 `total`까지 offset을 전진하고, 재연결 복구가 이를 사용하도록 결선했다. 실제 JavaScript 실행에서 151건을 offset 0·100 두 요청으로 전량 회수했고 단일 페이지 재주입은 두 웹 출구에서 실패했다. |

@@ -283,6 +283,9 @@ def _run_replay(args: argparse.Namespace) -> int:
             f"[run.py] 종료 — 재생 {replayer.stats['sent']}건, "
             f"rx={stats['rx']} tx={stats['tx']} 위반={stats['violations']}"
         ))
+        if replayer.error is not None:
+            print(_cp949_safe(f"[run.py] replay 실패: {replayer.error}"))
+            return 1
         return 0
 
     # 안전망 — 로그가 비정상적으로 길거나 재생 서버가 멈춰도 run.py 자체는
@@ -309,11 +312,14 @@ def _run_replay(args: argparse.Namespace) -> int:
 
     if not finished:
         print(_cp949_safe(f"[run.py] 재생이 {safety_upper:.0f}초 안에 끝나지 않아 강제 종료"))
+    if replayer.error is not None:
+        print(_cp949_safe(f"[run.py] replay 실패: {replayer.error}"))
     print(_cp949_safe(
-        f"[run.py] 종료 — 재생 {replayer.stats['sent']}건(tx 레코드 {replayer.stats['skipped_tx']}건은 "
-        f"기대 출력이므로 주입 제외, F-042), rx={stats['rx']} tx={stats['tx']} 위반={stats['violations']}"
+        f"[run.py] 종료 — 재생 {replayer.stats['sent']}건, tx 기대 "
+        f"{replayer.stats['matched_tx']}/{replayer.stats['expected_tx']}건 일치, "
+        f"rx={stats['rx']} tx={stats['tx']} 위반={stats['violations']}"
     ))
-    return 0 if finished else 1
+    return 0 if finished and replayer.error is None else 1
 
 
 def _run_hardware(args: argparse.Namespace) -> int:

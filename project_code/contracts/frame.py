@@ -253,7 +253,9 @@ class Violation:
 
 @dataclass(frozen=True)
 class Frame:
-    header: Header
+    # 12byte 헤더 자체가 불완전한 수신도 경계를 넘어 표시·저장돼야 한다.
+    # 이때 알 수 없는 헤더 값을 0으로 합성하지 않고 None 으로 보존한다(F-215).
+    header: Header | None
     kind: MsgKind | None = None          # 해석된 논리 종류 (0x0800 해소 결과)
     rsc: RSC | None = None
     nec: NEC | None = None
@@ -268,7 +270,7 @@ class Frame:
 
     @property
     def is_valid(self) -> bool:
-        return len(self.violations) == 0
+        return self.header is not None and len(self.violations) == 0
 
 # ═══════════════════════════════════════════════════════════════
 #  6. 페이로드 레이아웃 — N 산출의 정본
@@ -386,7 +388,8 @@ def reply_kind(kind: MsgKind | None) -> MsgKind | None:
     위반 프레임에도 이 표를 그대로 적용한다 — 0943 7.3.1 은 요청 처리 실패 시
     Response 에 오류 RSC 를 담아 보내도록 규정한다. 다만 ACK 는 헤더뿐이라
     오류를 실을 수단이 없으므로 **위반 Notify 에는 ACK 를 보내지 않는다**
-    (표준 미규정 → 자체 결정, docs/standard-findings.md 참조)."""
+    (표준 미규정 → 자체 결정, CLAUDE.md §3.5 결정 표와
+    project_docs/contracts/Frame_구조_명세서.md §5.2 참조)."""
     if kind is None:
         return None
     if kind in NODE_ORIGINATED_REQUESTS:

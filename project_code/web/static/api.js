@@ -54,6 +54,26 @@ async function request(method, path, { params, body, userId, signal } = {}) {
   return payload;
 }
 
+// 동일한 필터의 페이지를 응답 total까지 모두 소비한다.
+//
+// SSE 재연결 누락 복구는 100건을 넘을 수 있으므로 첫 페이지만 가져와서는
+// 안 된다(F-205). fetchPage는 listFrames 또는 listViolations처럼 Page를
+// 반환하는 함수이고, params에는 복구 구간의 since/until 스냅샷이 들어간다.
+export async function collectAllPages(fetchPage, params = {}, limit = 100) {
+  const items = [];
+  let offset = 0;
+  let total = Number.POSITIVE_INFINITY;
+  while (offset < total) {
+    const page = await fetchPage({ ...params, limit, offset });
+    const batch = Array.isArray(page?.items) ? page.items : [];
+    total = Number.isInteger(page?.total) ? page.total : offset + batch.length;
+    items.push(...batch);
+    if (!batch.length) break;
+    offset += batch.length;
+  }
+  return items;
+}
+
 export const api = {
   // ── ems (기능 1 · 설정) ──
   // 화면_설계서.md §2.1 이 선언한 화면별 읽기·쓰기만 감싼다 — getHealth·getNode

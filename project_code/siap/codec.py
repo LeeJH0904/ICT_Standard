@@ -7,10 +7,9 @@ firmware/core/bitpack.c · firmware/core/siap_frame.c 를 Python 으로 옮긴 �
 갈리면 C·Python 두 구현이 상호운용성 증거가 되지 못한다.
 
 계약(Frame 구조 명세서 §3 "예외를 던지지 않는다"):
-  decode_frame() 은 예외를 던지지 않는다. 유일한 예외는 IncompleteFrameError 로,
-  이는 프로토콜 위반이 아니라 "아직 바이트가 덜 왔다"는 스트리밍 버퍼링 신호다
-  (헤더 12byte 미달 — 아키텍처 설계서 §3.1-a "헤더 12byte 미달 → 회신 없음" 행,
-  Node ID 조차 모르므로 위반 Frame 도 만들 수 없다).
+  공개 decode_frame() 은 불완전 입력도 raw 와 INVALID_FORMAT 을 담은 Frame 으로
+  반환한다. 헤더 12byte 미달이면 알 수 없는 값을 합성하지 않고 header=None 이다.
+  IncompleteFrameError 는 Decoder 가 다음 바이트를 기다리기 위한 내부 신호로만 쓴다.
   encode_frame() 은 ValueRangeError(및 그 하위인 구성 오류)를 던질 수 있다 —
   이건 "우리가 잘못된 Frame 을 만들려 했다"는 프로그래밍 오류이지 수신
   프레임의 표준 위반이 아니므로 예외로 남긴다(호출자는 build.py 뿐이다).
@@ -49,9 +48,10 @@ SIAP_VERSION = 0x12   # v1.2, 7.2.1 — firmware/core/siap_types.h SIAP_VERSION 
 
 
 class IncompleteFrameError(Exception):
-    """스트리밍 버퍼링 신호. 헤더 12byte 조차 모이지 않았다는 뜻이며
-    프로토콜 위반이 아니다(아키텍처 설계서 §3.1-a). decode_frame() 이 던지는
-    유일한 예외다 — Decoder.feed() 는 이걸 잡아 다음 바이트를 기다린다."""
+    """Decoder 전용 스트리밍 버퍼링 신호.
+
+    공개 decode_frame() 에서는 노출하지 않으며, Decoder.feed() 가 조각을
+    위반으로 너무 일찍 방출하지 않도록 내부 디코드 경로에서만 사용한다."""
 
 
 class ValueRangeError(ValueError):
@@ -151,6 +151,8 @@ def pack_int(value) -> int:
         v = int(value)
     except (TypeError, ValueError, OverflowError) as e:      # F-058
         raise ValueRangeError(f"INT 변환 실패: {value!r}") from e
+    if v != value:                                           # F-214 — 1.5를 1로 절삭 금지
+        raise ValueRangeError(f"INT 는 정수만 담는다: {value!r}")
     if not (-(2 ** 31) <= v <= 2 ** 31 - 1):
         raise ValueRangeError(f"INT 범위 초과: {v}")
     return struct.unpack(">I", struct.pack(">i", v))[0]
@@ -162,6 +164,8 @@ def pack_uint(value) -> int:
         v = int(value)
     except (TypeError, ValueError, OverflowError) as e:
         raise ValueRangeError(f"UINT 변환 실패: {value!r}") from e
+    if v != value:                                           # F-214 — 소수부 보존 불가 입력 거부
+        raise ValueRangeError(f"UINT 는 정수만 담는다: {value!r}")
     if not (0 <= v <= 2 ** 32 - 1):
         raise ValueRangeError(f"UINT 범위 초과: {v}")
     return v
@@ -473,6 +477,8 @@ def encode_frame(frame: Frame, mode: Mode = "strict") -> bytes:
     siap_tx_put_*() 함수들과 같은 필드 순서를 쓴다(RSC/NEC -> NODE_PROPERTY ->
     MSG_CONTROL_PROFILE -> 요소) — C 인코더 출력과 바이트 단위로 일치해야
     한다(tools/xcodec_verify.py)."""
+    if frame.header is None:
+        raise ValueRangeError("header 가 없는 불완전 Frame 은 인코딩할 수 없다")
     kind = frame.kind
     if kind is None:
         raise ValueRangeError("kind 가 없는 Frame 은 인코딩할 수 없다")
@@ -530,16 +536,31 @@ def encode_frame(frame: Frame, mode: Mode = "strict") -> bytes:
 
 def decode_frame(data: bytes, mode: Mode = "strict",
                   node_known: Callable[[int], bool] | None = None) -> Frame:
-    """완결된 프레임 1건의 바이트열을 Frame 으로 해석한다. 예외를 던지지
-    않는다(Frame 구조 명세서 §3 계약) — 유일한 예외는 IncompleteFrameError 로,
-    이는 프로토콜 위반이 아니라 스트리밍 버퍼링 신호다.
+    """프레임 1건의 바이트열을 Frame 으로 해석한다. 불완전 입력을 포함해
+    예외를 던지지 않는다(Frame 구조 명세서 §3 계약).
 
     node_known: Node ID 가 등록돼 있는지 확인하는 콜백(위반 2 판정, F-060 —
     "core/ 는 내 주소를 모른다"와 같은 원칙으로 registry.py 를 여기 import
     하지 않는다. 호출자(link.py)가 registry.py 를 보고 주입한다). None 이면
     이 검사를 생략한다(단독 코덱 테스트·골든 벡터 재생 등)."""
+    return _decode_frame(data, mode, node_known, incomplete_as_violation=True)
+
+
+def _decode_frame(data: bytes, mode: Mode,
+                  node_known: Callable[[int], bool] | None,
+                  *, incomplete_as_violation: bool) -> Frame:
+    """공개 단발 디코드와 스트리밍 디코드의 공통 구현.
+
+    스트리밍 경로만 불완전 입력을 내부 신호로 바꾸어 버퍼를 유지한다."""
     if len(data) < HEADER_BYTES:
-        raise IncompleteFrameError(f"헤더 미달: {len(data)} byte")
+        detail = f"헤더 미달: 필요 {HEADER_BYTES}, 보유 {len(data)} byte"
+        if not incomplete_as_violation:
+            raise IncompleteFrameError(detail)
+        return Frame(
+            header=None, kind=None, raw=data,
+            violations=(Violation(int(RSC.INVALID_FORMAT), "INVALID_FORMAT",
+                                  "7.3.1", detail),),
+        )
 
     h = decode_header(data[:HEADER_BYTES])
     total_len = HEADER_BYTES + h.payload_len
@@ -575,7 +596,14 @@ def decode_frame(data: bytes, mode: Mode = "strict",
                            f"Node ID=0x{h.node_id:05X} 는 등록되지 않았다")
 
     if len(data) < total_len:
-        raise IncompleteFrameError(f"payload 미달: 필요 {total_len}, 보유 {len(data)}")
+        detail = f"payload 미달: 필요 {total_len}, 보유 {len(data)}"
+        if not incomplete_as_violation:
+            raise IncompleteFrameError(detail)
+        return Frame(
+            header=h, kind=kind, raw=data,
+            violations=(Violation(int(RSC.INVALID_FORMAT), "INVALID_FORMAT",
+                                  "7.3.1", detail),),
+        )
 
     payload = data[HEADER_BYTES:total_len]
     fixed_bytes, elem_bytes = LAYOUT[kind]
@@ -766,7 +794,8 @@ class Decoder:
                     continue
                 self._resync = False
             try:
-                frame = decode_frame(bytes(self._buf), self.mode, self.node_known)
+                frame = _decode_frame(bytes(self._buf), self.mode, self.node_known,
+                                      incomplete_as_violation=False)
             except IncompleteFrameError:
                 return None
             if frame.violations:
@@ -781,6 +810,7 @@ class Decoder:
                 del self._buf[:HEADER_BYTES]
                 self._resync = True
                 return frame
+            assert frame.header is not None
             total = HEADER_BYTES + frame.header.payload_len
             del self._buf[:min(total, len(self._buf))]
             return frame

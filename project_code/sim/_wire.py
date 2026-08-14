@@ -44,6 +44,9 @@ MT_ACK = 0x0C00                      # 6.2.2
 TRANS_UNICAST = 0x00                 # 표 7-6
 
 RSC_SUCCESS = 0x00                   # 표 7-10
+RSC_INVALID_NODE_ID = 0x02           # 표 7-10
+RSC_INVALID_DEVICE_ID = 0x04         # 표 7-10
+RSC_INVALID_DEVICE_TYPE = 0x05       # 표 7-10
 
 DEV_SENSOR = 0x00                    # 표 7-14
 DEV_ACTUATOR = 0x01

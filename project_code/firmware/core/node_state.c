@@ -767,6 +767,14 @@ static void _on_end(void *ctx, siap_rsc_t rsc, siap_clause_t clause)
         node->t_backoff_until = now + _backoff_ms(node);
         return;
 
+    case SIAP_NOTI_REBOOT:
+        if (rsc != SIAP_RSC_SUCCESS) return;
+        /* 0943 §6.1.2/§8.2.1.4 — 게이트웨이발 리부팅 알림도 정상
+           수신하면 상태 게이트보다 먼저 ACK한다. 수신 알림은 노드 자신의
+           리부팅 명령이 아니므로 현재 상태와 송신 pending은 유지한다(F-210). */
+        _send_ack_now(node, &node->rx_hdr);
+        return;
+
     /* ── 이하 RUNNING 전용 — "G→N 요청 수신 → RES_* 회신"(§6.2) ── */
     case SIAP_REQ_SET_DEVICE_CONTROL:
         if (node->state != SIAP_NS_RUNNING) return;

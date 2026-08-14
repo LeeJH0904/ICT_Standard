@@ -1512,6 +1512,28 @@
               "IRRIGATION_VALVE"
             ]
           },
+          "transfer_mode": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "PERIODIC",
+              "EVENT",
+              "BOTH",
+              null
+            ],
+            "description": "마지막으로 확인된 0943 표 7-15 Transfer Mode"
+          },
+          "period_sec": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 16383,
+            "description": "마지막으로 확인된 0943 표 7-15 Period (sec)"
+          },
           "unit": {
             "type": [
               "string",

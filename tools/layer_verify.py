@@ -207,17 +207,13 @@ def main() -> int:
     t("siap/ 가 backend/ 를 import 하지 않는다 (CLAUDE.md §2.2)", not bad_siap, "; ".join(bad_siap))
 
     # ═══════════════════════════════════════════════════════════
-    #  contracts/ 는 project_docs/ 를 import 하지 않는다 (CLAUDE.md §2.2)
+    #  project_code/ 전체는 project_docs/ 를 import 하지 않는다 (CLAUDE.md §2.2)
+    #  F-206 — 이전 검사는 contracts/ 만 순회해 backend/ · siap/ · sim/ 등
+    #  다른 구현 계층에 같은 금지 import 가 들어와도 7/7 로 통과했다.
     # ═══════════════════════════════════════════════════════════
-    contracts_dir = PROJECT_CODE / "contracts"
-    contracts_files = [p for p in _py_files(contracts_dir) if "vectors" not in p.parts]
-    bad_docs = []
-    for f in contracts_files:
-        src = f.read_text(encoding="utf-8", errors="replace")
-        mods = _top_level_modules(src, f)
-        if "project_docs" in mods:
-            bad_docs.append(f"{f.relative_to(ROOT)}: import project_docs")
-    t("contracts/ 가 project_docs/ 를 import 하지 않는다 (CLAUDE.md §2.2)", not bad_docs, "; ".join(bad_docs))
+    bad_docs = _violations(PROJECT_CODE, "project_docs")
+    t("project_code/ 전체가 project_docs/ 를 import 하지 않는다 (CLAUDE.md §2.2)",
+      not bad_docs, "; ".join(bad_docs))
 
     # ═══════════════════════════════════════════════════════════
     w = max(len(n) for _, n, _ in R)

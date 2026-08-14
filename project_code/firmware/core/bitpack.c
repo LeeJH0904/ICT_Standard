@@ -7,7 +7,13 @@
  * 허용할 수 없다. 그래서 여기서는 바이트·비트 인덱스를 직접 계산한다.
  */
 #include "bitpack.h"
-#include <string.h> /* memcpy — 표준 라이브러리 헤더. 타입 펀닝에만 쓴다(§4.3) */
+
+void bp_memcpy(void *dst, const void *src, size_t len)
+{
+    uint8_t *d = (uint8_t *)dst;
+    const uint8_t *s = (const uint8_t *)src;
+    for (size_t i = 0; i < len; i++) d[i] = s[i];
+}
 
 bool bp_write(uint8_t *buf, size_t *bitpos, uint32_t val, uint8_t nbits)
 {
@@ -54,7 +60,7 @@ uint32_t bp_read(const uint8_t *buf, size_t *bitpos, uint8_t nbits)
 bool bp_write_f32(uint8_t *buf, size_t *bitpos, float val)
 {
     uint32_t bits;
-    memcpy(&bits, &val, sizeof(bits)); /* strict-aliasing 안전한 타입 펀닝 */
+    bp_memcpy(&bits, &val, sizeof(bits)); /* strict-aliasing 안전한 타입 펀닝 */
     return bp_write(buf, bitpos, bits, 32); /* nbits==32 → 범위 검사 생략 */
 }
 
@@ -62,6 +68,6 @@ float bp_read_f32(const uint8_t *buf, size_t *bitpos)
 {
     uint32_t bits = bp_read(buf, bitpos, 32);
     float val;
-    memcpy(&val, &bits, sizeof(val));
+    bp_memcpy(&val, &bits, sizeof(val));
     return val;
 }

@@ -30,10 +30,11 @@ export const STATUS = {
  * @param {(type: string, data: any) => void} opts.onEvent
  * @param {(status: {code:string, text:string}) => void} opts.onStatus
  * @param {() => Promise<void>} [opts.onPollTick]  폴링 폴백 중 1초마다 호출 (즉시 보정 없이 다음 재연결까지 미뤄도 되는 화면용)
+ * @param {() => void} [opts.onDisconnect]  SSE 최초 단절 시 폴링이 표시 목록을 바꾸기 전에 연속 커서를 고정
  * @param {() => Promise<void>} [opts.onReconnect]  F-200 — 폴백을 거쳐 SSE 가 다시 열렸을 때(최초 연결 제외) 1회 호출. `listFrames?since=`로 폴백 중 놓친 프레임을 채우는 자리
  * @returns {() => void} 구독 해제 함수
  */
-export function connectStream({ events, onEvent, onStatus, onPollTick, onReconnect }) {
+export function connectStream({ events, onEvent, onStatus, onPollTick, onDisconnect, onReconnect }) {
   let es = null;
   let pollTimer = null;
   let backoffIdx = 0;
@@ -91,7 +92,9 @@ export function connectStream({ events, onEvent, onStatus, onPollTick, onReconne
     };
 
     es.onerror = () => {
+      const firstFailure = !recovering;
       recovering = true;
+      if (firstFailure && onDisconnect) onDisconnect();
       setStatus(pollTimer ? STATUS.POLLING : STATUS.DOWN);
       startPolling();
       if (es) {

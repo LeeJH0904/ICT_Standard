@@ -498,6 +498,60 @@ static void test_noti_disconnect_ack_then_reconnect_8_2_1_3(void)
     check("8_2_1_3: 백오프 후 CONNECTING 재시도", f.node.state == SIAP_NS_CONNECTING);
 }
 
+/* F-210 — §6.2-a(1)의 상태 게이트 선행 규칙을 NOTI_REBOOT에도 적용한다.
+   BOOT/INIT는 한 poll 안에서 CONNECTING으로 진행하므로, 수신 가능한 안정 상태
+   5종을 전부 검사하고 HALTED가 유일한 예외임을 별도로 고정한다. */
+static void check_noti_reboot_ack_in_state(siap_node_state_t state, uint16_t msg_id,
+                                            const char *ack_tag, const char *state_tag)
+{
+    fixture_t f; fixture_boot(&f, 1, 60);
+    fixture_run_to_running(&f);
+    f.node.state = state;
+    if (state == SIAP_NS_DISCONNECTED)
+        f.node.t_backoff_until = f.io.now + 1000u;
+
+    f.io.tx_len = 0;
+    push_empty(&f.io, SIAP_NOTI_REBOOT, GCG, NID, msg_id);
+    siap_node_poll(&f.node);
+    siap_hdr_t h = decode_tx_hdr(&f.io);
+    check(ack_tag, h.msg_type == siap_wire_code(SIAP_ACK, SIAP_MODE_STRICT)
+                   && h.msg_id == msg_id && h.payload_len == 0);
+    check(state_tag, f.node.state == state);
+}
+
+static void test_noti_reboot_ack_state_matrix_F210(void)
+{
+    check_noti_reboot_ack_in_state(
+        SIAP_NS_CONNECTING, 510,
+        "F-210: CONNECTING에서 NOTI_REBOOT -> ACK",
+        "F-210: CONNECTING 상태 유지");
+    check_noti_reboot_ack_in_state(
+        SIAP_NS_RUNNING, 511,
+        "F-210: RUNNING에서 NOTI_REBOOT -> ACK",
+        "F-210: RUNNING 상태 유지");
+    check_noti_reboot_ack_in_state(
+        SIAP_NS_FAULT, 512,
+        "F-210: FAULT에서 NOTI_REBOOT -> ACK",
+        "F-210: FAULT 상태 유지");
+    check_noti_reboot_ack_in_state(
+        SIAP_NS_REBOOTING, 513,
+        "F-210: REBOOTING에서 NOTI_REBOOT -> ACK",
+        "F-210: REBOOTING 상태 유지");
+    check_noti_reboot_ack_in_state(
+        SIAP_NS_DISCONNECTED, 514,
+        "F-210: DISCONNECTED에서 NOTI_REBOOT -> ACK",
+        "F-210: DISCONNECTED 상태 유지");
+
+    fixture_t f; fixture_boot(&f, 1, 60);
+    fixture_run_to_running(&f);
+    f.node.state = SIAP_NS_HALTED;
+    f.io.tx_len = 0;
+    push_empty(&f.io, SIAP_NOTI_REBOOT, GCG, NID, 515);
+    siap_node_poll(&f.node);
+    check("F-210: HALTED에서 NOTI_REBOOT는 ACK하지 않음", f.io.tx_len == 0);
+    check("F-210: HALTED 상태 유지", f.node.state == SIAP_NS_HALTED);
+}
+
 /* ═══════════════════════════════════════════════════════════════
  *  6. 리부팅 — 8.1.6 / 그림 8-56
  * ═══════════════════════════════════════════════════════════════ */
@@ -783,6 +837,7 @@ int main(void)
     test_periodic_rotation_no_starvation_6_4_a_100cycles();
     test_fault_enter_and_recover_8_2_1_1();
     test_noti_disconnect_ack_then_reconnect_8_2_1_3();
+    test_noti_reboot_ack_state_matrix_F210();
     test_reboot_completes_on_ack_8_1_6();
     test_reboot_completes_on_retry_exhaustion_8_1_6();
     test_device_control_write_path_6_6();

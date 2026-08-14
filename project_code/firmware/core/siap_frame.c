@@ -14,7 +14,6 @@
  *   7 Subtype                -> S_ELEM  (위와 동일 지점, value_type 통과 후)
  *   8 NEC                    -> 코덱 밖 (게이트웨이 전용 판정, F-060)
  */
-#include <string.h>   /* memmove — 재동기 슬라이딩 윈도우 */
 #include "siap_frame.h"
 
 /* ═══════════════════════════════════════════════════════════════
@@ -324,7 +323,9 @@ static void handle_header_complete(siap_dec_t *d)
         if (!resync_check(d->buf, d->mode, &h, &k, &n)) {
             /* 4조건 불만족 — 1byte 슬라이딩. 위반으로 보고하지 않는다(잡음
                구간을 스캔 중일 뿐이다). */
-            memmove(d->buf, d->buf + 1, SIAP_HEADER_BYTES - 1);
+            for (size_t i = 0; i < SIAP_HEADER_BYTES - 1u; i++) {
+                d->buf[i] = d->buf[i + 1u];
+            }
             d->buf_len = SIAP_HEADER_BYTES - 1;
             return;
         }

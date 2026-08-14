@@ -486,6 +486,102 @@ def test_device_property_patch_success(app, link, builder, tmp_path):
     assert r.json()["items"][0]["id"] == install_id
 
 
+def test_device_property_partial_patch_preserves_thresholds_f220(app, link, builder, tmp_path):
+    install_id = _register_device_install(tmp_path, node_id=3, device_id=1, subtype=0x01)
+    builder.device_kinds[(3, 1)] = (DevType.SENSOR, 0x01)
+    _register_link_device(link, 3, 1, DevType.SENSOR, 0x01)
+    con = db.connect(tmp_path / "api.db")
+    con.execute(
+        "UPDATE device_install_info SET transfer_mode='BOTH',period_sec=30,"
+        "lower_limit=2.0,upper_limit=8.0 WHERE id=?", (install_id,),
+    )
+    con.commit(); con.close()
+
+    r = call(app, "PATCH", "/api/v1/device-property",
+             json={"selector": {"install_id": install_id}, "property": {"period_sec": 60}},
+             headers={"X-User-Id": "demo-user-1"})
+    assert r.status_code == 200
+    con = db.connect(tmp_path / "api.db")
+    row = con.execute(
+        "SELECT transfer_mode,period_sec,lower_limit,upper_limit "
+        "FROM device_install_info WHERE id=?", (install_id,),
+    ).fetchone()
+    con.close()
+    assert tuple(row) == ("BOTH", 60, 2.0, 8.0)
+
+
+def test_device_property_success_records_user_history_f221(app, link, builder, tmp_path):
+    import json
+    install_id = _register_device_install(tmp_path, node_id=3, device_id=1, subtype=0x01)
+    builder.device_kinds[(3, 1)] = (DevType.SENSOR, 0x01)
+    _register_link_device(link, 3, 1, DevType.SENSOR, 0x01)
+    con = db.connect(tmp_path / "api.db")
+    before = con.execute("SELECT COUNT(*) FROM config_change_log").fetchone()[0]
+    con.close()
+
+    r = call(app, "PATCH", "/api/v1/device-property",
+             json={"selector": {"install_id": install_id},
+                   "property": {"transfer_mode": "PERIODIC", "period_sec": 60}},
+             headers={"X-User-Id": "demo-user-1"})
+    assert r.status_code == 200
+    con = db.connect(tmp_path / "api.db")
+    after = con.execute("SELECT COUNT(*) FROM config_change_log").fetchone()[0]
+    history = con.execute(
+        "SELECT table_name,row_id,operation,changes,user_id FROM config_change_log "
+        "ORDER BY rowid DESC LIMIT 1"
+    ).fetchone()
+    con.close()
+    assert after - before == 1
+    assert (history["table_name"], history["row_id"], history["operation"], history["user_id"]) == \
+        ("device_install_info", install_id, "UPDATE", "demo-user-1")
+    assert json.loads(history["changes"]) == {
+        "transfer_mode": {"from": None, "to": "PERIODIC"},
+        "period_sec": {"from": None, "to": 60},
+    }
+
+
+def test_device_property_timeout_records_neither_setting_nor_history_f221(
+        app, link, builder, tmp_path, monkeypatch):
+    install_id = _register_device_install(tmp_path, node_id=3, device_id=1, subtype=0x01)
+    builder.device_kinds[(3, 1)] = (DevType.SENSOR, 0x01)
+    _register_link_device(link, 3, 1, DevType.SENSOR, 0x01)
+    con = db.connect(tmp_path / "api.db")
+    before = con.execute("SELECT COUNT(*) FROM config_change_log").fetchone()[0]
+    con.close()
+    monkeypatch.setattr(link, "send", lambda frame, timeout=None: None)
+
+    r = call(app, "PATCH", "/api/v1/device-property",
+             json={"selector": {"install_id": install_id}, "property": {"period_sec": 60}},
+             headers={"X-User-Id": "demo-user-1"})
+    assert r.status_code == 504
+    con = db.connect(tmp_path / "api.db")
+    row = con.execute("SELECT period_sec FROM device_install_info WHERE id=?", (install_id,)).fetchone()
+    after = con.execute("SELECT COUNT(*) FROM config_change_log").fetchone()[0]
+    con.close()
+    assert row["period_sec"] is None
+    assert after == before
+
+
+@pytest.mark.parametrize("prop", [
+    {"value": 1},
+    {"period_sec": 16384},
+    {"period_sec": True},
+    {"transfer_mode": None},
+    {"lower_value": None},
+])
+def test_device_property_openapi_negative_vectors_rejected_by_http_f228(
+        app, link, builder, tmp_path, prop):
+    install_id = _register_device_install(tmp_path, node_id=3, device_id=1, subtype=0x01)
+    builder.device_kinds[(3, 1)] = (DevType.SENSOR, 0x01)
+    _register_link_device(link, 3, 1, DevType.SENSOR, 0x01)
+    tx_before = link.stats()["tx"]
+    r = call(app, "PATCH", "/api/v1/device-property",
+             json={"selector": {"install_id": install_id}, "property": prop},
+             headers={"X-User-Id": "demo-user-1"})
+    assert r.status_code == 400
+    assert link.stats()["tx"] == tx_before
+
+
 def test_device_property_selector_exclusive_400(app):
     r = call(app, "PATCH", "/api/v1/device-property",
              json={"selector": {"install_id": "a", "greenhouse_id": "b"}, "property": {"period_sec": 1}},

@@ -66,6 +66,18 @@ def test_update_node_updates_registered():
     assert reg.registry()[3].num_devices == 3
 
 
+def test_replace_node_and_device_properties_updates_both_f213():
+    reg = NodeRegistry()
+    reg.register(_node(), (_dp(device_id=5),))
+    updated = NodeProperty(sw_version=9, gcg_id=1, node_id=3,
+                           status=Status.NORMAL, num_devices=1)
+    replacement = _dp(device_id=7)
+    reg.replace_node_and_device_properties(updated, (replacement,))
+    assert reg.registry()[3] == updated
+    assert reg.devices(3) == (replacement.main,)
+    assert reg.device_properties(3) == (replacement,)
+
+
 def test_registry_returns_copy_not_live_reference():
     reg = NodeRegistry()
     reg.register(_node())

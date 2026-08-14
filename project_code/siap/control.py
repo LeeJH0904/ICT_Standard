@@ -44,17 +44,30 @@ class PendingTable:
         self._lock = threading.Lock()
         self._pending: dict[tuple[int, int], PendingRequest] = {}
 
+    def update_profile(self, profile: MsgControlProfile) -> None:
+        """F-213 — 역방향 프로파일 설정 성공 뒤 새 pending부터 즉시 적용한다.
+        프로파일 교체와 register()/expire()의 판정을 같은 잠금으로 직렬화한다."""
+        with self._lock:
+            self._profile = profile
+
+    def profile(self) -> MsgControlProfile:
+        """현재 재전송 프로파일의 불변 사본을 반환한다."""
+        with self._lock:
+            return self._profile
+
     def register(self, frame: Frame) -> PendingRequest | None:
         """송신 직후 호출한다(`_drain_request_queue`). 기대 회신 종류가
         없으면(`RES_*`·`ACK` 송신) 대기 항목을 만들지 않고 None 을 돌려준다 —
         호출자는 즉시 완료로 본다."""
+        if frame.header is None:
+            return None
         expect = expected_reply(frame.kind)
         if expect is None:
             return None
-        req = PendingRequest(frame=frame, expect=expect,
-                              deadline=self._now() + self._profile.recv_timeout)
         key = (frame.header.node_id, frame.header.msg_id)
         with self._lock:
+            req = PendingRequest(frame=frame, expect=expect,
+                                  deadline=self._now() + self._profile.recv_timeout)
             self._pending[key] = req
         return req
 
@@ -63,6 +76,8 @@ class PendingTable:
         True. 기대와 다른 프레임(kind 불일치)은 대기 항목을 소비하지 않고
         흘려보낸다 — 진짜 Response 가 아직 올 수 있다. 타임아웃 판단은
         `expire()` 의 몫이다."""
+        if frame.header is None:
+            return False
         key = (frame.header.node_id, frame.header.msg_id)
         with self._lock:
             pend = self._pending.get(key)

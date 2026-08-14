@@ -6,7 +6,7 @@
 | 분류 | 코드버그 |
 | 대상 | `project_code/backend/services/fms.py:45-71` · `project_code/backend/tests/test_services_fms.py:41,65-70` · F-191 |
 | 발견일 | 2026-08-13 |
-| 상태 | 신규 |
+| 상태 | 수정완료 |
 
 ## 근거
 
@@ -59,4 +59,5 @@ with TemporaryDirectory() as td:
 
 | 일시 | 상태 | 내용 |
 |---|---|---|
-
+| 2026-08-13 | 확인 | `DeviceProperty.period=60`으로 등록한 센서의 마지막 측정 181초 후를 판정했다. 요구 임계점 180초를 넘었지만 생성 alert는 0건이었다. |
+| 2026-08-14 | 수정완료 | 노드발 DEVICE_PROPERTY와 사용자발 성공 PATCH의 Period를 `device_install_info.period_sec`에 저장하고, FMS가 측정 장치별 `period_sec × 3`을 계산하도록 바꿨다(NULL인 과거 행만 300초 기본값). Period 60/300 두 장치를 181초 시점에 함께 판정해 60초 장치만 경고하는 회귀를 추가했다. 전역 900초로 되돌리면 전용 회귀가 실패하고 원복 후 통과했다. |

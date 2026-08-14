@@ -379,6 +379,31 @@ def unsafe_connect(p):
     return opener(p)
 """
 
+F222_IMPORTLIB_DIRECT_POC = """\
+import importlib
+
+def unsafe_connect(path):
+    return importlib.import_module("sqlite3").connect(path)
+"""
+
+F222_IMPORTLIB_ALIAS_CHAIN_POC = """\
+import importlib as loader_module
+
+loader = loader_module.import_module
+db_module = loader("sqlite3")
+open_db = db_module.connect
+
+def unsafe_connect(path):
+    return open_db(path)
+"""
+
+F222_IMPORTLIB_GETATTR_POC = """\
+from importlib import import_module as load
+
+def unsafe_connect(path):
+    return getattr(load(name="sqlite3"), "connect")(path)
+"""
+
 
 def test_f181_dunder_import_direct_call_bypass_is_caught():
     """F-181 재현: `__import__('sqlite3').connect(...)`는 `sqlite3`를 이름에
@@ -434,6 +459,65 @@ def test_f181_dunder_import_factory_in_db_py_is_detected():
         assert _function_sets_fk_pragma(db_py, "unsafe") is False
 
 
+def test_f222_importlib_bypass_and_actual_fk_off_connection_are_caught():
+    """F-222 재현: 검증기가 임시 backend 우회를 잡고, 반례 자체가 실제로
+    `foreign_keys=0` 연결을 만드는 실행 가능한 코드임을 독립 실측한다."""
+    with tempfile.TemporaryDirectory() as tmp:
+        backend_dir = Path(tmp) / "backend"
+        backend_dir.mkdir()
+        (backend_dir / "_fault14.py").write_text(
+            F222_IMPORTLIB_DIRECT_POC, encoding="utf-8"
+        )
+        found = _find_sqlite_connect_bypasses(backend_dir)
+        assert found, "F-222 재발: importlib.import_module('sqlite3') 직접 우회를 놓쳤다"
+
+        namespace: dict[str, object] = {}
+        exec(compile(F222_IMPORTLIB_DIRECT_POC, "<F-222>", "exec"), namespace)
+        con = namespace["unsafe_connect"](Path(tmp) / "fk_off.db")
+        try:
+            assert con.execute("PRAGMA foreign_keys").fetchone()[0] == 0
+        finally:
+            con.close()
+
+
+def test_f222_importlib_module_and_function_alias_chain_is_caught():
+    """`importlib as X`와 `loader = X.import_module` 뒤 모듈·connect를 다시
+    대입하는 전이적 별칭 사슬도 고정점 추적 대상이다."""
+    with tempfile.TemporaryDirectory() as tmp:
+        backend_dir = Path(tmp) / "backend"
+        backend_dir.mkdir()
+        (backend_dir / "_fault15.py").write_text(
+            F222_IMPORTLIB_ALIAS_CHAIN_POC, encoding="utf-8"
+        )
+        assert _find_sqlite_connect_bypasses(backend_dir)
+
+
+def test_f222_from_import_keyword_and_getattr_bypass_is_caught():
+    """from-import 함수 별칭·name 키워드·getattr가 겹친 변형도 잡는다."""
+    with tempfile.TemporaryDirectory() as tmp:
+        backend_dir = Path(tmp) / "backend"
+        backend_dir.mkdir()
+        (backend_dir / "_fault16.py").write_text(
+            F222_IMPORTLIB_GETATTR_POC, encoding="utf-8"
+        )
+        assert _find_sqlite_connect_bypasses(backend_dir)
+
+
+def test_f222_importlib_factory_in_db_py_is_detected():
+    """동일 공통 판정이 db.py 내부 연결 함수 자동 탐지에도 적용돼야 한다."""
+    with tempfile.TemporaryDirectory() as tmp:
+        db_py = Path(tmp) / "db.py"
+        db_py.write_text(
+            "import importlib\n\n"
+            "def unsafe_connect(path):\n"
+            "    return importlib.import_module('sqlite3').connect(path)\n",
+            encoding="utf-8",
+        )
+        funcs = _db_factory_functions(db_py)
+        assert funcs == ["unsafe_connect"]
+        assert _function_sets_fk_pragma(db_py, "unsafe_connect") is False
+
+
 if __name__ == "__main__":
     failures = 0
     for fn in (
@@ -458,6 +542,10 @@ if __name__ == "__main__":
         test_f181_dunder_import_module_alias_bypass_is_caught,
         test_f181_dunder_import_getattr_bypass_is_caught,
         test_f181_dunder_import_factory_in_db_py_is_detected,
+        test_f222_importlib_bypass_and_actual_fk_off_connection_are_caught,
+        test_f222_importlib_module_and_function_alias_chain_is_caught,
+        test_f222_from_import_keyword_and_getattr_bypass_is_caught,
+        test_f222_importlib_factory_in_db_py_is_detected,
     ):
         try:
             fn()
@@ -466,6 +554,6 @@ if __name__ == "__main__":
             failures += 1
             print(f"[FAIL] {fn.__name__}: {exc}")
 
-    total = 21
+    total = 25
     print(f"\n=== {total - failures}/{total} 통과 ===")
     sys.exit(1 if failures else 0)

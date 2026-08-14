@@ -6,7 +6,7 @@
 | 분류 | 코드버그 |
 | 대상 | `project_code/firmware/core/bitpack.c:L10` · `siap_frame.c:L17` · `siap_frame.h:L11` · `tools/core_purity_verify.py:L78-L121` · 펌웨어 설계서 §2.1 |
 | 발견일 | 2026-08-12 |
-| 상태 | 신규 |
+| 상태 | 수정완료 |
 
 ## 근거
 
@@ -56,3 +56,5 @@
 
 | 일시 | 상태 | 내용 |
 |---|---|---|
+| 2026-08-13 | 확인 | 현재 `core/`의 `string.h` 3건이 존재해도 공식 검증기가 7/7·종료코드 0인 것을 재현했다. 별도 임시 core 복제본에 `#include <windows.h>`를 추가한 반례도 GCC 전처리 성공 상태에서 7/7·종료코드 0으로 통과함을 독립 재현했다. 설계서 §2.1의 명시적 허용 목록과 구현·검증기가 불일치하므로 오류를 수용한다. |
+| 2026-08-13 | 수정완료 | `bitpack.h/.c`에 겹치지 않는 객체 표현용 `bp_memcpy`를 추가해 FLOAT·INT 타입 펀닝의 `memcpy`를 대체하고, `siap_frame.c`의 1바이트 재동기 슬라이드는 좌측 복사 루프로 바꿔 core의 `string.h` 3건을 제거했다. `core_purity_verify.py`는 소스 지시문과 GCC `-H` 직접 include(depth 1)를 각각 `stdint.h`·`stddef.h`·`stdbool.h` 또는 실제 core 내부 헤더 허용 목록과 대조한다. 회귀 테스트에 `string.h`, `windows.h`, core 밖 경로, 미존재 내부 헤더 반례와 정상 세 헤더를 고정했다. 결함 재주입 시 `windows.h`가 소스/GCC 양쪽에서 FAIL하여 5/7·종료코드 1, 정상 core는 7/7이었다. C 빌드·실행은 bitpack 41/41, siap_frame 148/148, status_codes 53/53, golden 253/253(53벡터), 도구 테스트 32/32, firmware_verify 51/51, golden_verify 31/31, `tools/run_all.py` 20/20을 통과했다. |

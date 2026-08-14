@@ -6,7 +6,7 @@
 | 분류 | 코드버그 |
 | 대상 | `project_code/backend/services/ems.py:120-136` · `project_code/backend/repository.py:702-716` · `project_docs/arch/아키텍처_설계서.md` §4.4-a |
 | 발견일 | 2026-08-13 |
-| 상태 | 신규 |
+| 상태 | 수정완료 |
 
 ## 근거
 
@@ -45,5 +45,6 @@ new_history_rows=0
 
 | 일시 | 상태 | 내용 |
 |---|---|---|
+| 2026-08-13 | 확인 | 실제 HTTP 설정 성공 전후 `config_change_log`를 실측했으며 증가량은 0이었다. `link.send()`의 동기 ACK 뒤 API 스레드가 저장하는 현재 구조를 확인해 `device_install_info`·`config_change_log`의 사용자발 설정 연산을 API 소유로 명시하는 판정안을 보고했다. |
+| 2026-08-14 | 수정완료 | 사용자 설정의 실질 변경 필드와 전후값·`user_id`를 원본 UPDATE와 같은 트랜잭션의 `config_change_log`에 기록한다. 타임아웃은 설정과 이력을 모두 남기지 않는 회귀로 고정했다. 아키텍처 §4.4-a는 두 테이블을 교차 소유로 옮겨 7/18/2/4=31로 정정했고 메타 검증이 실제 표를 같은 값으로 파싱했다. 사용자 귀속을 임시 제거하자 F-221 회귀가 실패했고 원복 후 통과했다. |
 | | | |
-

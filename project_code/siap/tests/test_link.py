@@ -13,7 +13,9 @@ import time
 
 import pytest
 
-from contracts.frame import Frame, Header, MsgKind, NodeProperty, RSC, Status
+from contracts.frame import (
+    Frame, Header, MsgControlProfile, MsgKind, NodeProperty, RSC, Status, Violation,
+)
 from siap import codec
 from siap.link import SiapNodeLink
 
@@ -52,6 +54,42 @@ class _AlwaysErrorReadTransport:
 
     def write(self, data: bytes) -> int:
         return len(data)
+
+
+def test_reverse_settings_update_runtime_state_f213():
+    link = SiapNodeLink(gcg_id=1)
+    old = NodeProperty(1, 1, 3, Status.NORMAL, 0)
+    link._registry.register(old, ())
+
+    def apply(req: Frame) -> None:
+        reply = link._default_reply(req)
+        assert reply is not None and reply.rsc == RSC.SUCCESS
+        link._apply_registry_effects(req, reply)
+
+    header = Header(0x12, 0, 0, 7, 0, 1, 3)
+    node_only = NodeProperty(9, 1, 3, Status.ABNORMAL, 0)
+    apply(Frame(header, MsgKind.REQ_SET_NODE_PROPERTY, node_property=node_only))
+    assert link.registry()[3] == node_only
+
+    all_node = NodeProperty(10, 1, 3, Status.NORMAL, 0)
+    apply(Frame(header, MsgKind.REQ_SET_NODE_DEVICE_PROPERTY_ALL,
+                node_property=all_node))
+    assert link.registry()[3] == all_node
+
+    changed = MsgControlProfile(9, 4, 30, 45)
+    apply(Frame(header, MsgKind.REQ_SET_MSG_FLOW_CONTROL_PROFILE, profile=changed))
+    assert link._profile == changed
+    assert link._pending.profile() == changed
+
+
+def test_headerless_violation_gets_no_reply_or_registry_effect_f215():
+    link = SiapNodeLink(gcg_id=1)
+    frame = Frame(header=None, raw=b"\x12", violations=(
+        Violation(9, "INVALID_FORMAT", "7.3.1", "header incomplete"),
+    ))
+    assert link._default_reply(frame) is None
+    link._apply_registry_effects(frame, None)
+    assert link.registry() == {}
 
 
 def test_write_retries_partial_writes_and_reports_truth_f139():

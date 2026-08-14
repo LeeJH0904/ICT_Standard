@@ -162,6 +162,7 @@
 | `siap_node_id` | 0943 7.2.4 | 20bit — `CHECK 0~1048575` |
 | `siap_device_id` | 0943 5.1 | 8bit — `CHECK 0~255` |
 | `siap_subtype` | 0943 표 7-14 | 8bit — 항목은 1369-P1 6.3.3/6.3.4에서 도출 |
+| `transfer_mode`, `period_sec` | 0943 표 7-15 | 사용자 설정과 노드 선언의 마지막 성공값. Period는 14bit `CHECK 0~16383`; 미수집 판정은 디바이스별 `period_sec × 3`(F-227) |
 | `unit`, `lower_limit`, `upper_limit`, `precision_val` | 1369-P1 6.3.2 | **0943 프레임은 값만 싣고 단위를 싣지 않는다.** 이 간극을 데이터 계층이 메운다 |
 
 `UNIQUE(siap_node_id, siap_device_id)` 제약은 0943 3.4 *"디바이스 ID는 단일 노드에서 유일한 값을 가짐"* 을 DB로 강제한 것이다.
@@ -476,6 +477,8 @@ CREATE TABLE device_install_info (
     siap_node_id    INTEGER,                           -- 0943 Node ID (20bit)
     siap_device_id  INTEGER,                           -- 0943 Device ID (8bit)
     siap_subtype    INTEGER,                           -- 0943 Subtype (8bit)
+    transfer_mode   TEXT,                              -- 0943 표 7-15 Transfer Mode 이름
+    period_sec      INTEGER,                           -- 0943 표 7-15 Period (14bit, sec)
     -- ↓ 1369-P1 6.3.2 "단위·유효범위·오차범위가 관리되어야 한다"
     unit            TEXT,
     lower_limit     REAL,
@@ -486,6 +489,8 @@ CREATE TABLE device_install_info (
     CHECK (siap_node_id   IS NULL OR (siap_node_id   BETWEEN 0 AND 1048575)),
     CHECK (siap_device_id IS NULL OR (siap_device_id BETWEEN 0 AND 255)),
     CHECK (siap_subtype   IS NULL OR (siap_subtype   BETWEEN 0 AND 255)),
+    CHECK (transfer_mode IS NULL OR transfer_mode IN ('PERIODIC','EVENT','BOTH')),
+    CHECK (period_sec IS NULL OR period_sec BETWEEN 0 AND 16383),
     CHECK (installed_at <> ''),                          -- F-162
     CHECK (installed_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]*'), -- F-166
     CHECK (created_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]*'),   -- F-184

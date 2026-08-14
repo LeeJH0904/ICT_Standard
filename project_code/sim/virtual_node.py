@@ -425,14 +425,35 @@ class VirtualNodeServer:
                 dmis = wire.decode_req_set_device_control(payload)
             except ValueError:
                 return
-            if node is not None:
+            rsc = wire.RSC_SUCCESS
+            targets: list[tuple[SimDevice, "wire.WireDMI"]] = []
+            if node is None:
+                rsc = wire.RSC_INVALID_NODE_ID
+            else:
                 for cmd in dmis:
-                    for dev in node.devices:
-                        if dev.device_id == cmd.device_id:
-                            dev.value = cmd.value
-                            log.info("노드 %s 디바이스 %s 제어값 갱신: 0x%08X",
-                                      h.node_id, dev.device_id, dev.value)
-            self._send(conn, wire.build_res_set_device_control(h.msg_id, h.gcg_id, h.node_id))
+                    dev = next((d for d in node.devices if d.device_id == cmd.device_id), None)
+                    if dev is None:
+                        rsc = wire.RSC_INVALID_DEVICE_ID
+                        break
+                    # 8.1.5는 사용자 제어 대상을 액추에이터로 한정한다. ID만
+                    # 같다고 센서를 바꾸거나, 등록 속성과 다른 Type/Subtype/
+                    # Value Type을 받아들이면 실제 노드와 다른 장치를 제어한다.
+                    if (dev.dev_type != wire.DEV_ACTUATOR
+                            or cmd.dev_type != dev.dev_type
+                            or cmd.subtype != dev.subtype
+                            or cmd.value_type != dev.value_type):
+                        rsc = wire.RSC_INVALID_DEVICE_TYPE
+                        break
+                    targets.append((dev, cmd))
+            # 목록 중 뒤 항목이 잘못됐을 때 앞 항목만 적용되는 부분 성공을
+            # 막기 위해 전량 검증이 끝난 뒤에만 값을 바꾼다.
+            if rsc == wire.RSC_SUCCESS:
+                for dev, cmd in targets:
+                    dev.value = cmd.value
+                    log.info("노드 %s 디바이스 %s 제어값 갱신: 0x%08X",
+                             h.node_id, dev.device_id, dev.value)
+            self._send(conn, wire.build_res_set_device_control(
+                h.msg_id, h.gcg_id, h.node_id, rsc))
         elif h.msg_type == wire.MT_RES_SET_DEVICE_CONTROL:
             log.debug("노드 %s 제어 응답 msg_id=%s", h.node_id, h.msg_id)
         else:

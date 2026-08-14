@@ -6,7 +6,7 @@
 | 분류 | 코드버그 |
 | 대상 | `project_code/backend/api.py:451-465` · `project_code/backend/services/ems.py:189-204` · `project_docs/api/openapi.json:2798-2831` |
 | 발견일 | 2026-08-13 |
-| 상태 | 신규 |
+| 상태 | 수정완료 |
 
 ## 근거
 
@@ -63,4 +63,5 @@ OpenAPI와 같은 닫힌 요청 모델을 런타임 라우트에 적용하고, `
 
 | 일시 | 상태 | 내용 |
 |---|---|---|
-
+| 2026-08-13 | 확인 | 실제 ASGI HTTP에 `property={value: 1}`과 `{period_sec: 16384}`를 각각 전송했다. OpenAPI가 모두 금지하지만 두 요청 모두 HTTP 200이었다. |
+| 2026-08-14 | 수정완료 | 타입 없는 라우트 본문에 OpenAPI와 같은 닫힌 요청 검증을 적용했다. 본문·selector·property의 허용 키, 배타 선택자, 문자열/정수/숫자 타입, Transfer Mode 열거, Subtype 8bit, Period 14bit, float32 범위를 검사한다. 미지 키·초과 Period·bool Period·null 설정 2종을 실제 ASGI HTTP 음성 벡터로 고정하고 거부 전 TX=0도 확인한다. 검증을 임시 우회하면 5/5가 실패하고 원복 후 통과했다. |

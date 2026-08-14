@@ -78,7 +78,8 @@ def list_node_devices(conn: sqlite3.Connection, node_id: int):
 
 
 def set_device_property(conn: sqlite3.Connection, link: SiapLink, builder: FrameBuilder, *,
-                         selector: dict, property_patch: dict, timeout: float | None = None) -> list:
+                         selector: dict, property_patch: dict, user_id: str,
+                         timeout: float | None = None) -> list:
     """`PATCH /api/v1/device-property` — 0937 6.4-2 · 부속서 A 1.3
     (0943 8.1.3.2 REQ_SET_DEVICE_PROPERTY 로 나간다).
 
@@ -128,9 +129,7 @@ def set_device_property(conn: sqlite3.Connection, link: SiapLink, builder: Frame
             )
         for (install, _n, _d, _dmi) in node_plans:
             repository.update_device_property(
-                conn, install.id,
-                lower_limit=property_patch.get("lower_value"),
-                upper_limit=property_patch.get("upper_value"),
+                conn, install.id, property_patch=property_patch, user_id=user_id,
             )
             updated_ids.append(install.id)
     conn.commit()
@@ -191,7 +190,7 @@ def _build_device_property(install, dmi: DeviceMainInfo, patch: dict) -> DeviceP
     일부만 바꿔도 나머지는 현재값을 그대로 채워 보낸다(부분 필드 전송
     수단이 0943에 없다). `lower_value`/`upper_value`는 패치 값 우선,
     없으면 `device_install_info`에 저장된 값(F-170), 그것도 없으면 0."""
-    tm = patch.get("transfer_mode")
+    tm = patch.get("transfer_mode", install.transfer_mode)
     transfer_mode = TransferMode[tm] if tm else TransferMode.PERIODIC
     zero = 0 if dmi.value_type in (ValueType.INT, ValueType.UINT) else 0.0
     lower = patch.get("lower_value", install.lower_limit if install.lower_limit is not None else zero)
@@ -199,7 +198,7 @@ def _build_device_property(install, dmi: DeviceMainInfo, patch: dict) -> DeviceP
     return DeviceProperty(
         main=dmi,
         transfer_mode=transfer_mode,
-        period=patch.get("period_sec", 0),
+        period=patch.get("period_sec", install.period_sec if install.period_sec is not None else 0),
         lower_value=lower, upper_value=upper,
         lower_limit=zero, upper_limit=zero, precision=zero,
         status=Status.NORMAL,

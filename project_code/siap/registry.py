@@ -96,6 +96,18 @@ class NodeRegistry:
             if node.node_id in self._nodes:
                 self._nodes[node.node_id] = node
 
+    def replace_node_and_device_properties(
+            self, node: NodeProperty, devices: tuple[DeviceProperty, ...]) -> None:
+        """F-213 — REQ_SET_NODE_DEVICE_PROPERTY_ALL 성공 효과를 한 잠금에서
+        반영한다. 노드 속성과 전체 디바이스 목록 사이의 부분 관측을 막는다."""
+        with self._lock:
+            if node.node_id not in self._nodes:
+                return
+            ordered = tuple(devices)
+            self._nodes[node.node_id] = node
+            self._device_properties[node.node_id] = ordered
+            self._devices[node.node_id] = tuple(dp.main for dp in ordered)
+
     def registry(self) -> dict[int, NodeProperty]:
         """SiapLink.registry() 구현. 내부 dict 의 사본을 돌려준다 — 호출자가
         고쳐도 세션 상태가 깨지지 않는다."""

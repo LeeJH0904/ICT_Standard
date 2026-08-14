@@ -6,7 +6,7 @@
 | 분류 | 코드버그 |
 | 대상 | `tools/layer_verify.py:L210` |
 | 발견일 | 2026-08-12 |
-| 상태 | 신규 |
+| 상태 | 수정완료 |
 
 ## 근거
 
@@ -41,4 +41,5 @@ layer_verify.main()        -> 7/7 통과, exit 0
 
 | 일시 | 상태 | 내용 |
 |---|---|---|
-
+| 2026-08-13 | 확인 | 임시 `project_code/backend/bad.py`에 `from project_docs.contracts import frame`을 넣고 `ROOT`·`PROJECT_CODE`를 임시 트리로 바꿔 `main()`을 실행했다. 금지 import가 존재하는데도 7/7, 종료 코드 0으로 통과하여 신고 내용을 재현했다. |
+| 2026-08-13 | 수정완료 | `tools/layer_verify.py`의 `project_docs` 금지 검사를 `contracts/` 한정 순회에서 `project_code/` 전체 AST 순회로 넓혔다. `tools/tests/test_layer_verify.py`에 backend 위반과 정상 파일 반례 2건을 추가했다. 결함 주입은 6/7·종료 코드 1로 실패했고, 정상 상태에서 신규 테스트 2/2, 도구 테스트 30/30, 계층 검증 7/7, 계약 62/62, 골든 31/31, 전체 검증기 20/20을 통과했다. |

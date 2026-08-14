@@ -6,7 +6,7 @@
 | 분류 | 코드버그 |
 | 대상 | `project_code/sim/replayer.py:73` · `project_code/sim/replayer.py:95` · `project_code/run.py:316` |
 | 발견일 | 2026-08-12 |
-| 상태 | 신규 |
+| 상태 | 수정완료 |
 
 ## 근거
 
@@ -40,4 +40,5 @@ exit: 0
 
 | 일시 | 상태 | 내용 |
 |---|---|---|
-| | | |
+| 2026-08-13 | 확인 | `{not-json}` 로그를 실제 `run.py --mode replay`로 실행했다. `sim-replayer` 스레드에서 JSONDecodeError traceback이 발생하고 재생·rx·tx가 모두 0이어도 종료 코드가 0임을 재현했다. |
+| 2026-08-13 | 수정완료 | 작업 스레드가 JSON/필드/hex/송수신 오류를 `Replayer.error`에 저장한 뒤 `done`을 설정하고, `run.py`와 독립 replayer 진입점이 오류를 출력해 종료 코드 1을 반환하도록 변경했다. 오류 저장을 임시 제거하자 전용 회귀가 실패했고 복원 후 통과했다. 실제 `run.main()` 회귀에서 malformed 로그와 TX 불일치가 모두 1, 정상 기본 로그가 0임을 확인했다. |

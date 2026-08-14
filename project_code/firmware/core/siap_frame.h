@@ -8,7 +8,6 @@
  * 프레임 크기와 무관하게 동작한다 (펌웨어 설계서 §3.4/§5.1) — 501 byte 위반
  * 프레임이 들어와도 이 버퍼 크기는 변하지 않는다(S_DRAIN).
  */
-#include <string.h>   /* memcpy — 표준 라이브러리 헤더, 타입 펀닝에만 쓴다(bitpack.c 와 동일 원칙) */
 #include "siap_types.h"
 #include "subtype_registry.h"
 #include "bitpack.h"  /* bp_* 4개 함수, SIAP_WUR */
@@ -71,12 +70,12 @@ SIAP_WUR bool siap_encode_mcp(uint8_t *buf, size_t *bitpos, const siap_mcp_t *mc
          void siap_decode_mcp(const uint8_t *buf, size_t *bitpos, siap_mcp_t *mcp);
 
 /* Value(32bit 원시 비트열) 해석 — 표 7-14. INT 는 2의 보수. */
-static inline int32_t  siap_value_as_int(uint32_t raw)   { int32_t v; memcpy(&v, &raw, 4); return v; }
+static inline int32_t  siap_value_as_int(uint32_t raw)   { int32_t v; bp_memcpy(&v, &raw, 4); return v; }
 static inline uint32_t siap_value_as_uint(uint32_t raw)  { return raw; }
-static inline float    siap_value_as_float(uint32_t raw) { float v; memcpy(&v, &raw, 4); return v; }
-static inline uint32_t siap_raw_from_int(int32_t v)      { uint32_t r; memcpy(&r, &v, 4); return r; }
+static inline float    siap_value_as_float(uint32_t raw) { float v; bp_memcpy(&v, &raw, 4); return v; }
+static inline uint32_t siap_raw_from_int(int32_t v)      { uint32_t r; bp_memcpy(&r, &v, 4); return r; }
 static inline uint32_t siap_raw_from_uint(uint32_t v)    { return v; }
-static inline uint32_t siap_raw_from_float(float v)      { uint32_t r; memcpy(&r, &v, 4); return r; }
+static inline uint32_t siap_raw_from_float(float v)      { uint32_t r; bp_memcpy(&r, &v, 4); return r; }
 
 /* ═══════════════════════════════════════════════════════════════
  *  3. 수신 — 스트리밍 상태 머신 (펌웨어 설계서 §5.1/§5.2/§5.7)

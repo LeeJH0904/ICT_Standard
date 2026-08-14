@@ -8,6 +8,8 @@
   ⑤ simulate 모드가 신선한 DB에서 실제로 장치·텔레메트리·장치상태를 채운다
      (F-198 회귀 가드 — "하드웨어 없이 검증 가능"은 재현 경로가 빈 화면이면
      성립하지 않는다)
+  ⑥ 가상 노드의 초기 센서·액추에이터 값이 golden.jsonl 원본에 실제로 존재한다
+     (F-216 — 단계 4~7 합성 데이터 예외의 경계)
 
 "실행 가능한 것은 직접 실행 결과로 판정한다"(CLAUDE.md §6.2, F-136/F-142
 가 남긴 교훈) — ①·④는 정적 스캔이지만, ②·③·⑤는 `sim/replayer.py`·
@@ -151,6 +153,9 @@ def check_replay_injects_rx_only(tmp_dir: Path) -> None:
 
     client = socket.create_connection(("127.0.0.1", port), timeout=2.0)
     client.settimeout(1.5)
+    # dir=tx는 소켓에 주입되는 입력이 아니라 이 클라이언트(게이트웨이
+    # 대역)가 실제로 내야 하는 기대 출력이다(F-218).
+    client.sendall(tx_frame)
     received = b""
     deadline = time.monotonic() + 1.5
     while time.monotonic() < deadline:
@@ -168,7 +173,8 @@ def check_replay_injects_rx_only(tmp_dir: Path) -> None:
       tx_frame not in received, f"실제 수신: {received.hex()}")
     t("replay — dir=\"rx\" 레코드만 정확히 주입된다 (F-042)",
       received == rx_frame, f"실제 수신: {received.hex()}, 기대: {rx_frame.hex()}")
-    t("replay — skipped_tx 통계가 tx 제외 사실을 기록한다", r.stats["skipped_tx"] == 1,
+    t('replay — dir="tx" 기대 출력이 실제 송신과 일치한다 (F-218)',
+      r.stats["expected_tx"] == 1 and r.stats["matched_tx"] == 1 and r.error is None,
       f"실제 {r.stats}")
 
 
@@ -422,6 +428,46 @@ def check_simulate_populates_devices_and_telemetry(tmp_dir: Path) -> None:
     t("simulate 모드 — 신선한 DB에서 장치·텔레메트리·장치상태가 실제로 채워진다 (F-198)", ok, note)
 
 
+def check_virtual_node_values_match_golden() -> None:
+    """F-216 — 가상 노드 값의 진짜 출처를 골든 원본과 독립 대조한다.
+
+    `_load_value_pool()`의 결과를 그 함수 자신과 비교하면 함수가 골든 밖
+    값을 반환하도록 바뀌어도 양쪽이 같이 오염된다. mode 검증기가
+    golden.jsonl을 직접 읽어 허용 (Subtype, Value Type, Value) 집합을
+    만들고, 그 뒤 실제 기본·추가 노드를 생성해 전량 포함 여부를 본다."""
+    from sim import virtual_node as vn
+
+    allowed: set[tuple[int, int, int]] = set()
+    with open(vn.GOLDEN_PATH, encoding="utf-8") as f:
+        for line in f:
+            if not line.strip():
+                continue
+            vector = json.loads(line)
+            if vector.get("judgement") != "normal":
+                continue
+            current: dict[str, int] | None = None
+            for field in vector.get("fields", []):
+                if field["name"] == "Subtype":
+                    current = {"subtype": field["value"]}
+                elif field["name"] == "Value Type" and current is not None:
+                    current["value_type"] = field["value"]
+                elif (field["name"] == "Value" and current is not None
+                      and "value_type" in current):
+                    allowed.add((current["subtype"], current["value_type"], field["value"]))
+                    current = None
+
+    pool = vn._load_value_pool()
+    nodes = vn._default_nodes(pool) + [vn._late_node(pool)]
+    actual = [
+        (device.subtype, device.value_type, device.value)
+        for node in nodes for device in node.devices
+    ]
+    bad = [triple for triple in actual if triple not in allowed]
+    t("simulate 초기 장치값이 golden.jsonl 정상 벡터 원본에 전량 존재 (F-216)",
+      bool(allowed) and not bad,
+      "" if not bad else f"골든 밖 값={bad}")
+
+
 def golden_msg_id(vector_id: str) -> int:
     from sim import inject
     with open(inject.GOLDEN_PATH, encoding="utf-8") as f:
@@ -448,6 +494,7 @@ def main() -> int:
     # 스레드 경계 문제, 검사 자체의 정확성과는 무관).
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as td:
         check_simulate_populates_devices_and_telemetry(Path(td))
+    check_virtual_node_values_match_golden()
     check_injection_vectors_match_golden()
     check_injection_actual_wire_bytes()
     check_injection_wire_path_and_classification()

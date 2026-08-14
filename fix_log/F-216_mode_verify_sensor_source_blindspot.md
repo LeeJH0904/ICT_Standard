@@ -6,7 +6,7 @@
 | 분류 | 코드버그 |
 | 대상 | `tools/mode_verify.py:361` · `project_code/sim/virtual_node.py:92` |
 | 발견일 | 2026-08-12 |
-| 상태 | 신규 |
+| 상태 | 수정완료 |
 
 ## 근거
 
@@ -43,4 +43,5 @@ assert mode_verify.main() == 0
 
 | 일시 | 상태 | 내용 |
 |---|---|---|
-| | | |
+| 2026-08-13 | 확인 | `virtual_node._load_value_pool`을 골든에 없는 온도 26.7·습도 62.5·관수밸브 77로 교체한 뒤 `mode_verify.main()`을 실행했으나 기존 11/11, 종료 코드 0으로 통과함을 재현했다. |
+| 2026-08-13 | 수정완료 | `mode_verify.py`가 `golden.jsonl`을 직접 읽어 정상 벡터의 (Subtype, Value Type, Value) 허용 집합을 독립 구성하고, `_load_value_pool()`로 실제 생성한 기본·추가 노드의 초기값 전량을 대조하도록 강화했다. 골든 밖 값 monkeypatch는 신규 도구 테스트에서 실패 판정, 현재 값은 통과한다. mode 검증 12/12, tools 테스트 34개, 핵심 계층 392개, `run_all.py` 20/20 통과. |

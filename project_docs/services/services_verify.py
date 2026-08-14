@@ -1,4 +1,4 @@
-"""0937 요구사항 대조표 검증 — 독립 입력 4종과 대조한다
+"""0937 요구사항 대조표 검증 — 독립 입력 5종과 대조한다
 
 F-080 — 초안은 대조표 한 파일만 읽었다. 그러면 "대조표가 자기 자신과 일치하는가"만
         보게 되어, 요구 문구를 서로 바꾸거나 존재하지 않는 심벌을 근거로 적어도
@@ -9,6 +9,7 @@ F-080 — 초안은 대조표 한 파일만 읽었다. 그러면 "대조표가 �
   2) 아키텍처_설계서.md — handle() 의 실제 서비스 배정 (F-079 회귀)
   3) schema.sql         — 근거로 인용한 테이블·컬럼의 실재 (F-082)
   4) openapi.json       — 근거로 인용한 API 경로의 실재 (F-082)
+  5) 실제 Python 소스    — §4.1과 요구 행의 진입점 실재 (F-229)
 
 실행:  python project_docs/services/services_verify.py
        python project_docs/services/services_verify.py --with-source <0937 원문.md>
@@ -17,7 +18,7 @@ F-080 — 초안은 대조표 한 파일만 읽었다. 그러면 "대조표가 �
 종료코드: 0 = 전부 일치, 1 = 불일치 있음
 """
 from __future__ import annotations
-import json, re, sys
+import ast, json, re, sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -58,6 +59,39 @@ API_P   = find("openapi.json", must="openapi")
 ARCH = ARCH_P.read_text(encoding="utf-8") if ARCH_P else ""
 SQL  = SQL_P.read_text(encoding="utf-8")  if SQL_P  else ""
 API  = json.loads(API_P.read_text(encoding="utf-8")) if API_P else {"paths": {}}
+
+# F-229 — 문서의 §4.1 표를 정답으로 다시 읽지 않는다. 실제 구현 소스를
+# 독립 입력으로 파싱해 모듈 함수와 클래스 메서드의 완전한 심벌을 만든다.
+SOURCE_SPECS = {
+    "ems": ("ems.py", "def list_nodes"),
+    "dms": ("dms.py", "def fetch_public_data"),
+    "mms": ("mms.py", "def run_model"),
+    "fms": ("fms.py", "def check_stale_devices"),
+    "fcs": ("fcs.py", "def execute"),
+    "ingest": ("ingest.py", "def handle"),
+    "link": ("link.py", "class SiapNodeLink"),
+}
+SOURCE_PATHS = {mod: find(name, must=must) for mod, (name, must) in SOURCE_SPECS.items()}
+
+def source_symbols(module: str, path: Path | None) -> set[str]:
+    if path is None:
+        return set()
+    try:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+    except (OSError, SyntaxError):
+        return set()
+    out: set[str] = set()
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            out.add(f"{module}.{node.name}")
+        elif isinstance(node, ast.ClassDef):
+            for child in node.body:
+                if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    out.add(f"{module}.{node.name}.{child.name}")
+    return out
+
+ACTUAL_SYMBOLS = set().union(
+    *(source_symbols(module, path) for module, path in SOURCE_PATHS.items()))
 
 def strength_of(ending: str) -> str:
     """0937 종결어미 -> 강도. 대조표가 아니라 원문 발췌에서 산출한다 (F-081).
@@ -314,10 +348,11 @@ t("아키텍처 handle() 본문을 읽었다", len(_h) > 200, f"{len(_h)}자")
 _bad_dms = re.findall(r"dms\.on_(?:node|device)_\w+", _h)
 t("아키텍처 handle() 에 dms.on_*_property 가 없다 (F-079 회귀)",
   not _bad_dms, str(_bad_dms))
-_need_ems = ("ems.on_node_property", "ems.on_device_property", "ems.on_node_device_all")
-_miss_ems = [x for x in _need_ems if x not in _h]
-t("아키텍처 handle() 이 속성 설정 3종을 ems 로 호출한다 (F-079 회귀)",
-  not _miss_ems, str(_miss_ems))
+_need_ingest = ("REQ_SET_DEVICE_PROPERTY", "REQ_SET_NODE_DEVICE_PROPERTY_ALL",
+                "_handle_device_property")
+_miss_ingest = [x for x in _need_ingest if x not in _h]
+t("아키텍처 handle() 이 속성 설정 2종을 실제 ingest 등록 함수에 배정 (F-079·F-229)",
+  not _miss_ingest, str(_miss_ingest))
 
 # ── F-079 회귀 ② 대조표 배정 ─────────────────────────────────
 dms_row = next((r for r in MOD if cell(r[0]).startswith("dms")), None)
@@ -329,9 +364,10 @@ t("dms 진입점에 노드·디바이스 속성 함수가 없다 (F-079 회귀)"
   and not re.search(r"on_(node|device)_(property|device_all)", cell(dms_row[2])),
   cell(dms_row[2]) if dms_row else "")
 ems_row = next((r for r in MOD if cell(r[0]).startswith("ems")), None)
-t("속성 설정 3종이 ems 로 배정되었다 (0937 6.1, F-079)",
+t("EMS 행이 실제 link·ingest·ems 경계를 함께 배정 (0937 6.1, F-079·F-229)",
   ems_row is not None and all(k in cell(ems_row[2]) for k in
-      ("on_node_property", "on_device_property", "on_node_device_all")),
+      ("link.SiapNodeLink._apply_registry_effects",
+       "ingest._handle_device_property", "ems.set_device_property")),
   cell(ems_row[2])[:60] if ems_row else "")
 t("F-079 를 문서에 근거와 함께 기록",
   "F-079" in DOC and "### 4.2" in DOC)
@@ -347,10 +383,19 @@ for m in re.finditer(r"CREATE TABLE (\w+)\s*\((.*?)\n\);", SQL, re.S):
     COLS[m.group(1)] = {mm.group(1) for mm in
                         re.finditer(r"^\s{4}(\w+)\s+[A-Z]", body, re.M)}
 PATHS = set(API.get("paths", {}))
-ENTRY: dict[str, set[str]] = {}
-for r in MOD:
-    mod = re.sub(r"\.py$", "", cell(r[0]).strip("()").split()[0])
-    ENTRY[mod] = set(re.findall(r"[a-z_][a-z0-9_]*", cell(r[2])))
+t("실제 Python 구현 소스 7종 AST 적재 (F-229)",
+  all(SOURCE_PATHS.values()) and bool(ACTUAL_SYMBOLS),
+  " ".join(f"{m}={p.name if p else '없음'}" for m, p in SOURCE_PATHS.items()))
+
+DOC_ENTRY_REFS = {
+    sym for r in MOD
+    for sym in re.findall(r"([a-z_][a-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*){1,2})\(\)",
+                          cell(r[2]))
+}
+missing_doc_entry = sorted(DOC_ENTRY_REFS - ACTUAL_SYMBOLS)
+t("§4.1 진입점이 실제 Python 함수·메서드에 전부 실재 (F-229)",
+  bool(DOC_ENTRY_REFS) and not missing_doc_entry,
+  str(missing_doc_entry))
 
 t(f"schema.sql · openapi.json 적재 (테이블 {len(TABLES)} · 경로 {len(PATHS)})",
   len(TABLES) >= 30 and len(PATHS) >= 15)
@@ -364,10 +409,9 @@ def check_evidence(text: str) -> list[str]:
         if tok.startswith("/api/") or re.match(r"^(GET|POST|PATCH|DELETE)\s+/api/", tok):
             path = tok.split()[-1]
             if path not in PATHS: out.append(f"경로 {path}")
-        # 2) 모듈 진입점  ems.on_node_connect()
-        elif re.fullmatch(r"[a-z_]+\.[a-z_][a-z0-9_]*\(\)", tok):
-            mod, fn = tok[:-2].split(".", 1)
-            if mod in ENTRY and fn not in ENTRY[mod]: out.append(f"진입점 {tok}")
+        # 2) Python 진입점. 문서 표가 아니라 실제 소스 AST와 대조한다(F-229).
+        elif re.fullmatch(r"[a-z_][a-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*){1,2}\(\)", tok):
+            if tok[:-2] not in ACTUAL_SYMBOLS: out.append(f"진입점 {tok}")
         # 3) 테이블.컬럼
         elif re.fullmatch(r"[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*", tok):
             tbl, col = tok.split(".", 1)
@@ -395,9 +439,10 @@ for rs in REQ.values():
 t("부분 행이 인용한 심벌도 실재 (F-082)", not ghost2, "; ".join(ghost2[:3]))
 
 # ── 신규 계약 2종이 배정표에도 등재되었는가 ────────────────────
-t("4.4 신규 계약 2종이 4.1 진입점에 등재 (F-082)",
-  "run_model" in ENTRY.get("mms", set()) and "check_stale_devices" in ENTRY.get("fms", set()),
-  f"mms={sorted(ENTRY.get('mms',[]))[:4]} fms={sorted(ENTRY.get('fms',[]))[:4]}")
+t("4.4 신규 계약 2종이 실제 구현과 4.1 진입점에 모두 실재 (F-082·F-229)",
+  {"mms.run_model", "fms.check_stale_devices"} <= ACTUAL_SYMBOLS
+  and {"mms.run_model", "fms.check_stale_devices"} <= DOC_ENTRY_REFS,
+  f"실제={sorted({'mms.run_model','fms.check_stale_devices'} & ACTUAL_SYMBOLS)}")
 t("4.4 절이 두 계약의 시그니처·근거를 적었다",
   "### 4.4" in DOC and "mms.run_model" in DOC and "fms.check_stale_devices" in DOC)
 

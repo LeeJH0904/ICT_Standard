@@ -109,7 +109,9 @@ class FrameBuilder(Protocol):
                            node: NodeProperty | None = None,
                            devices: tuple[DeviceProperty, ...] = ()) -> Frame:
         """RES_SET_CONNECTION (8.1.1). RSC + NODE_PROPERTY + DEVICE_PROPERTY×N.
-        rsc != SUCCESS 이면 node·devices 는 생략하고 RSC 만 싣는다."""
+        rsc != SUCCESS 이면 호출자가 넘긴 node·devices는 사용하지 않지만,
+        LAYOUT의 9byte 고정부(RSC + 자리표시 NODE_PROPERTY, N=0)는 유지한다.
+        표준에는 오류 RSC에서 응답 구조를 1byte로 줄인다는 규정이 없다(F-208)."""
 
     def res_set_node_property(self, req: Frame, rsc: RSC) -> Frame:
         """RES_SET_NODE_PROPERTY (8.1.3.1 역방향). RSC 만."""
@@ -125,7 +127,8 @@ class FrameBuilder(Protocol):
 
     def error_response(self, req: Frame, rsc: RSC) -> Frame | None:
         """위반 Request 에 대한 오류 회신 (7.3.1).
-        `frame.reply_kind(req.kind)` 로 대응 Response 종류를 정해 RSC 만 싣는다.
+        `frame.reply_kind(req.kind)` 로 대응 Response 종류를 정한다. 일반 응답은
+        RSC만 싣고, RES_SET_CONNECTION은 LAYOUT의 9byte 고정부를 유지한다(F-208).
         회신 종류를 정할 수 없으면(해석 불가 msg_type, Notify) **None** 을 반환한다 —
         ACK 는 헤더뿐이라 오류를 실을 수단이 없다."""
 

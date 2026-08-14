@@ -1,5 +1,5 @@
-"""F-122·F-128 회귀 테스트 — tools/core_purity_verify.py 가 보드 매크로 우회를
-놓치고 통과시키던 버그를 다시 만들지 않는지 확인한다.
+"""F-122·F-128·F-211 회귀 테스트 — tools/core_purity_verify.py 가 보드 매크로와
+비허용 시스템 헤더를 놓치고 통과시키던 버그를 다시 만들지 않는지 확인한다.
 
 배경: CLAUDE.md §1-5·개발_착수_지시서 §3.3 은 `core/`에 보드 판별 매크로·
 플랫폼 헤더 include 가 0개임을 기계로 판정하라고 요구한다.
@@ -106,6 +106,48 @@ def test_f128_arbitrary_macro_name_is_caught(monkeypatch):
         )
 
 
+def test_f211_disallowed_system_headers_are_caught_by_both_layers(monkeypatch):
+    """현재 위반 string.h와 설치 환경에 존재하는 플랫폼 헤더 windows.h 모두
+    소스 허용 목록과 GCC 직접 include 대조에서 검출되어야 한다."""
+    for header in ("string.h", "windows.h"):
+        with tempfile.TemporaryDirectory() as tmp:
+            core_dir = Path(tmp) / "core"
+            core_dir.mkdir()
+            (core_dir / "probe.h").write_text(
+                "#ifndef PROBE_H\n#define PROBE_H\n"
+                f"#include <{header}>\n#endif\n",
+                encoding="utf-8",
+            )
+            monkeypatch.setattr(cpv, "ROOT", Path(tmp))
+            monkeypatch.setattr(cpv, "CORE_DIR", core_dir)
+
+            files = cpv._source_files()
+            assert cpv._check_includes_textual(files), (
+                f"F-211 재발: <{header}>가 소스 허용 목록 검사를 통과했다"
+            )
+            bad_cc, _ = cpv._check_includes_compiler(files)
+            assert bad_cc, (
+                f"F-211 재발: <{header}>가 GCC 직접 include 검사를 통과했다"
+            )
+
+
+def test_f211_project_header_must_exist_inside_core(monkeypatch):
+    """따옴표 include도 core 밖 탈출이나 존재하지 않는 파일이면 허용하지 않는다."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        core_dir = root / "core"
+        core_dir.mkdir()
+        (root / "outside.h").write_text("int outside;\n", encoding="utf-8")
+        (core_dir / "probe.c").write_text(
+            '#include "../outside.h"\n#include "missing.h"\n', encoding="utf-8"
+        )
+        monkeypatch.setattr(cpv, "ROOT", root)
+        monkeypatch.setattr(cpv, "CORE_DIR", core_dir)
+
+        bad = cpv._check_includes_textual(cpv._source_files())
+        assert len(bad) == 2, "F-211 재발: core 밖·미존재 프로젝트 헤더가 허용됐다"
+
+
 def test_clean_core_files_still_pass(monkeypatch):
     """정상적인(간접화 없는) 순수 코드는 여전히 위반 0건이어야 한다 — 오탐 방지.
     include guard 형태와 실제 bitpack.h 의 `#if defined(__GNUC__)` 패턴 둘 다 넣는다."""
@@ -117,6 +159,7 @@ def test_clean_core_files_still_pass(monkeypatch):
         )
         (core_dir / "clean.h").write_text(
             "#ifndef CLEAN_H\n#define CLEAN_H\n"
+            "#include <stdbool.h>\n#include <stddef.h>\n#include <stdint.h>\n"
             "#if defined(__GNUC__)\n"
             "#  define ATTR __attribute__((warn_unused_result))\n"
             "#else\n"
@@ -150,11 +193,14 @@ if __name__ == "__main__":
                 setattr(obj, name, old)
 
     failures = 0
-    for fn in (
+    tests = (
         test_f122_indirect_board_macro_is_caught,
         test_f128_arbitrary_macro_name_is_caught,
+        test_f211_disallowed_system_headers_are_caught_by_both_layers,
+        test_f211_project_header_must_exist_inside_core,
         test_clean_core_files_still_pass,
-    ):
+    )
+    for fn in tests:
         mp = _FakeMonkeypatch()
         try:
             fn(mp)
@@ -165,5 +211,5 @@ if __name__ == "__main__":
         finally:
             mp.undo()
 
-    print(f"\n=== {3 - failures}/3 통과 ===")
+    print(f"\n=== {len(tests) - failures}/{len(tests)} 통과 ===")
     sys.exit(1 if failures else 0)

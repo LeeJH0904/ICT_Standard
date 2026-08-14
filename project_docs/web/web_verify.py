@@ -17,6 +17,21 @@ import json, re, sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+TOOLS_DIR = HERE.parent.parent / "tools"
+if str(TOOLS_DIR) not in sys.path:
+    sys.path.insert(0, str(TOOLS_DIR))
+from web_source_checks import (
+    approved_has_execute_path,
+    bit_unpack_sources,
+    external_css_references,
+    extract_inline_scripts,
+    numeric_korean_map_sources,
+    pending_execute_paths,
+    recovery_cursor_issues,
+    recovery_pagination_issues,
+    status_cue_issues,
+)
+
 if sys.stdout.encoding and sys.stdout.encoding.lower().replace("-", "") != "utf8":
     try: sys.stdout.reconfigure(errors="replace")
     except Exception: pass
@@ -255,6 +270,12 @@ for cand in (HERE.parent.parent / "project_code" / "web", HERE.parent.parent / "
 if WEB_DIR:
     htmls = sorted(WEB_DIR.glob("*.html"))
     txt = {p.name: p.read_text(encoding="utf-8") for p in htmls}
+    static_dir = WEB_DIR / "static"
+    js_txt = {p.name: p.read_text(encoding="utf-8")
+              for p in sorted(static_dir.glob("*.js"))} if static_dir.is_dir() else {}
+    css_txt = {p.name: p.read_text(encoding="utf-8")
+               for p in sorted(static_dir.glob("*.css"))} if static_dir.is_dir() else {}
+    script_txt = {**js_txt, **extract_inline_scripts(txt)}
     t(f"web/ 실물 {len(htmls)}종 발견 - 실물 검사 수행", len(htmls) == 4, str(list(txt)))
     t("모든 페이지에 lang=ko (WCAG 3.1.1)",
       all(re.search(r'<html[^>]*lang="ko"', v) for v in txt.values()))
@@ -262,14 +283,40 @@ if WEB_DIR:
       all(all(f"<{k}" in v for k in ("main", "nav", "header")) for v in txt.values()))
     t("모든 페이지에 건너뛰기 링크 (2.4.1)",
       all('class="skip"' in v for v in txt.values()))
-    t("외부 리소스 참조 0건 (오프라인)",
-      not any(re.search(r'(src|href)="https?://', v) for v in txt.values()))
+    external_refs = [name for name, source in txt.items()
+                     if re.search(r'(src|href)\s*=\s*["\']https?://', source)]
+    external_refs.extend(external_css_references(css_txt))
+    t("외부 리소스·CSS CDN 참조 0건 (오프라인, F-230)",
+      not external_refs, str(external_refs))
     t("localStorage 사용 0건",
       not any("localStorage" in v or "sessionStorage" in v for v in txt.values()))
-    js = "".join((p.read_text(encoding="utf-8") for p in (WEB_DIR / "static").glob("*.js"))) \
-         if (WEB_DIR / "static").is_dir() else ""
+    js = "".join(js_txt.values())
     t("화면 코드에 RSC·NEC·Subtype 상수 없음 (CLAUDE.md 3.4 · 1-6)",
-      not re.search(r"INVALID_(VERSION|FORMAT|NODE_ID)|ERROR_BATTERY|0x8[0-9A-F]\b", js))
+      not any(re.search(r"INVALID_(VERSION|FORMAT|NODE_ID)|ERROR_BATTERY|0x8[0-9A-F]\b", source)
+              for source in script_txt.values()))
+    bit_hits = bit_unpack_sources(script_txt)
+    t("정적·인라인 화면 스크립트에 비트 언팩 없음 (F-231)",
+      not bit_hits, str(bit_hits))
+    numeric_map_hits = numeric_korean_map_sources(script_txt)
+    t("화면 스크립트에 숫자 코드→한국어 매핑 객체 없음 (F-231)",
+      not numeric_map_hits, str(numeric_map_hits))
+    rules_html = txt.get("rules.html", "")
+    pending_exec = pending_execute_paths(rules_html)
+    t("미승인 카드가 헬퍼를 거쳐서도 실행 경로를 렌더하지 않음 (F-204)",
+      not pending_exec, str(pending_exec))
+    t("승인 카드에는 실행 경로가 존재 (F-204)",
+      approved_has_execute_path(rules_html))
+    status_issues = status_cue_issues(txt.get("verify.html", ""))
+    t("프레임 상태가 색 외 아이콘·문자를 함께 제공 (F-232)",
+      not status_issues, str(status_issues))
+    recovery_issues = recovery_pagination_issues(
+        js_txt.get("api.js", ""), txt.get("verify.html", ""))
+    t("SSE 재연결 누락 복구가 100건 초과 페이지를 모두 소비 (F-205)",
+      not recovery_issues, str(recovery_issues))
+    cursor_issues = recovery_cursor_issues(
+        js_txt.get("stream.js", ""), txt.get("verify.html", ""))
+    t("폴링이 최초 SSE 단절의 연속 커서를 덮지 않음 (F-233)",
+      not cursor_issues, str(cursor_issues))
 else:
     t("web/ 실물 없음 - 설계 단계이므로 실물 검사는 건너뛴다", True, "구현 후 자동 활성")
 

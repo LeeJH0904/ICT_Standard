@@ -6,7 +6,7 @@
 | 분류 | 코드버그 |
 | 대상 | `project_code/sim/virtual_node.py:398` · `project_code/sim/virtual_node.py:423` |
 | 발견일 | 2026-08-12 |
-| 상태 | 신규 |
+| 상태 | 수정완료 |
 
 ## 근거
 
@@ -41,4 +41,5 @@ UNKNOWN_DEVICE response_rsc=0x0
 
 | 일시 | 상태 | 내용 |
 |---|---|---|
-| | | |
+| 2026-08-13 | 확인 | 노드 3의 온도 센서(device_id=1)에 제어 명령을 직접 전달하자 raw 값이 1103783526→1106247680으로 변경되고 RSC=0x00이 회신됐다. 존재하지 않는 device_id=99도 RSC=0x00임을 실제 응답 바이트로 재현했다. |
+| 2026-08-13 | 수정완료 | 제어 목록 전량의 Node ID·Device ID·액추에이터 여부·등록 Type/Subtype/Value Type 일치를 먼저 검증하고, 성공할 때만 일괄 적용하도록 변경했다. 미등록 노드/디바이스/타입에 각각 `INVALID_NODE_ID(0x02)`·`INVALID_DEVICE_ID(0x04)`·`INVALID_DEVICE_TYPE(0x05)`를 회신한다. 센서 검사 분기를 임시 무력화하자 전용 회귀가 RSC 0x00을 받아 실패했고 복원 후 통과했다. |

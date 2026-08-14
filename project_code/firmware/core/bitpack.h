@@ -13,6 +13,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
+/* core/ 전용 바이트 복사. string.h 없이 객체 표현을 안전하게 옮긴다.
+   src/dst 영역은 겹치지 않아야 한다. */
+void bp_memcpy(void *dst, const void *src, size_t len);
+
 /* GCC · Clang · AVR-GCC 공통. 미지원 컴파일러에서는 빈 매크로가 되지만
    호스트 테스트(펌웨어 설계서 §4.4)가 GCC/Clang 으로 도는 한 누락은
    거기서 잡힌다 (F-078). */

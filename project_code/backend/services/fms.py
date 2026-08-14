@@ -43,20 +43,15 @@ def list_alerts(conn: sqlite3.Connection, **kwargs):
 #: 3회. 재전송이 전부 실패해야 미수집으로 본다.
 STALE_RETRY_MULTIPLIER = 3
 
-#: 표준 미규정(CLAUDE.md §3.5 갱신 대상) — `device_install_info`는 이 참조
-#: 구현에서 디바이스별 `Period`(표 7-15)를 저장하지 않는다(프레임 송신 시점의
-#: 값일 뿐 게이트웨이 DB에 미러링하는 컬럼이 없다, `PATCH /device-property`
-#: 참고). `check_stale_devices()`는 그래서 디바이스별 실제 Period 대신
-#: 전역 기본값을 쓴다 — Period 컬럼 추가는 `contracts/`가 아니라 `schema.sql`
-#: 변경이라 CLAUDE.md §5 절차 대상은 아니지만, DB 제약 테스트 109종을 흔드는
-#: 변경이라 이번 단계 범위 밖으로 미룬다(§5 후속 과제와 같은 성격).
+#: 과거 데이터나 SIAP 연동 전 설치 행은 Period가 NULL일 수 있다. 그런 행만
+#: 호환 기본값을 쓰고, 표 7-15로 등록된 장치는 저장된 실제 Period를 쓴다.
 DEFAULT_PERIOD_SEC = 300
 
 
 def check_stale_devices(conn: sqlite3.Connection, now: str) -> list[str]:
     """0937 6.4-3 · A.1-4 — "정해진 시간에 데이터가 수집되지 않는 경우
-    알림". 디바이스별 마지막 측정시각이 `DEFAULT_PERIOD_SEC × 3`을 넘으면
-    `alert(kind='NO_DATA')`를 만든다.
+    알림". 디바이스별 마지막 측정시각이 그 장치의 표 7-15
+    `period_sec × 3`을 넘으면 `alert(kind='NO_DATA')`를 만든다.
 
     `Keep Alive`와의 차이 — Keep Alive는 노드 생존성(8.2.1.5)이다. 노드는
     살아 있고 특정 디바이스의 `NOTI_DEVICE_VALUE`만 멈춘 경우는 Keep Alive로
@@ -68,15 +63,18 @@ def check_stale_devices(conn: sqlite3.Connection, now: str) -> list[str]:
     (SSE, 0.5초 틱마다)에서 이 함수를 호출한다 — 함수 자체는 DB만 보고
     판정하므로 언제 불러도 결과가 같다(멱등). 반환값은 새로 만든 alert id
     목록."""
-    threshold_sec = DEFAULT_PERIOD_SEC * STALE_RETRY_MULTIPLIER
     now_epoch = _iso_to_epoch(now)
     rows = conn.execute(
-        "SELECT em.install_id AS install_id, MAX(s.measured_at) AS last_seen"
+        "SELECT em.install_id AS install_id, MAX(s.measured_at) AS last_seen,"
+        " COALESCE(di.period_sec, ?) AS period_sec"
         " FROM env_measure em JOIN env_state_data s ON s.id = em.env_state_id"
+        " JOIN device_install_info di ON di.id = em.install_id"
         " GROUP BY em.install_id"
+        , (DEFAULT_PERIOD_SEC,)
     ).fetchall()
     created: list[str] = []
     for row in rows:
+        threshold_sec = row["period_sec"] * STALE_RETRY_MULTIPLIER
         last_epoch = _iso_to_epoch(row["last_seen"])
         if now_epoch - last_epoch <= threshold_sec:
             continue

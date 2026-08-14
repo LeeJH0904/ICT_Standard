@@ -86,6 +86,7 @@ class SiapNodeLink:
     def __init__(self, gcg_id: int = 1, profile: MsgControlProfile = DEFAULT_PROFILE) -> None:
         self._gcg_id = gcg_id
         self._profile = profile
+        self._profile_lock = threading.Lock()
         self._registry = NodeRegistry()
         self._pending = PendingTable(self._profile)
         self._proto_mode: Mode = "strict"
@@ -141,7 +142,9 @@ class SiapNodeLink:
         전송 계층 오류로 계속 막혀 있으면(과거에는 `_io_loop()` 가 그 회차의
         큐 처리·만료 검사를 통째로 건너뛰어 pending 등록 자체가 무한정
         미뤄졌다) 이 마감시각이 없으면 `out.get()` 이 영원히 블로킹한다."""
-        upper = timeout if timeout is not None else self._profile.recv_timeout * (self._profile.num_retry + 1)
+        with self._profile_lock:
+            profile = self._profile
+        upper = timeout if timeout is not None else profile.recv_timeout * (profile.num_retry + 1)
         deadline = time.monotonic() + upper
         out: "queue.Queue" = queue.Queue(maxsize=1)
         self._txq.put((frame, out))
@@ -265,29 +268,51 @@ class SiapNodeLink:
         회신 Frame 자체에서 등록 내용을 읽는다 — `build.res_set_connection()`
         은 항상 유효한 `node_property` 를 채우므로(§ build.py), 어느 경로가
         회신을 만들었든 이 판정은 동일하게 성립한다."""
+        if frame.header is None:
+            return
         if (frame.kind is MsgKind.REQ_SET_CONNECTION and reply is not None
                 and reply.kind is MsgKind.RES_SET_CONNECTION and reply.rsc == RSC.SUCCESS
                 and reply.node_property is not None):
             self._registry.register(reply.node_property, reply.device_properties)
         elif frame.kind is MsgKind.NOTI_DISCONNECT:
             self._registry.unregister(frame.header.node_id)
-        elif (frame.kind is MsgKind.REQ_SET_NODE_DEVICE_PROPERTY_ALL and reply is not None
+        elif (frame.kind is MsgKind.REQ_SET_NODE_PROPERTY and frame.node_property is not None
+                and reply is not None and reply.kind is MsgKind.RES_SET_NODE_PROPERTY
                 and reply.rsc == RSC.SUCCESS):
+            self._registry.update_node(frame.node_property)
+        elif (frame.kind is MsgKind.REQ_SET_NODE_DEVICE_PROPERTY_ALL and reply is not None
+                and reply.kind is MsgKind.RES_SET_NODE_DEVICE_PROPERTY_ALL
+                and reply.rsc == RSC.SUCCESS and frame.node_property is not None):
             # F-198 — REQ_SET_CONNECTION 은 페이로드가 없어(LAYOUT (0,0)) 디바이스
             # 구성을 실을 수 없다. 노드가 연결 성공 뒤 이 메시지로 전체 구성을
             # 선언하면 그때 registry 를 갱신한다("ALL"이므로 전체 교체).
-            self._registry.merge_device_properties(
-                frame.header.node_id, frame.device_properties, replace=True)
+            self._registry.replace_node_and_device_properties(
+                frame.node_property, frame.device_properties)
+        elif (frame.kind is MsgKind.REQ_SET_MSG_FLOW_CONTROL_PROFILE
+                and frame.profile is not None and reply is not None
+                and reply.kind is MsgKind.RES_SET_MSG_FLOW_CONTROL_PROFILE
+                and reply.rsc == RSC.SUCCESS):
+            self._replace_profile(frame.profile)
         elif (frame.kind is MsgKind.REQ_SET_DEVICE_PROPERTY and reply is not None
+                and reply.kind is MsgKind.RES_SET_DEVICE_PROPERTY
                 and reply.rsc == RSC.SUCCESS):
             # 부분 갱신 — device_id 기준 병합(표에 없는 기존 디바이스는 유지).
             self._registry.merge_device_properties(
                 frame.header.node_id, frame.device_properties, replace=False)
 
+    def _replace_profile(self, profile: MsgControlProfile) -> None:
+        """F-213 — 링크 대기 상한과 PendingTable 재전송 정책을 한 갱신점에서
+        교체한다. send()의 프로파일 읽기도 같은 잠금으로 직렬화한다."""
+        with self._profile_lock:
+            self._pending.update_profile(profile)
+            self._profile = profile
+
     def _default_reply(self, frame: Frame) -> Frame | None:
         """`backend/` 가 아직 없을 때(이 단계) 쓰는 최소 기본 처리기 —
         `REQ_SET_CONNECTION` 은 SUCCESS 회신(등록은 `_apply_registry_effects()`
         가 한다), 그 외 노드발 Request 는 SUCCESS 회신, Notify 는 ACK."""
+        if frame.header is None:
+            return None
         if frame.violations:
             return self._build.error_response(frame, RSC(frame.violations[0].code))
 
