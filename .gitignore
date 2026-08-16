@@ -19,10 +19,14 @@ _stage*/
 .coverage
 project_code/logs/*.jsonl.tmp
 
-# F-160 — run.py 가 §9.2 "2. DB 준비" 로 매 실행마다 만드는 런타임 DB 파일
-project_code/backend/runtime.db
-project_code/backend/*.db-wal
-project_code/backend/*.db-shm
+# F-160 — run.py·테스트가 만드는 런타임/디버그 SQLite DB. 제출물이 아니다
+# (fixtures 는 .sql 로 둔다, CLAUDE.md §7). 과거에 실수로 커밋된 것
+# (project_code/runtime.db · backend/runtime_stage7.db · x_*.db)은
+# `git rm --cached <파일>` 로 추적에서 빼야 이 무시가 효과를 낸다.
+*.db
+*.db-wal
+*.db-shm
+*.db-journal
 
 # 실제 비밀값이 실수로 커밋되는 것을 막는다 (CLAUDE.md §1-2). 목업은 project_code/fixtures/ 에 둔다
 .env

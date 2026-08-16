@@ -130,6 +130,20 @@ static void push_res_set_connection(fake_io_t *io, uint32_t gcg, uint32_t nid, u
     }
 }
 
+/* F-198 — 게이트웨이가 노드의 디바이스 구성 선언(REQ_SET_NODE_DEVICE_PROPERTY_ALL)
+   에 돌려주는 응답. LAYOUT {RSC_BYTES,0} — 고정부에 RSC 만 있다. */
+static void push_res_set_node_device_property_all(fake_io_t *io, uint32_t gcg, uint32_t nid,
+                                                   uint16_t msg_id, siap_rsc_t rsc)
+{
+    siap_enc_t e; siap_tx_reset(&e);
+    siap_hdr_t h = { SIAP_VERSION,
+                      siap_wire_code(SIAP_RES_SET_NODE_DEVICE_PROPERTY_ALL, SIAP_MODE_STRICT),
+                      SIAP_TRANS_UNICAST, msg_id, SIAP_RSC_BYTES, gcg, nid };
+    if (!siap_tx_put_hdr(&e, &h)) return;
+    if (!siap_tx_put_rsc(&e, rsc)) return;
+    rx_append(io, &e);
+}
+
 static void push_ack_for(fake_io_t *io, uint32_t gcg, uint32_t nid, uint16_t msg_id)
 {
     siap_hdr_t req = { SIAP_VERSION, 0, SIAP_TRANS_UNICAST, msg_id, 0, gcg, nid };
@@ -289,7 +303,17 @@ static void fixture_run_to_running(fixture_t *f)
     siap_node_poll(&f->node);   /* BOOT->INIT->CONNECTING, REQ_SET_CONNECTION 송신 */
     uint16_t mid = f->node.pending.msg_id;
     push_res_set_connection(&f->io, GCG, NID, mid, SIAP_RSC_SUCCESS, f->devices, f->dev.n);
-    siap_node_poll(&f->node);
+    siap_node_poll(&f->node);   /* -> RUNNING, 이어서 REQ_SET_NODE_DEVICE_PROPERTY_ALL 선언(F-198) */
+
+    /* F-198 — 연결 성공 직후 노드가 자기 구성을 선언한다. 게이트웨이 RES 로
+       그 handshake 를 마쳐 pending 을 비운다 — 개별 테스트는 "구성 선언이
+       끝난 RUNNING"(pending 빔)에서 이어 붙인다. 선언 자체의 검증은
+       test_connection_declares_node_device_property_all_F198 가 담당한다. */
+    if (f->node.pending.kind == (uint8_t)SIAP_REQ_SET_NODE_DEVICE_PROPERTY_ALL) {
+        push_res_set_node_device_property_all(&f->io, GCG, NID, f->node.pending.msg_id,
+                                              SIAP_RSC_SUCCESS);
+        siap_node_poll(&f->node);
+    }
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -825,6 +849,73 @@ static void test_msg_id_wraps_to_zero_not_one_F135(void)
     check("F-135: 다음 next_msg_id 는 0으로 감긴다(1이 아니다)", f.node.next_msg_id == 0);
 }
 
+/* F-198 — 연결 성공 직후 노드가 REQ_SET_NODE_DEVICE_PROPERTY_ALL(8.1.3.3)로
+   자기 디바이스 구성을 선언한다. REQ_SET_CONNECTION(8.1.1)은 페이로드가 없어
+   (LAYOUT (0,0)) 이 역할을 못 한다. pending 에 실려 RES 수신까지 §6.4 재전송
+   타이머가 재시도하고, RES_SET_NODE_DEVICE_PROPERTY_ALL(SUCCESS) 로 멈춘다.
+   DP/NP 의 바이트 폭·순서 자체는 test_golden.c(C↔골든 벡터)와
+   xcodec_verify(C↔Python sim/_wire) 가 이미 대조한다 — 여기서는 "선언이
+   올바른 구조로 나가고 handshake 가 성립하는가"만 본다. */
+static void test_connection_declares_node_device_property_all_F198(void)
+{
+    fixture_t f; fixture_boot(&f, 2, 30);   /* 디바이스 2종 — 다중 요소 경로 */
+
+    /* fixture_run_to_running 은 선언까지 드레인하므로, 여기서는 직접
+       연결만 성립시켜 선언 프레임을 검사한다. */
+    siap_node_poll(&f.node);                              /* -> CONNECTING, REQ_SET_CONNECTION */
+    uint16_t cmid = f.node.pending.msg_id;
+    push_res_set_connection(&f.io, GCG, NID, cmid, SIAP_RSC_SUCCESS, f.devices, f.dev.n);
+    f.io.tx_len = 0;
+    siap_node_poll(&f.node);                              /* -> RUNNING + 선언 송신 */
+
+    check("F-198: RUNNING 진입", f.node.state == SIAP_NS_RUNNING);
+    check("F-198: 연결 성공 직후 pending = REQ_SET_NODE_DEVICE_PROPERTY_ALL",
+          f.node.pending.kind == (uint8_t)SIAP_REQ_SET_NODE_DEVICE_PROPERTY_ALL);
+
+    /* 송신 프레임 구조 검사: 헤더 msg_type · payload_len = NP + DP×N. */
+    siap_hdr_t h = decode_tx_hdr(&f.io);
+    check("F-198: 송신 msg_type = REQ_SET_NODE_DEVICE_PROPERTY_ALL",
+          h.msg_type == siap_wire_code(SIAP_REQ_SET_NODE_DEVICE_PROPERTY_ALL, SIAP_MODE_STRICT));
+    check("F-198: payload_len = NODE_PROPERTY + DEVICE_PROPERTY×2 (RSC 없음)",
+          h.payload_len == (uint16_t)(SIAP_NP_BYTES + SIAP_DP_BYTES * 2u));
+
+    /* 고정부 NODE_PROPERTY 의 num_devices 가 device_count 와 같다. */
+    siap_np_t np; size_t bp = 0;
+    siap_decode_np(f.io.tx + 12, &bp, &np);
+    check("F-198: NODE_PROPERTY.num_devices = 2", np.num_devices == 2);
+    check("F-198: NODE_PROPERTY.node_id = 노드 자신", np.node_id == NID);
+
+    /* 첫 DEVICE_PROPERTY 요소가 devices[0] 로 라운드트립된다(요소 경로 실행 증거). */
+    siap_dp_t dp0; bp = 0;
+    siap_decode_dp(f.io.tx + 12 + SIAP_NP_BYTES, &bp, &dp0);
+    check("F-198: 첫 DEVICE_PROPERTY.device_id = devices[0]",
+          dp0.main.device_id == f.devices[0].main.device_id);
+
+    /* 재전송 — Timeout 경과 후 같은 msg_id 로 재인코딩(F-041). */
+    uint16_t dmid = f.node.pending.msg_id;
+    f.io.tx_len = 0;
+    f.io.now += (uint32_t)f.node.cfg.profile.recv_timeout * 1000u;
+    siap_node_poll(&f.node);
+    check("F-198: 재전송해도 pending 유지 · msg_id 동일(F-041)",
+          f.node.pending.kind == (uint8_t)SIAP_REQ_SET_NODE_DEVICE_PROPERTY_ALL
+          && f.node.pending.msg_id == dmid && f.node.pending.retry == 1);
+    siap_hdr_t h2 = decode_tx_hdr(&f.io);
+    check("F-198: 재전송 프레임도 REQ_SET_NODE_DEVICE_PROPERTY_ALL",
+          h2.msg_type == siap_wire_code(SIAP_REQ_SET_NODE_DEVICE_PROPERTY_ALL, SIAP_MODE_STRICT));
+
+    /* 실패 RSC 는 pending 을 해제하지 않는다 — 계속 재시도한다. */
+    push_res_set_node_device_property_all(&f.io, GCG, NID, dmid, SIAP_RSC_INVALID_DEVICE_ID);
+    siap_node_poll(&f.node);
+    check("F-198: 실패 RSC 수신 시 pending 유지(재시도 계속)",
+          f.node.pending.kind == (uint8_t)SIAP_REQ_SET_NODE_DEVICE_PROPERTY_ALL);
+
+    /* SUCCESS RSC 로 handshake 완료 — pending 해제. */
+    push_res_set_node_device_property_all(&f.io, GCG, NID, dmid, SIAP_RSC_SUCCESS);
+    siap_node_poll(&f.node);
+    check("F-198: SUCCESS 수신 시 pending 해제(선언 완료)",
+          f.node.pending.kind == (uint8_t)SIAP_KIND_NONE);
+}
+
 int main(void)
 {
     printf("노드 상태 머신 호스트 유닛테스트 (펌웨어 설계서 §6)\n\n");
@@ -847,6 +938,7 @@ int main(void)
     test_event_only_fault_detection_F130();
     test_res_set_connection_rsc_matrix_6_5_F131();
     test_ack_does_not_clear_connection_request_pending_F132();
+    test_connection_declares_node_device_property_all_F198();
     test_multi_chunk_send_survives_partial_write_F133();
     test_msg_id_wraps_to_zero_not_one_F135();
 

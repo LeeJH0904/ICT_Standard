@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 from tools.web_source_checks import (
@@ -5,6 +6,7 @@ from tools.web_source_checks import (
     bit_unpack_sources,
     external_css_references,
     extract_inline_scripts,
+    function_bodies,
     numeric_korean_map_sources,
     pending_execute_paths,
     recovery_cursor_issues,
@@ -119,3 +121,23 @@ def test_f233_recovery_uses_disconnect_cursor_not_polled_list():
         1,
     )
     assert recovery_cursor_issues(stream_js, overwritten) == ["고정 커서 사용"]
+
+
+def test_verify_injection_controls_stay_above_scrollable_frame_list():
+    html = _read(WEB / "verify.html")
+    css = _read(WEB / "static" / "app.css")
+    assert html.index('id="inject-buttons"') < html.index('id="frame-list"')
+    frame_list_rule = re.search(r"#frame-list\s*\{([^}]*)\}", css, re.S)
+    assert frame_list_rule is not None
+    declarations = frame_list_rule.group(1)
+    assert re.search(r"\bheight\s*:", declarations)
+    assert re.search(r"\boverflow-y\s*:\s*auto\b", declarations)
+
+
+def test_verify_violation_filter_applies_to_load_and_live_upsert():
+    html = _read(WEB / "verify.html")
+    bodies = function_bodies(html)
+    assert 'frame.judgement === "violation"' in bodies["frameMatchesCurrentFilter"]
+    assert ".filter(frameMatchesCurrentFilter)" in bodies["loadFrames"]
+    assert "loadRevision !== state.loadRevision" in bodies["loadFrames"]
+    assert "if (!frameMatchesCurrentFilter(frame))" in bodies["upsertFrame"]

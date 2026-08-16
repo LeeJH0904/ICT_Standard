@@ -124,9 +124,26 @@ h1, h2, h3 { line-height: 1.25; }
   font-weight: 600;
 }
 
+/* 노드(좌) · 알림(우)을 1:1 로 나눈다. 두 열이 모두 폭을 채우므로 노드·알림
+   사이에 빈 공백이 생기지 않고, 카드도 과도하게 넓어지지 않는다.
+   좁은 화면에서는 다시 세로로 쌓아 알림이 노드 아래로 간다. */
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1.25rem;
+  align-items: start;
+}
+@media (max-width: 760px) {
+  .dashboard-grid { grid-template-columns: 1fr; }
+}
+.alerts-col { min-width: 0; }
+
 .cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  /* auto-fit — 빈 트랙을 접어 카드가 노드 열의 남은 폭을 채운다(auto-fill 은 빈
+     320px 트랙을 남겨 노드·알림 사이 공백을 만들었다). 노드가 1개면 한 장이 열을
+     꽉 채우고, 여러 개면 나눠 채운다 — 어느 쪽도 불필요한 공백이 없다. */
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
   gap: 1rem;
 }
 
@@ -135,20 +152,32 @@ h1, h2, h3 { line-height: 1.25; }
   border-radius: 8px;
   padding: 1rem;
   background: var(--bg-page);
+  overflow: hidden;   /* 긴 subtype 이름·스파크라인이 카드 경계를 넘지 않게 클립(둥근 모서리 유지) */
 }
 .card h3 { margin-top: 0; }
 
-.device-row {
-  display: flex;
-  justify-content: space-between;
+/* 디바이스 목록을 하나의 그리드로 — 값·단위·그래프 열이 행마다 정렬된다.
+   이름(1fr) | 값(우측정렬) | 단위 | 그래프. 각 .device-row 는 display:contents 라
+   자기 셀만 이 그리드에 기여한다(구분선 대신 행 gap 으로 나눈다). */
+.device-list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.35rem 0;
-  border-top: 1px solid var(--bg-badge);
+  gap: 0.5rem 0.7rem;   /* 행 간격 · 열 간격(값과 그래프를 약간 떨어뜨림) */
+  margin-top: 0.5rem;
 }
-.device-row:first-of-type { border-top: none; }
+.device-row { display: contents; }
+.dev-name { min-width: 0; overflow-wrap: anywhere; }
+/* 값 숫자는 굵게 + 우측정렬 → 숫자들의 오른쪽 끝이 한 열로 통일된다. */
+.dev-value { justify-self: end; font-weight: 700; }
+/* 단위는 괄호 안, 굵기 해제. 값 열 바로 뒤에서 좌측정렬되어 단위도 한 열로 선다. */
+.dev-unit { justify-self: start; font-weight: 400; }
+.dev-spark { justify-self: end; display: inline-flex; align-items: center; }
+/* 구동기 상태·값 없음은 숫자 열을 왜곡하지 않게 값~그래프 열을 가로지른다. */
+.dev-value-span { grid-column: 2 / -1; justify-self: start; font-weight: 700; }
 
-.spark { display: block; }
+/* 스파크라인은 넘칠 때만 칸 폭에 맞춰 축소된다(viewBox 라 비율 유지). 평소엔 120px. */
+.spark { display: block; max-width: 100%; height: auto; }
 
 /* 상태 배지 — 색만으로 의미를 전달하지 않는다(§8.2). 아이콘·문자를 항상 함께 둔다 */
 .badge {
@@ -238,6 +267,25 @@ input, select, textarea {
   padding: 0.75rem;
   min-height: 12rem;
 }
+.verify-list-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+.verify-list-panel h2 { margin-top: 0; }
+.inject-controls {
+  flex: 0 0 auto;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--bg-panel-border);
+}
+.frame-list-region { min-width: 0; }
+#frame-list {
+  height: clamp(18rem, 48vh, 32rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  padding-right: 0.25rem;
+}
 .frame-list-item {
   display: block;
   width: 100%;
@@ -279,8 +327,12 @@ input, select, textarea {
 
 .inject-grid {
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.4rem;
   margin-top: 0.5rem;
+}
+@media (max-width: 480px) {
+  .inject-grid { grid-template-columns: 1fr; }
 }
 
 [data-state-message] { color: var(--fg-muted); }

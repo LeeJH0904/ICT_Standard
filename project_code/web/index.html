@@ -30,17 +30,19 @@
     <span>알림 <strong id="sum-alerts">—</strong></span>
   </div>
 
-  <section aria-labelledby="nodes-h" data-state="loading">
-    <h2 id="nodes-h">노드</h2>
-    <p data-state-message>불러오는 중입니다…</p>
-    <div class="cards" id="node-cards" aria-busy="true"></div>
-  </section>
+  <div class="dashboard-grid">
+    <section aria-labelledby="nodes-h" data-state="loading">
+      <h2 id="nodes-h">노드</h2>
+      <p data-state-message>불러오는 중입니다…</p>
+      <div class="cards" id="node-cards" aria-busy="true"></div>
+    </section>
 
-  <section aria-labelledby="alerts-h">
-    <h2 id="alerts-h">알림</h2>
-    <p data-state-message></p>
-    <ul id="alert-list" style="list-style:none; padding:0;"></ul>
-  </section>
+    <section class="alerts-col" aria-labelledby="alerts-h">
+      <h2 id="alerts-h">알림</h2>
+      <p data-state-message></p>
+      <ul id="alert-list" style="list-style:none; padding:0;"></ul>
+    </section>
+  </div>
 </main>
 
 <div id="live" aria-live="polite" class="sr-only"></div>
@@ -58,6 +60,16 @@ const alertListEl = document.getElementById("alert-list");
 
 const state = { nodes: [], devicesByNode: new Map(), telemetryByDevice: new Map(), statesByDevice: new Map(), alerts: [] };
 
+// subtype → 표시 단위. 값의 물리 단위는 표준(1369-P1 6.3.3.x)이 subtype 별로
+// 정하는데 SIAP 프레임엔 단위 필드가 없다 — 화면에서 subtype 으로 단위를 붙인다
+// (표시 계층. 서버가 unit 을 주면 그쪽이 우선한다). ON/OFF·단위 없는 것(PH·감우)은
+// 비운다. 정본은 contracts/frame.py 의 Subtype 주석.
+const SUBTYPE_UNITS = {
+  TEMPERATURE: "℃", HUMIDITY: "%", CO2: "ppm", INSOLATION: "W/㎡",
+  WIND_DIRECTION: "°", WIND_SPEED: "m/s", SOIL_MOISTURE_TENSION: "kPa", EC: "dS/m",
+  WINDOW_OPENER: "%", INSULATION_COVER: "%", IRRIGATION_VALVE: "%",
+};
+
 function sparkSvg(values, unit, label) {
   const w = 120, h = 24;
   if (!values.length) return `<span class="hint">추이 없음</span>`;
@@ -74,31 +86,36 @@ function nodeCardHtml(node, devices) {
   const online = node.last_seen_at != null && (Date.now() / 1000 - isoToEpoch(node.last_seen_at)) < 60;
   const connCls = online ? "online" : "stale";
   const connText = online ? "연결됨" : `응답 없음 (${Math.round(Date.now() / 1000 - (isoToEpoch(node.last_seen_at) ?? 0))}초)`;
+  // 모든 디바이스 행을 하나의 그리드(.device-list)에 넣어 값·단위·그래프 열이
+  // 행마다 정렬되게 한다(각 .device-row 는 display:contents 로 셀만 기여).
   const rows = devices.map((dev) => {
     const tel = state.telemetryByDevice.get(dev.id);
     const ds = state.statesByDevice.get(dev.id);
-    let valueHtml, sparkHtml = "";
+    let cells;
     if (tel && tel.length) {
       const latest = tel[tel.length - 1];
-      valueHtml = formatValue(latest.value, latest.unit);
-      sparkHtml = sparkSvg(tel.map((p) => p.value), latest.unit, dev.subtype || dev.device_name);
-    } else if (ds) {
-      valueHtml = Object.entries(ds.attributes || {}).map(([k, v]) => `${k}=${v}`).join(", ") || "—";
+      const unit = latest.unit ?? SUBTYPE_UNITS[dev.subtype];   // 숫자는 굵게, 단위는 괄호 안(굵기 해제)
+      cells = `<strong class="dev-value">${formatValue(latest.value, null)}</strong>`
+            + `<span class="dev-unit">${unit ? `(${unit})` : ""}</span>`
+            + `<span class="dev-spark">${sparkSvg(tel.map((p) => p.value), unit, dev.subtype || dev.device_name)}</span>`;
     } else {
-      valueHtml = "—";
+      // 구동기 상태(속성 문자열) 또는 값 없음 — 숫자 열을 왜곡하지 않게 나머지 열을 가로지른다.
+      const txt = ds ? (Object.entries(ds.attributes || {}).map(([k, v]) => `${k}=${v}`).join(", ") || "—") : "—";
+      cells = `<span class="dev-value dev-value-span">${txt}</span>`;
     }
     // 서버가 준 것만 쓴다 — subtype 은 레지스트리 이름, siap_subtype 은 표 7-14 원시 코드(§4.2)
-    return `<div class="device-row">
-      <span>${dev.subtype ?? dev.device_name} <span class="hint">(${hex(dev.siap_subtype)})</span></span>
-      <span>${valueHtml} ${sparkHtml}</span>
-    </div>`;
-  }).join("") || `<p class="hint">등록된 디바이스가 없습니다.</p>`;
+    return `<div class="device-row">`
+      + `<span class="dev-name">${dev.subtype ?? dev.device_name} <span class="hint">(${hex(dev.siap_subtype)})</span></span>`
+      + cells
+      + `</div>`;
+  }).join("");
+  const rowsHtml = rows ? `<div class="device-list">${rows}</div>` : `<p class="hint">등록된 디바이스가 없습니다.</p>`;
 
   return `<article class="card">
     <h3>Node ${hex(node.node_id)}</h3>
     <p class="status-line ${connCls}">${connText}</p>
     <p class="hint">S/W ${hex(node.sw_version)} · 상태 ${node.status} · 디바이스 ${node.device_count}대</p>
-    ${rows}
+    ${rowsHtml}
   </article>`;
 }
 
@@ -164,8 +181,27 @@ async function loadAll() {
   }
 }
 
+// 프레임 수신마다 값만 가볍게 재조회한다(토폴로지 재조회·로딩 표시 없이 —
+// renderNodes 는 곧장 ready 로 가 깜빡임이 없다). 프레임 버스트는 800ms
+// 디바운스로 한 번에 합쳐 서버·렌더 부담을 억제한다. 새 노드 등장은 node_up
+// 이 loadAll 로 처리하므로 여기서는 기존 노드의 값·last_seen 만 갱신한다.
+let valueRefreshTimer = null;
+function scheduleValueRefresh() {
+  if (valueRefreshTimer) return;   // 이미 예약됨 — 버스트를 한 번으로 합친다
+  valueRefreshTimer = setTimeout(() => {
+    valueRefreshTimer = null;
+    refreshValues().catch(() => {});   // 실패는 다음 프레임에 다시 시도
+  }, 800);
+}
+async function refreshValues() {
+  const nodePage = await api.listNodes({ limit: 500 });
+  state.nodes = nodePage.items;
+  await Promise.all([...state.devicesByNode.values()].flat().map(loadDeviceData));
+  renderNodes();
+}
+
 connectStream({
-  events: ["node_up", "node_down", "alert"],
+  events: ["node_up", "node_down", "frame", "alert"],
   onStatus: setConnStatus,
   onEvent: (type, data) => {
     if (type === "alert") {
@@ -175,6 +211,8 @@ connectStream({
     } else if (type === "node_up" || type === "node_down") {
       loadAll();
       announce(type === "node_up" ? "노드가 연결되었습니다" : "노드 연결이 끊겼습니다");
+    } else if (type === "frame") {
+      scheduleValueRefresh();   // 주기 센서값(NOTI_DEVICE_VALUE 등)을 실시간 반영
     }
   },
   onPollTick: loadAll,

@@ -12,6 +12,12 @@
 #include "siap_types.h"
 #include "siap_frame.h"
 
+/* C++/Arduino 스케치에서 C 링키지로 부를 수 있게 한다(bitpack.h 주석 참조) —
+   C 컴파일 시엔 비활성, 언어 매크로라 core 순수성(§1-5)과 무관하다. */
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* ═══════════════════════════════════════════════════════════════
  *  0. 상태 — §6.1 다이어그램. 노드 자신의 상태이며 게이트웨이가 보는
  *     상태(아키텍처 §6.1)와는 다른 열거형이다.
@@ -65,6 +71,8 @@ typedef enum {
     SIAP_SEQ_RES_GET_DEVICE_PROPERTY,
     SIAP_SEQ_RES_GET_NODE_DEVICE_PROPERTY_ALL,
     SIAP_SEQ_RES_GET_DEVICE_VALUE,
+    SIAP_SEQ_REQ_SET_NODE_DEVICE_PROPERTY_ALL,  /* F-198 — 노드→GCG 디바이스 구성 선언(8.1.3.3).
+                                                   요청이라 고정부에 RSC 가 없다(NP + DP×N) */
 } siap_tx_seq_kind_t;
 
 typedef struct {
@@ -173,5 +181,9 @@ bool siap_node_init(siap_node_t *node, const siap_node_cfg_t *cfg);
    가능한 만큼 바이트를 읽고 먹이고, pending timeout 을 검사하고, RUNNING
    에서는 due 소스를 회전 송신한다. */
 void siap_node_poll(siap_node_t *node);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* SIAP_NODE_STATE_H */

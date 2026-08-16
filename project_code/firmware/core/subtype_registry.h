@@ -13,6 +13,12 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+/* C++/Arduino 스케치에서 C 링키지로 부를 수 있게 한다(bitpack.h 주석 참조) —
+   C 컴파일 시엔 비활성, 언어 매크로라 core 순수성(§1-5)과 무관하다. */
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef enum {
     /* 센서 — 1369-P1 6.3.3 */
     SIAP_SUBTYPE_TEMPERATURE            = 0x01, /* 온도         ℃     6.3.3.2  */
@@ -57,5 +63,9 @@ static inline bool siap_subtype_valid(uint8_t code) {
 /* 최상위 비트로 센서/액추에이터 구분 — DEVICE_MAIN_INFO.Type 과 중복되지만
    검증(교차 대조)에 쓸 수 있다 (SIAP 메시지 명세서 §5). */
 static inline bool siap_subtype_is_actuator(uint8_t code) { return (code & 0x80u) != 0u; }
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* SIAP_SUBTYPE_REGISTRY_H */

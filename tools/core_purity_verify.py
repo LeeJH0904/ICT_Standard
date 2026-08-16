@@ -98,6 +98,41 @@ _DEFINE_NAME_RE = re.compile(r"^\s*#\s*define\s+(\w+)\b")
 # SIAP_WUR). `#if defined(X)` 와 `#ifdef X` 두 표기 모두 받는다.
 _ALLOWED_COMPILER_IDENTS = {"__GNUC__", "__clang__"}
 _DEFINED_X_RE = re.compile(r"^defined\s*\(\s*(\w+)\s*\)$")
+# C++/Arduino 링키지 가드 — `#ifdef __cplusplus` 안은 extern "C" { / } 링키지
+# 전환만 허용한다. __cplusplus 는 보드 매크로가 아니라 C++ 언어 매크로라 어느
+# 타깃에서든 켜지므로 보드 식별에 못 쓰인다. 다만 check (b)(C 전처리, __cplusplus
+# 미정의)는 이 블록 안을 보지 못하므로, 그 사각을 이 본문 검사가 대신 닫는다 —
+# 안에 #include·코드가 있으면 위반. 스케치가 core 헤더를 extern "C" 로 감싸지
+# 않아도 C++ 가 C 링키지로 링크되게 한다(펌웨어 링크 회귀 대응).
+_EXTERN_C_OPEN_RE = re.compile(r'^extern\s+"C"\s*\{$')
+_CPP_ENDIF_RE = re.compile(r"^#\s*endif\b")
+_CPP_IF_RE = re.compile(r"^#\s*(if|ifdef|ifndef)\b")
+
+
+def _cplusplus_body_is_linkage_only(lines: list[str], idx: int) -> tuple[bool, str]:
+    """lines[idx] 가 `#ifdef __cplusplus`. 매칭되는 #endif 까지의 본문이
+    extern "C" { / } 링키지 전환뿐인지 본다(F-128 취지 유지)."""
+    depth = 0
+    end = -1
+    for j in range(idx, len(lines)):
+        s = lines[j].strip()
+        if _CPP_IF_RE.match(s):
+            depth += 1
+        elif _CPP_ENDIF_RE.match(s):
+            depth -= 1
+            if depth == 0:
+                end = j
+                break
+    if end < 0:
+        return False, "__cplusplus 가드의 #endif 를 찾지 못함"
+    for b in lines[idx + 1:end]:
+        s = b.strip()
+        if not s:
+            continue
+        if _EXTERN_C_OPEN_RE.match(s) or s == "}":
+            continue
+        return False, f"__cplusplus 가드 안에 링키지 전환(extern \"C\") 외 내용: {s}"
+    return True, ""
 # F-122 — #define 의 치환 목록(우변)에 보드 매크로 이름이 있으면, 그 이름을
 # 다른 매크로로 감싸 #if/#include 에 쓰더라도 정의 시점에는 원본이 노출된다.
 _DEFINE_RE = re.compile(r'^\s*#\s*define\s+(\w+)(?:\([^)]*\))?\s+(.*)$')
@@ -327,9 +362,15 @@ def _check_conditional_whitelist(files: list[Path]) -> list[str]:
             ident = dm2.group(1) if dm2 else cond
             if ident in _ALLOWED_COMPILER_IDENTS:
                 continue
+            if ident == "__cplusplus":
+                ok, why = _cplusplus_body_is_linkage_only(lines, i)
+                if ok:
+                    continue
+                bad.append(f"{f.relative_to(ROOT)}:~{i + 1}(정규화 후): {line.strip()}  ({why})")
+                continue
             bad.append(
                 f"{f.relative_to(ROOT)}:~{i + 1}(정규화 후): {line.strip()}  "
-                f"(화이트리스트 밖 조건부 컴파일 — include guard·__GNUC__·__clang__ 만 허용)"
+                f"(화이트리스트 밖 조건부 컴파일 — include guard·__GNUC__·__clang__·__cplusplus 링키지 가드만 허용)"
             )
     return bad
 
@@ -360,7 +401,7 @@ def main() -> int:
       not bad_macro, "; ".join(bad_macro))
 
     bad_whitelist = _check_conditional_whitelist(files)
-    t("(c) 화이트리스트 — core/ 조건부 컴파일이 include guard·컴파일러 자기식별뿐 (F-128, 임의 이름 매크로도 포함)",
+    t("(c) 화이트리스트 — core/ 조건부 컴파일이 include guard·컴파일러 자기식별·__cplusplus 링키지 가드(본문 extern \"C\" 한정)뿐 (F-128, 임의 이름 매크로도 포함)",
       not bad_whitelist, "; ".join(bad_whitelist))
 
     # 독립 입력 대조 (F-080, CLAUDE.md §6.2) — 이 파일 하나만 읽고 판정하지

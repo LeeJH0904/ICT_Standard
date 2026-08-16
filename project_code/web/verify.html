@@ -25,15 +25,19 @@
   <p class="hint">TTAK.KO-10.0943 7.3.1 · 표 7-2 · 표 7-6 · 표 7-14 — 수신한 프레임의 판정은 전부 서버(<code>siap/codec.py</code>)가 내리며, 이 화면은 그 결과를 그대로 옮긴다.</p>
 
   <div class="verify-grid">
-    <section class="panel" aria-labelledby="list-h" data-state="loading">
-      <h2 id="list-h">프레임 목록</h2>
-      <label><input type="checkbox" id="violations-only"> 위반만 보기 (<code>GET /frames/violations</code>)</label>
-      <p data-state-message>불러오는 중입니다…</p>
-      <div id="frame-list" role="listbox" aria-label="수신 프레임 목록"></div>
+    <section class="panel verify-list-panel" aria-labelledby="inject-h list-h" data-state="loading">
+      <div class="inject-controls">
+        <h2 id="inject-h">주입 8종 <span class="hint">(simulate · replay 모드에서만 동작)</span></h2>
+        <div class="inject-grid" id="inject-buttons"></div>
+        <p id="inject-status" class="hint" role="status"></p>
+      </div>
 
-      <h2>주입 8종 <span class="hint">(simulate · replay 모드에서만 동작)</span></h2>
-      <div class="inject-grid" id="inject-buttons"></div>
-      <p id="inject-status" class="hint" role="status"></p>
+      <div class="frame-list-region">
+        <h2 id="list-h">프레임 목록</h2>
+        <label><input type="checkbox" id="violations-only"> 위반만 보기 (<code>GET /frames/violations</code>)</label>
+        <p data-state-message>불러오는 중입니다…</p>
+        <div id="frame-list" role="listbox" aria-label="수신 프레임 목록" tabindex="0"></div>
+      </div>
     </section>
 
     <section class="panel" aria-labelledby="hex-h">
@@ -69,6 +73,7 @@ const fieldDetailEl = document.getElementById("field-detail");
 const judgePanelEl = document.getElementById("judge-panel");
 const injectButtonsEl = document.getElementById("inject-buttons");
 const injectStatusEl = document.getElementById("inject-status");
+const violationsOnlyEl = document.getElementById("violations-only");
 
 // 5.3 주입 8종 — 골든 X01~X08 과 1:1. 라벨은 "무엇을 주입하는가"를 설명할
 // 뿐 판정 결과(코드명·조항)를 여기서 만들지 않는다 — 그 값은 서버 응답에서만 온다.
@@ -90,6 +95,7 @@ const state = {
   selectedId: null,
   selectedFieldIdx: null,
   recoverySince: undefined,
+  loadRevision: 0,
 };
 
 function judgementMeta(j) {
@@ -118,6 +124,10 @@ function renderFrameList() {
   frameListEl.querySelectorAll(".frame-list-item").forEach((btn) => {
     btn.addEventListener("click", () => selectFrame(btn.dataset.id));
   });
+}
+
+function frameMatchesCurrentFilter(frame) {
+  return !violationsOnlyEl.checked || frame.judgement === "violation";
 }
 
 function renderHex(frame) {
@@ -217,23 +227,35 @@ async function selectFrame(id) {
 }
 
 async function loadFrames() {
+  const loadRevision = ++state.loadRevision;
   setViewState(listSection, "loading", "불러오는 중입니다…");
-  const violationsOnly = document.getElementById("violations-only").checked;
+  const violationsOnly = violationsOnlyEl.checked;
   try {
     const [framePage, alertPage] = await Promise.all([
       violationsOnly ? api.listViolations({ limit: 100 }) : api.listFrames({ limit: 100 }),
       api.listAlerts({ limit: 100 }),
     ]);
-    state.frames = framePage.items.slice().sort((a, b) => b.t - a.t);
+    if (loadRevision !== state.loadRevision || violationsOnly !== violationsOnlyEl.checked) return;
+    state.frames = framePage.items
+      .filter(frameMatchesCurrentFilter)
+      .sort((a, b) => b.t - a.t);
     state.byId = new Map(state.frames.map((f) => [f.id, f]));
     state.alertsByFrame = new Map(alertPage.items.filter((a) => a.frame_id).map((a) => [a.frame_id, a]));
     renderFrameList();
   } catch (err) {
+    if (loadRevision !== state.loadRevision) return;
     setViewState(listSection, "error", err instanceof ApiError ? err.message : String(err));
   }
 }
 
 function upsertFrame(frame) {
+  if (!frameMatchesCurrentFilter(frame)) {
+    if (state.byId.delete(frame.id)) {
+      state.frames = state.frames.filter((f) => f.id !== frame.id);
+      renderFrameList();
+    }
+    return false;
+  }
   if (!state.byId.has(frame.id)) {
     state.frames.unshift(frame);
   } else {
@@ -242,6 +264,7 @@ function upsertFrame(frame) {
   state.byId.set(frame.id, frame);
   renderFrameList();
   if (state.selectedId === frame.id) selectFrame(frame.id);
+  return true;
 }
 
 // F-200 — 화면_설계서.md §3.2 "누락 보정": 폴백 중 놓친 프레임은 재연결
@@ -265,7 +288,7 @@ async function recoverMissedFrames() {
     state.recoverySince = undefined;
     return;
   }
-  const violationsOnly = document.getElementById("violations-only").checked;
+  const violationsOnly = violationsOnlyEl.checked;
   const until = new Date().toISOString();
   const listPage = violationsOnly ? api.listViolations : api.listFrames;
   const beforeIds = new Set(state.byId.keys());
@@ -324,7 +347,14 @@ injectButtonsEl.querySelectorAll("button").forEach((btn) => {
   });
 });
 
-document.getElementById("violations-only").addEventListener("change", loadFrames);
+violationsOnlyEl.addEventListener("change", () => {
+  if (violationsOnlyEl.checked) {
+    state.frames = state.frames.filter(frameMatchesCurrentFilter);
+    state.byId = new Map(state.frames.map((frame) => [frame.id, frame]));
+    renderFrameList();
+  }
+  loadFrames();
+});
 
 loadFrames();
 </script>

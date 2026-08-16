@@ -96,6 +96,10 @@ class SiapNodeLink:
         self._txq: "queue.Queue" = queue.Queue()
         self._recvq: "queue.Queue" = queue.Queue()
         self._on_frame: Callable[[Frame], Frame | None] | None = None   # F-154: 부수효과 전용, 반환값 무시
+        # 실측 캡처(단계 8 출구 ③). None 이면 비활성 — 기본 동작 불변. I/O 스레드가
+        # rx(각 frame.raw, 위반 프레임의 원시 바이트도 그대로)·tx(전송 성공 프레임)
+        # 마다 capture(dir, raw) 를 부른다. 파일 포맷·시각은 호출자(run.py)가 정한다.
+        self._capture: Callable[[str, bytes], None] | None = None
         self._thread: threading.Thread | None = None
         self._stop = threading.Event()
         self._stats = {"rx": 0, "tx": 0, "violations": 0, "retries": 0, "uptime": 0.0}
@@ -106,6 +110,7 @@ class SiapNodeLink:
         self._proto_mode = proto_mode
         self._build = FrameBuilderImpl(self._gcg_id, mode=proto_mode, registry=self._registry)
         self._on_frame = opts.pop("on_frame", None)
+        self._capture = opts.pop("capture", None)
         self._decoder = codec.Decoder(proto_mode, node_known=self._registry.is_known)
         self._transport = transport.open_transport(run_mode, **opts)
         self._transport.open()
@@ -192,6 +197,8 @@ class SiapNodeLink:
             stalls = 0
         if sent < len(data):
             return False
+        if self._capture is not None:
+            self._capture("tx", data)   # 전량 전송에 성공한 프레임만 기록(replay tx 대조 대상)
         self._stats["tx"] += 1
         return True
 
@@ -218,6 +225,8 @@ class SiapNodeLink:
                     # 내보낸 "지금"만이 안다 — 여기서 한 번만 채운다. Frame
                     # 은 frozen dataclass 라 replace() 로 새 값을 만든다.
                     frame = dataclasses.replace(frame, t=time.time())
+                    if self._capture is not None:
+                        self._capture("rx", frame.raw)   # 위반 프레임의 원시 바이트도 그대로(단계 8 출구 ③)
                     self._stats["rx"] += 1
                     if frame.violations:
                         self._stats["violations"] += 1

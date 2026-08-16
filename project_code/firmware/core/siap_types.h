@@ -18,12 +18,19 @@
  * 빌드가 깨진다. 그래서 아래 SIAP_WIRE_CODE / SIAP_WIRE_CODE_EXT / SIAP_LAYOUT
  * 은 평범한 `static const` 배열로 둔다 — 플랫폼 무관을 우선한 것이며, AVR 에서는
  * 이 상수 테이블(각 70 byte 안팎) 이 .data/.rodata 로 RAM 에 얹힐 수 있다.
- * 개발_착수_지시서 §1.5 에 따라 단계 8 의 avr-size 실측이 SRAM 예산(40%)을 넘으면
- * 그때 보드별 바인딩 계층에서 PROGMEM 접근을 얹는 것으로 재검토한다 — 지금은
- * core/ 순수성이 우선한다. (사용자 보고 사항 — 개발_착수_지시서 §1.3)
+ * 개발_착수_지시서 §1.5 에 따라 단계 8 의 avr-size 실측이 전체-globals SRAM 예산
+ * (55%)을 넘으면 그때 보드별 바인딩 계층에서 PROGMEM 접근을 얹는 것으로 재검토한다.
+ * 단계 8 Uno 실측은 50.0%(< 55%)라 재검토는 발동하지 않았다 — core/ 순수성을 유지한다
+ * (2026-08-16, 펌웨어 설계서 §3.4·§3.5). 지금은 core/ 순수성이 우선한다.
  */
 #include <stdbool.h>
 #include <stdint.h>
+
+/* C++/Arduino 스케치에서 C 링키지로 부를 수 있게 한다(bitpack.h 주석 참조) —
+   C 컴파일 시엔 비활성, 언어 매크로라 core 순수성(§1-5)과 무관하다. */
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /* ═══════════════════════════════════════════════════════════════
  *  0. 헤더 상수 — 그림 7-1
@@ -374,5 +381,9 @@ static const siap_layout_t SIAP_LAYOUT[SIAP_KIND_COUNT] = {
     [SIAP_NOTI_KEEP_ALIVE]                   = {0, 0},
     [SIAP_ACK]                               = {0, 0},
 };
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* SIAP_TYPES_H */

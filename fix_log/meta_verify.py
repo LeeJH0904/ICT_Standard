@@ -861,6 +861,12 @@ ALLOW = {
     # 펌웨어 7.4 의 Wi-Fi 자격증명 파일명 규약(.gitignore 대상)을 가리키는
     # 오탐 허용 목록 항목이다. 값이 아니라 "커밋하지 말라"는 규칙이다.
     ('firmware_verify.py', '"secrets.h",'),
+    # 단계 8 — 같은 파일명 규약. board_verify.py 의 필수 파일 매니페스트와
+    # esp32_node.ino 의 include, secrets.h.example 예시 파일 자신이 이 이름을
+    # 문자열로 담는다(값이 아니라 파일명 규약, CLAUDE.md §1-2 / 펌웨어 §7.4).
+    ('board_verify.py', 'secrets.h.example'),
+    ('esp32_node.ino', 'secrets.h'),
+    ('secrets.h.example', 'secrets.h'),
     # demo_verify.py 도 같은 이유다 — 시연 시나리오의 블라인드 점검표에서 같은
     # 패턴을 찾는 검증기이므로 패턴을 소스에 적을 수밖에 없다.
     ('demo_verify.py', 'SECRET  = re.compile'),

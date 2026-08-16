@@ -13,6 +13,14 @@
 #include <stddef.h>
 #include <stdint.h>
 
+/* C++/Arduino 스케치에서 C 링키지로 부를 수 있게 한다 — C 컴파일 시엔 비활성.
+   __cplusplus 는 보드 판별 매크로가 아니라 언어 매크로라 core 순수성(§1-5)·
+   core_purity_verify 와 무관하다. .ino 의 extern "C" 래핑에만 의존하던 취약함을
+   제거한다(래핑이 없어도 C++ 가 C 링키지로 호출·링크). */
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* core/ 전용 바이트 복사. string.h 없이 객체 표현을 안전하게 옮긴다.
    src/dst 영역은 겹치지 않아야 한다. */
 void bp_memcpy(void *dst, const void *src, size_t len);
@@ -67,5 +75,9 @@ uint32_t bp_read(const uint8_t *buf, size_t *bitpos, uint8_t nbits);
  */
 SIAP_WUR bool bp_write_f32(uint8_t *buf, size_t *bitpos, float val);
          float bp_read_f32(const uint8_t *buf, size_t *bitpos);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* SIAP_BITPACK_H */

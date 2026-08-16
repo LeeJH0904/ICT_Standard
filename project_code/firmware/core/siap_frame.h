@@ -12,6 +12,12 @@
 #include "subtype_registry.h"
 #include "bitpack.h"  /* bp_* 4개 함수, SIAP_WUR */
 
+/* C++/Arduino 스케치에서 C 링키지로 부를 수 있게 한다(bitpack.h 주석 참조) —
+   C 컴파일 시엔 비활성, 언어 매크로라 core 순수성(§1-5)과 무관하다. */
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* ═══════════════════════════════════════════════════════════════
  *  0. 위반 조항 코드 — CLAUDE.md §3.3 "판정에는 반드시 clause 를 채운다"의
  *     펌웨어 대응. 문자열을 두면 flash 를 먹으므로 코드값만 두고 매핑표는
@@ -162,5 +168,9 @@ siap_tx_status_t siap_tx_flush(siap_enc_t *e, siap_io_write_fn write, void *io_c
 
 /* ACK — F-040 계약. msg_id·GCG ID·Node ID 를 원 요청에서 복사한다 (7.2.2). */
 SIAP_WUR bool siap_encode_ack(const siap_hdr_t *req, siap_mode_t mode, siap_enc_t *e);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* SIAP_FRAME_H */

@@ -37,6 +37,7 @@ ProgrammingError`로 죽는다(아키텍처 설계서 §4.1 "스레드별 연결
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 import time
 from pathlib import Path
@@ -84,6 +85,9 @@ def build_parser() -> argparse.ArgumentParser:
                          help="replay/simulate 서버가 열 TCP 포트 (기본은 §5.1 표: replay=5555, simulate=5556)")
     parser.add_argument("--control-port", type=int, default=5557,
                          help="simulate 모드 가상 노드의 주입 제어 채널 포트 (sim/inject.py 용)")
+    parser.add_argument("--capture", default=None,
+                        help="실측 로그 캡처 경로 (rx/tx 프레임을 logs/*.jsonl 포맷으로 기록). "
+                             "hardware·simulate 모드 전용. 단계 8 출구 ③")
     parser.add_argument("--db", default=None,
                          help="DB 파일 경로 (기본: project_code/backend/runtime.db). "
                               "F-160 — §9.2 '2. DB 준비': 없으면 schema.sql+seed 로 새로 만들고, 있으면 그대로 연다")
@@ -173,7 +177,12 @@ def _serve_app(*, db_path: Path, link, builder, run_mode: str, proto: str,
     app = create_app(db_path=db_path, link=link, builder=builder,
                       run_mode=run_mode, proto_mode=proto, inject_fn=inject_fn)
     print(_cp949_safe(f"[run.py] REST API 기동 — http://127.0.0.1:{http_port} (Ctrl-C 로 종료)"))
-    uvicorn.run(app, host="127.0.0.1", port=http_port, log_level="warning")
+    # timeout_graceful_shutdown — Ctrl-C 시 열려 있는 SSE 스트림(/api/v1/stream 은
+    # 무한 제너레이터라 클라이언트가 안 닫으면 안 끝난다)을 최대 2초만 기다리고
+    # 강제 종료한다. 이게 없으면 브라우저 대시보드 탭이 열려 있는 동안 graceful
+    # shutdown 이 그 연결을 무한정 기다려 프로세스가 안 죽는다(Windows 에서 특히).
+    uvicorn.run(app, host="127.0.0.1", port=http_port, log_level="warning",
+                timeout_graceful_shutdown=2)
 
 
 def _cp949_safe(s: str) -> str:
@@ -181,6 +190,41 @@ def _cp949_safe(s: str) -> str:
     다(F-045) — 이 함수는 호출부에 "이 출력은 콘솔 인코딩을 의식했다"는
     표식을 남기는 항등 함수다."""
     return s
+
+
+class _JsonlCapture:
+    """rx/tx 프레임을 logs/*.jsonl 포맷({"t","dir","hex"})으로 기록한다(단계 8
+    출구 ③). SIAP I/O 스레드가 단독으로 부른다(link._io_loop) — 시리얼·소켓
+    소유 스레드와 같아 별도 락이 필요 없다(아키텍처 §4.3). t 는 첫 프레임을
+    0.0 으로 한 상대 시각(초) — session_00_golden.jsonl 과 같은 관례라 replay 가
+    간격을 정규화해 그대로 재생한다. tx 는 게이트웨이 응답이므로 replay 가
+    바이트열을 대조하고, rx 는 노드가 보낸 것이라 주입된다(F-042)."""
+
+    def __init__(self, path: Path) -> None:
+        self._fh = path.open("w", encoding="utf-8")
+        self._t0: float | None = None
+        self.count = 0
+
+    def __call__(self, direction: str, raw: bytes) -> None:
+        now = time.time()
+        if self._t0 is None:
+            self._t0 = now
+        rec = {"t": round(now - self._t0, 3), "dir": direction, "hex": raw.hex().upper()}
+        self._fh.write(json.dumps(rec) + "\n")
+        self._fh.flush()   # 캡처 도중 Ctrl+C 로 끊겨도 이미 받은 프레임은 남는다
+        self.count += 1
+
+    def close(self) -> None:
+        self._fh.close()
+
+
+def _make_capture(args: argparse.Namespace) -> "_JsonlCapture | None":
+    if not args.capture:
+        return None
+    path = Path(args.capture)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    print(_cp949_safe(f"[run.py] 실측 캡처 → {path}"))
+    return _JsonlCapture(path)
 
 
 def _run_simulate(args: argparse.Namespace) -> int:
@@ -194,9 +238,10 @@ def _run_simulate(args: argparse.Namespace) -> int:
     print(_cp949_safe(f"[run.py] 가상 노드 서버 기동 (port={port}, 제어포트={args.control_port})"))
 
     db_path = _prepare_db_path(args)
+    capture = _make_capture(args)
     link = SiapNodeLink(gcg_id=1)
     link.start("simulate", proto_mode=args.proto, host="127.0.0.1", socket_port=port,
-               on_frame=_make_on_frame(db_path))
+               on_frame=_make_on_frame(db_path), capture=capture)
 
     try:
         if args.serve:
@@ -219,6 +264,9 @@ def _run_simulate(args: argparse.Namespace) -> int:
         registry = link.registry()
         link.stop()
         server.stop()
+        if capture is not None:
+            capture.close()
+            print(_cp949_safe(f"[run.py] 캡처 {capture.count}프레임 기록: {args.capture}"))
 
     print(_cp949_safe(
         f"[run.py] 종료 — 등록 노드 {len(registry)}개, "
@@ -327,12 +375,15 @@ def _run_hardware(args: argparse.Namespace) -> int:
         print(_cp949_safe("[run.py] hardware 모드는 --port 가 필요하다 (예: --port COM3 또는 /dev/ttyUSB0)"))
         return 1
     db_path = _prepare_db_path(args)
+    capture = _make_capture(args)
     link = SiapNodeLink(gcg_id=1)
     try:
         link.start("hardware", proto_mode=args.proto, port=args.port,
-                   on_frame=_make_on_frame(db_path))
+                   on_frame=_make_on_frame(db_path), capture=capture)
     except Exception as e:                      # noqa: BLE001 — 실물 연결 실패를 그대로 보고한다
         print(_cp949_safe(f"[run.py] 시리얼 포트 연결 실패: {e}"))
+        if capture is not None:
+            capture.close()
         return 1
     try:
         if args.serve:
@@ -356,6 +407,9 @@ def _run_hardware(args: argparse.Namespace) -> int:
     finally:
         stats = link.stats()
         link.stop()
+        if capture is not None:
+            capture.close()
+            print(_cp949_safe(f"[run.py] 캡처 {capture.count}프레임 기록: {args.capture}"))
     print(_cp949_safe(f"[run.py] 종료 — rx={stats['rx']} tx={stats['tx']} 위반={stats['violations']}"))
     return 0
 

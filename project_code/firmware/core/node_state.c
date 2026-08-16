@@ -170,6 +170,16 @@ static bool _tx_seq_build_header(siap_node_t *node)
         if (!siap_tx_put_hdr(&node->enc, &h)) return false;
         return siap_tx_put_rsc(&node->enc, (siap_rsc_t)s->rsc);
     }
+    case SIAP_SEQ_REQ_SET_NODE_DEVICE_PROPERTY_ALL: {
+        /* F-198 — 노드→GCG 디바이스 구성 선언. 요청이라 RSC 가 없다.
+           payload = NODE_PROPERTY(8B) + DEVICE_PROPERTY(30B)×N (LAYOUT). 요소(DP×N)는
+           _tx_seq_build_element 의 default 경로(siap_tx_put_dp)가 만든다. */
+        uint16_t plen = (uint16_t)(SIAP_NP_BYTES + SIAP_DP_BYTES * s->n);
+        siap_hdr_t h = _build_hdr(node, SIAP_REQ_SET_NODE_DEVICE_PROPERTY_ALL, s->msg_id, plen);
+        if (!siap_tx_put_hdr(&node->enc, &h)) return false;
+        siap_np_t np = _build_np(node);
+        return siap_tx_put_np(&node->enc, &np);
+    }
     default:
         return false;
     }
@@ -241,6 +251,22 @@ static bool _pending_encode(siap_node_t *node)
         s->n = n;
         s->next = 0;
         s->hdr_done = false;
+        _tx_seq_pump(node);
+        return true;
+    }
+
+    if (kind == SIAP_REQ_SET_NODE_DEVICE_PROPERTY_ALL) {
+        /* F-198 — 다중 청크 요청. "ALL"이므로 전체 디바이스를 선언한다.
+           재전송도 같은 msg_id 로 현재 devices[] 구성을 그대로 다시 편다
+           (§6.2-a(4) "재전송은 재인코딩이다"). */
+        siap_tx_seq_t *s = &node->tx_seq;
+        s->kind    = (uint8_t)SIAP_SEQ_REQ_SET_NODE_DEVICE_PROPERTY_ALL;
+        s->rsc     = 0;
+        s->msg_id  = node->pending.msg_id;
+        s->n       = node->cfg.device_count;
+        s->next    = 0;
+        s->hdr_done = false;
+        for (uint8_t i = 0; i < node->cfg.device_count; i++) s->idx[i] = i;
         _tx_seq_pump(node);
         return true;
     }
@@ -622,6 +648,17 @@ static int8_t _on_fixed(void *ctx, const uint8_t *buf, uint8_t len)
         if (rsc != SIAP_RSC_SUCCESS) return -(int8_t)rsc;
         return 0;
     }
+    if (node->rx_kind == SIAP_RES_SET_NODE_DEVICE_PROPERTY_ALL) {
+        /* F-198 — 노드가 보낸 디바이스 구성 선언의 응답. 고정부 RSC 를 꺼내
+           on_end 로 전파한다(RES_SET_CONNECTION 과 같은 관례 — 성공이면 0,
+           실패면 -(rsc)). F-046 매칭: pending 종류·msg_id 가 맞아야 한다. */
+        if (node->pending.kind != (uint8_t)SIAP_REQ_SET_NODE_DEVICE_PROPERTY_ALL
+            || node->rx_hdr.msg_id != node->pending.msg_id)
+            return 0;
+        siap_rsc_t rsc = (siap_rsc_t)buf[0];
+        if (rsc != SIAP_RSC_SUCCESS) return -(int8_t)rsc;
+        return 0;
+    }
     if (node->rx_kind == SIAP_REQ_SET_NODE_PROPERTY) {
         if (node->state != SIAP_NS_RUNNING) return 0;
         size_t bp = 0;
@@ -728,6 +765,13 @@ static void _on_end(void *ctx, siap_rsc_t rsc, siap_clause_t clause)
                 node->dev_next_due[i] = now + (uint32_t)node->cfg.devices[i].period * 1000u;
             node->t_keep_alive   = now + (uint32_t)node->cfg.profile.keep_alive_interval * 1000u;
             node->t_error        = now + (uint32_t)node->cfg.profile.noti_error_interval * 1000u;
+            /* F-198 — REQ_SET_CONNECTION(8.1.1)은 페이로드가 없어(LAYOUT (0,0))
+               디바이스 구성을 실을 수 없다. 연결 성공 직후 이 세션의 전체
+               구성을 REQ_SET_NODE_DEVICE_PROPERTY_ALL 1회로 선언한다. pending
+               에 실어 RES_SET_NODE_DEVICE_PROPERTY_ALL 수신까지 §6.4 재전송
+               타이머가 재시도한다 — 그 응답 전에는 pending 이 차 있어
+               NOTI_DEVICE_VALUE 텔레메트리가 뒤로 밀린다(선언 우선). */
+            _pending_begin(node, SIAP_REQ_SET_NODE_DEVICE_PROPERTY_ALL, 0, now);
         } else if (_rsc_retryable(rsc)) {
             /* 표 §6.2 — "Timeout 후 재송신, msg_id 유지". 응답을 받았어도
                즉시 재송신하지 않는다 — pending 을 그대로 두어 기존 재전송
@@ -815,6 +859,17 @@ static void _on_end(void *ctx, siap_rsc_t rsc, siap_clause_t clause)
     case SIAP_REQ_SET_NODE_DEVICE_PROPERTY_ALL:
         if (node->state != SIAP_NS_RUNNING) return;
         _reply_rsc_only(node, SIAP_RES_SET_NODE_DEVICE_PROPERTY_ALL, rsc);
+        return;
+    case SIAP_RES_SET_NODE_DEVICE_PROPERTY_ALL:
+        /* F-198 — 노드가 보낸 디바이스 구성 선언(REQ_SET_NODE_DEVICE_PROPERTY_ALL)
+           의 응답. F-046 매칭(Node ID·Message Identifier·Message Type) 이 맞고
+           SUCCESS 면 pending 을 해제해 재전송을 멈춘다. 실패면(rsc 는 on_fixed
+           가 전파) pending 을 두어 §6.4 타이머가 재시도하게 한다. */
+        if (node->pending.kind != (uint8_t)SIAP_REQ_SET_NODE_DEVICE_PROPERTY_ALL
+            || node->rx_hdr.msg_id != node->pending.msg_id)
+            return;
+        if (rsc == SIAP_RSC_SUCCESS)
+            _pending_clear(node);
         return;
     case SIAP_REQ_SET_MSG_FLOW_CONTROL_PROFILE:
         if (node->state != SIAP_NS_RUNNING) return;
