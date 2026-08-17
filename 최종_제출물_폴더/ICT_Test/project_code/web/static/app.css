@@ -139,10 +139,10 @@ h1, h2, h3 { line-height: 1.25; }
 
 .cards {
   display: grid;
-  /* auto-fit — 빈 트랙을 접어 카드가 노드 열의 남은 폭을 채운다(auto-fill 은 빈
-     320px 트랙을 남겨 노드·알림 사이 공백을 만들었다). 노드가 1개면 한 장이 열을
-     꽉 채우고, 여러 개면 나눠 채운다 — 어느 쪽도 불필요한 공백이 없다. */
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  /* 노드 카드를 한 장씩 세로로 쌓는다(1열). 각 카드가 노드 영역의 전체 폭을
+     차지하므로 디바이스 이름 열이 넓어져, 긴 이름(냉난방기 등)이 한 글자씩
+     세로로 깨지지 않는다. */
+  grid-template-columns: 1fr;
   gap: 1rem;
 }
 
