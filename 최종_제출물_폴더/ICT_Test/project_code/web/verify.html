@@ -175,12 +175,24 @@ function highlightField(field) {
     if (el) el.classList.add("hl");
   }
   const crossesByte = Math.floor(field.bit_offset / 8) !== Math.floor((field.bit_offset + field.bit_width - 1) / 8);
-  const parts = [`${field.name} — ${field.bit_width}bit, 오프셋 ${field.bit_offset}bit`];
-  if (field.display) parts.push(`= ${field.display}`);
-  else parts.push(`raw=${hex(field.raw)}`);
-  if (field.clause) parts.push(`(${field.clause})`);
-  if (crossesByte) parts.push("· 바이트 경계를 넘는 필드");
-  fieldDetailEl.textContent = parts.join(" ");
+  // 여러 줄 레이블 형식으로 가독성을 높인다(#field-detail 에 white-space:pre-line).
+  const lines = [field.name, `길이: ${field.bit_width}bit`, `오프셋: ${field.bit_offset}bit`];
+  // display 는 서버가 표준 enum 으로 디코딩한 "의미"(예: Value Type=UINT,
+  // Subtype=TEMPERATURE, Value=25.3). 있으면 의미와 raw 를 함께 보여준다.
+  if (field.display != null && field.display !== "") {
+    lines.push(`값: ${field.display}${field.raw != null ? ` (raw ${hex(field.raw)})` : ""}`);
+  } else {
+    lines.push(`raw = ${hex(field.raw)}`);
+  }
+  let notes = crossesByte ? "바이트 경계를 넘는 필드" : "";
+  if (field.clause) notes += notes ? `(${field.clause})` : field.clause;
+  if (notes) lines.push(`설명: ${notes}`);
+  // 첫 줄(필드명)만 굵게. 나머지는 텍스트 노드로 붙여 주입 위험을 없앤다.
+  fieldDetailEl.replaceChildren();
+  const nameEl = document.createElement("strong");
+  nameEl.textContent = lines[0];
+  fieldDetailEl.append(nameEl);
+  if (lines.length > 1) fieldDetailEl.append("\n" + lines.slice(1).join("\n"));
   announce(fieldDetailEl.textContent);
 }
 

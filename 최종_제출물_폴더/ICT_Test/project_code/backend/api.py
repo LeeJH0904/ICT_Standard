@@ -42,7 +42,8 @@ except ImportError:
 
 try:
     from contracts.frame import (
-        RSC, Subtype, ValueType, element_count as frame_element_count, resolve_kind,
+        RSC, Subtype, ValueType, DevType, TransType, TransferMode, Status,
+        element_count as frame_element_count, resolve_kind,
     )
     from contracts.siap_iface import FrameBuilder, Mode, SiapLink
 except ImportError:
@@ -50,7 +51,8 @@ except ImportError:
     import sys
     sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
     from contracts.frame import (
-        RSC, Subtype, ValueType, element_count as frame_element_count, resolve_kind,
+        RSC, Subtype, ValueType, DevType, TransType, TransferMode, Status,
+        element_count as frame_element_count, resolve_kind,
     )
     from contracts.siap_iface import FrameBuilder, Mode, SiapLink
 
@@ -222,8 +224,10 @@ def _header_field_slices(f: repository.models.FrameLog) -> list[dict]:
     values = (f.version, f.msg_type, f.trans_type, f.msg_id, f.payload_len, f.gcg_id, f.node_id)
     out, offset = [], 0
     for (name, width), value in zip(_HEADER_FIELD_LAYOUT, values):
+        # Transmission Type(표 7-6)만 코드→이름 디코딩. 나머지 헤더는 수치.
+        disp = _enum_name(TransType, value) if name == "Transmission Type" and value is not None else None
         out.append({"name": name, "bit_offset": offset, "bit_width": width,
-                     "raw": value if value is not None else 0, "display": None,
+                     "raw": value if value is not None else 0, "display": disp,
                      "element": None, "clause": "그림 7-1"})
         offset += width
     return out
@@ -262,6 +266,39 @@ def _value_to_raw_bits(value, value_type: int) -> int:
     return int(value) & 0xFFFFFFFF
 
 
+def _enum_name(enum_cls, raw: int) -> str | None:
+    """코드값 → 표준 enum 이름(정본). 미정의 코드면 None(화면은 raw 로 대체)."""
+    try:
+        return enum_cls(raw).name
+    except ValueError:
+        return None
+
+
+def _fmt_num(v) -> str | None:
+    if v is None or isinstance(v, bool):
+        return None
+    return f"{v:g}" if isinstance(v, float) else str(v)
+
+
+def _dmi_field_display(key: str | None, raw: int, item: dict) -> str | None:
+    """표 7-14/7-15 코드 필드엔 표준 enum 이름을, 값 계열엔 디코딩된 실제
+    값을 단다(화면은 이 문자열을 그대로 보여줄 뿐 다시 해석하지 않는다,
+    §3.4 — 정본 enum(contracts/frame.py)을 재사용한다)."""
+    if key == "dev_type":
+        return _enum_name(DevType, raw)
+    if key == "value_type":
+        return _enum_name(ValueType, raw)
+    if key == "subtype":
+        return _enum_name(Subtype, raw)
+    if key == "transfer_mode":
+        return _enum_name(TransferMode, raw)
+    if key == "status":
+        return _enum_name(Status, raw)
+    if key in _VALUE_LIKE_KEYS:
+        return _fmt_num(item.get(key))
+    return None
+
+
 def _payload_field_slices(f: repository.models.FrameLog) -> list[dict]:
     """`frame_log.elements_json`(ingest.py가 저장한, 이미 디코딩된 가변 요소)을
     `_header_field_slices()`와 이어지는 `FieldSlice` 목록으로
@@ -283,7 +320,7 @@ def _payload_field_slices(f: repository.models.FrameLog) -> list[dict]:
             else:
                 raw = int(item.get(key, 0))
             out.append({"name": name, "bit_offset": offset, "bit_width": width,
-                         "raw": raw, "display": None,
+                         "raw": raw, "display": _dmi_field_display(key, raw, item),
                          "element": idx, "clause": "표 7-14" if item["kind"] == "DMI" else "표 7-15"})
             offset += width
     return out

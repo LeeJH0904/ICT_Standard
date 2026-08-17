@@ -329,6 +329,8 @@ input, select, textarea {
   border-color: var(--bg-panel-border);
   background: var(--bg-card);
 }
+/* 필드 상세: 이름/길이/오프셋/값/설명을 줄바꿈(\n)으로 나눠 보여준다. */
+#field-detail { white-space: pre-line; }
 
 .inject-grid {
   display: grid;
