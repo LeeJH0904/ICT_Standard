@@ -235,7 +235,9 @@ def _handle_device_property(conn: sqlite3.Connection, frame: Frame) -> None:
         install_id = repository.upsert_device_install_info(
             conn,
             device_info_id=device_info_id,
-            device_name=f"node{node_id}-{name.lower()}-{dmi.device_id}",
+            # 노드 ID 는 화면 전체 표기(0x..)와 맞춰 16진수로 이름에 넣는다.
+            # subtype 종류명은 device_info 에 별도로 남으므로 라벨에서는 뺀다(중복 방지).
+            device_name=f"node0x{node_id:X}-{dmi.device_id}",
             siap_node_id=node_id,
             siap_device_id=dmi.device_id,
             siap_subtype=dmi.subtype,
