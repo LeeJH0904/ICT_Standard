@@ -56,6 +56,24 @@ def _load_mock() -> dict:
     return json.loads(MOCK_PATH.read_text(encoding="utf-8"))
 
 
+def _derive_region_item(payload: dict) -> tuple[str | None, str | None]:
+    """표시용 `구역`·`항목`을 응답 payload 에서 뽑는다(기상청 단기예보 스키마 —
+    실데이터·목업 동일 구조). 구조가 달라 파싱에 실패하면 (None, None) 을
+    돌려 컬럼을 비운다."""
+    try:
+        items = payload["response"]["body"]["items"]["item"]
+        first = items[0]
+        region = f"격자 {first['nx']},{first['ny']}"
+        cats: list[str] = []
+        for it in items:
+            c = it.get("category")
+            if c and c not in cats:
+                cats.append(c)
+        return region, ("·".join(cats) if cats else None)
+    except (KeyError, IndexError, TypeError):
+        return None, None
+
+
 def _fetch_kma_live(kma_key: str, *, timeout: float = 3.0) -> dict:
     """실제 기상청 단기예보 조회서비스 호출. 오프라인 기본 경로가 아니므로
     `KMA_API_KEY`가 있을 때만
@@ -92,6 +110,9 @@ def fetch_public_data(conn: sqlite3.Connection, *, source_id: str | None = None,
             payload = None      # 조용히 삼키지 않는다 — 아래에서 목업으로 대체할 뿐, 예외 자체는 버린다(폴백이 곧 처리다)
     if payload is None:
         payload = _load_mock()
+
+    if region is None and item is None:
+        region, item = _derive_region_item(payload)
 
     record_id = repository.insert_public_data_record(
         conn, source_id=source.id, payload=payload, region=region, item=item,

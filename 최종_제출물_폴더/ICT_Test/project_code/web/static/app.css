@@ -33,6 +33,12 @@ body {
   line-height: 1.5;
 }
 
+/* hidden 속성은 언제나 숨김을 이긴다. `form .field { display: flex }` 같은
+   author display 규칙이 UA 의 [hidden]{display:none} 을 덮어써(origin 우선),
+   hidden 을 건 필드가 그대로 보이는 문제를 막는다(초안 생성·설정 화면의
+   조건부 필드 토글이 여기에 의존한다). */
+[hidden] { display: none !important; }
+
 /* WCAG 2.4.1 — 본문 건너뛰기 링크. body 의 첫 자식이어야 한다. */
 .skip {
   position: absolute;

@@ -165,6 +165,26 @@ def _make_inject_fn(control_port: int):
     return _inject
 
 
+def _ensure_public_data_baseline(db_path: Path) -> None:
+    """rules 화면 ① 공공데이터 표가 첫 화면부터 비어 있지 않도록, 레코드가
+    하나도 없으면 시작 시 예보를 1건 수집해 둔다(KMA_API_KEY 없으면 목업 폴백).
+    이미 있으면(재시작·기존 DB) 아무것도 하지 않아 재시작마다 쌓이지 않는다.
+    스레드 기동 후 API 가 뜨기 직전 한 번만 실행되는 seed 성격의 쓰기다."""
+    from backend import db as backend_db
+    from backend.services import dms
+
+    conn = backend_db.connect(db_path)
+    try:
+        _, total = dms.list_records(conn, limit=1)
+        if total == 0:
+            _, fallback = dms.fetch_public_data(conn)
+            print(_cp949_safe(f"[run.py] 공공데이터 기본 1건 수집 ({'목업' if fallback else '기상청 실데이터'})"))
+    except Exception as e:   # noqa: BLE001 — 기본 수집 실패가 서버 기동을 막지 않게 한다
+        print(_cp949_safe(f"[run.py] 공공데이터 기본 수집 건너뜀: {e}"))
+    finally:
+        conn.close()
+
+
 def _serve_app(*, db_path: Path, link, builder, run_mode: str, proto: str,
                http_port: int, inject_fn=None) -> None:
     """F-188 — §9.2 '5. uvicorn 기동'. `create_app()`으로 앱을 만들고
@@ -176,6 +196,7 @@ def _serve_app(*, db_path: Path, link, builder, run_mode: str, proto: str,
 
     app = create_app(db_path=db_path, link=link, builder=builder,
                       run_mode=run_mode, proto_mode=proto, inject_fn=inject_fn)
+    _ensure_public_data_baseline(db_path)
     print(_cp949_safe(f"[run.py] REST API 기동 — http://127.0.0.1:{http_port} (Ctrl-C 로 종료)"))
     # timeout_graceful_shutdown — Ctrl-C 시 열려 있는 SSE 스트림(/api/v1/stream 은
     # 무한 제너레이터라 클라이언트가 안 닫으면 안 끝난다)을 최대 2초만 기다리고
