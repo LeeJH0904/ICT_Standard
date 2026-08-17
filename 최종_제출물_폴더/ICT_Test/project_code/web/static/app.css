@@ -1,0 +1,350 @@
+/* app.css — 공통 스타일 (WCAG 2.1 AA)
+ *
+ * 대비 쌍(전경/배경) — WCAG 명도 대비를 만족하도록 고른 색:
+ *   fg-page/bg-page  fg-muted/bg-page  fg-danger/bg-page
+ *   fg-alert/bg-page fg-online/bg-page fg-badge/bg-badge
+ */
+
+:root {
+  --bg-page: #ffffff;
+  --bg-card: #f3f5f7;
+  --bg-badge: #e5e7eb;
+  --bg-panel-border: #d1d5db;
+
+  --fg-page: #1a1a1a;       /* 본문 텍스트 */
+  --fg-muted: #4b5563;      /* 정상 · 미승인 (회색 + 문자) */
+  --fg-danger: #b91c1c;     /* 위반 (적색 + 문자) */
+  --fg-alert: #92400e;      /* NEC 알림 · STALE (황색 계열 + 문자) */
+  --fg-online: #15803d;     /* 노드 온라인 (녹색 + 문자) */
+  --fg-badge: #374151;
+
+  --focus-ring: #1d4ed8;
+}
+
+* { box-sizing: border-box; }
+
+html { font-size: 16px; }
+
+body {
+  margin: 0;
+  background: var(--bg-page);
+  color: var(--fg-page);
+  font-family: system-ui, -apple-system, "Segoe UI", "Malgun Gothic", sans-serif;
+  line-height: 1.5;
+}
+
+/* WCAG 2.4.1 — 본문 건너뛰기 링크. body 의 첫 자식이어야 한다. */
+.skip {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  background: var(--focus-ring);
+  color: #fff;
+  padding: 0.5rem 1rem;
+  z-index: 100;
+}
+.skip:focus {
+  left: 0.5rem;
+  top: 0.5rem;
+}
+
+/* WCAG 1.1.1 대체 텍스트 전용 시각적 숨김(스크린리더에는 읽힌다) */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* WCAG 2.1.1 키보드 포커스 — 브라우저 기본 아웃라인을 지우지 않고 강조만 더한다 */
+:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1.25rem;
+  border-bottom: 1px solid var(--bg-panel-border);
+  background: var(--bg-card);
+}
+
+nav[aria-label="주 메뉴"] ul {
+  list-style: none;
+  display: flex;
+  gap: 1rem;
+  margin: 0;
+  padding: 0;
+}
+nav[aria-label="주 메뉴"] a {
+  color: var(--fg-page);
+  text-decoration: none;
+  padding: 0.35rem 0.6rem;
+  border-radius: 4px;
+}
+nav[aria-label="주 메뉴"] a[aria-current="page"] {
+  background: var(--bg-badge);
+  font-weight: 700;
+}
+
+#conn {
+  margin: 0;
+  font-size: 0.9rem;
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid var(--bg-panel-border);
+}
+#conn.conn-live { color: var(--fg-online); }
+#conn.conn-polling { color: var(--fg-alert); }
+#conn.conn-down { color: var(--fg-danger); }
+
+main {
+  padding: 1.25rem;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+h1, h2, h3 { line-height: 1.25; }
+
+.summary-bar {
+  display: flex;
+  gap: 1.5rem;
+  padding: 0.75rem 1rem;
+  background: var(--bg-card);
+  border-radius: 8px;
+  margin-bottom: 1rem;
+  font-weight: 600;
+}
+
+/* 노드(좌) · 알림(우)을 1:1 로 나눈다. 두 열이 모두 폭을 채우므로 노드·알림
+   사이에 빈 공백이 생기지 않고, 카드도 과도하게 넓어지지 않는다.
+   좁은 화면에서는 다시 세로로 쌓아 알림이 노드 아래로 간다. */
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1.25rem;
+  align-items: start;
+}
+@media (max-width: 760px) {
+  .dashboard-grid { grid-template-columns: 1fr; }
+}
+.alerts-col { min-width: 0; }
+
+.cards {
+  display: grid;
+  /* auto-fit — 빈 트랙을 접어 카드가 노드 열의 남은 폭을 채운다(auto-fill 은 빈
+     320px 트랙을 남겨 노드·알림 사이 공백을 만들었다). 노드가 1개면 한 장이 열을
+     꽉 채우고, 여러 개면 나눠 채운다 — 어느 쪽도 불필요한 공백이 없다. */
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1rem;
+}
+
+.card {
+  border: 1px solid var(--bg-panel-border);
+  border-radius: 8px;
+  padding: 1rem;
+  background: var(--bg-page);
+  overflow: hidden;   /* 긴 subtype 이름·스파크라인이 카드 경계를 넘지 않게 클립(둥근 모서리 유지) */
+}
+.card h3 { margin-top: 0; }
+
+/* 디바이스 목록을 하나의 그리드로 — 값·단위·그래프 열이 행마다 정렬된다.
+   이름(1fr) | 값(우측정렬) | 단위 | 그래프. 각 .device-row 는 display:contents 라
+   자기 셀만 이 그리드에 기여한다(구분선 대신 행 gap 으로 나눈다). */
+.device-list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  gap: 0.5rem 0.7rem;   /* 행 간격 · 열 간격(값과 그래프를 약간 떨어뜨림) */
+  margin-top: 0.5rem;
+}
+.device-row { display: contents; }
+.dev-name { min-width: 0; overflow-wrap: anywhere; }
+/* 값 숫자는 굵게 + 우측정렬 → 숫자들의 오른쪽 끝이 한 열로 통일된다. */
+.dev-value { justify-self: end; font-weight: 700; }
+/* 단위는 괄호 안, 굵기 해제. 값 열 바로 뒤에서 좌측정렬되어 단위도 한 열로 선다. */
+.dev-unit { justify-self: start; font-weight: 400; }
+.dev-spark { justify-self: end; display: inline-flex; align-items: center; }
+/* 구동기 상태·값 없음은 숫자 열을 왜곡하지 않게 값~그래프 열을 가로지른다. */
+.dev-value-span { grid-column: 2 / -1; justify-self: start; font-weight: 700; }
+
+/* 스파크라인은 넘칠 때만 칸 폭에 맞춰 축소된다(viewBox 라 비율 유지). 평소엔 120px. */
+.spark { display: block; max-width: 100%; height: auto; }
+
+/* 상태 배지 — 색만으로 의미를 전달하지 않는다(§8.2). 아이콘·문자를 항상 함께 둔다 */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+  padding: 0.15em 0.55em;
+  border-radius: 999px;
+  background: var(--bg-badge);
+  color: var(--fg-badge);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.badge.normal, .badge.unapproved { color: var(--fg-muted); }
+.badge.violation { color: var(--fg-danger); }
+.badge.alert, .badge.stale { color: var(--fg-alert); }
+.badge.online { color: var(--fg-online); }
+
+.status-line { display: flex; align-items: center; gap: 0.4em; font-weight: 600; }
+.status-line.normal, .status-line.unapproved { color: var(--fg-muted); }
+.status-line.violation { color: var(--fg-danger); }
+.status-line.alert, .status-line.stale { color: var(--fg-alert); }
+.status-line.online { color: var(--fg-online); }
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.5rem 0;
+}
+th, td {
+  text-align: left;
+  padding: 0.4rem 0.6rem;
+  border-bottom: 1px solid var(--bg-badge);
+  vertical-align: top;
+}
+th { background: var(--bg-card); }
+
+button, .btn {
+  font: inherit;
+  padding: 0.45rem 0.9rem;
+  border-radius: 6px;
+  border: 1px solid var(--bg-panel-border);
+  background: var(--bg-page);
+  color: var(--fg-page);
+  cursor: pointer;
+}
+button:hover { background: var(--bg-card); }
+button.primary {
+  background: var(--focus-ring);
+  color: #fff;
+  border-color: var(--focus-ring);
+}
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+form .field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-bottom: 0.75rem;
+  max-width: 26rem;
+}
+form label { font-weight: 600; }
+input, select, textarea {
+  font: inherit;
+  padding: 0.4rem 0.55rem;
+  border: 1px solid var(--bg-panel-border);
+  border-radius: 6px;
+}
+.field .hint {
+  font-size: 0.82rem;
+  color: var(--fg-muted);
+}
+
+/* verify.html 3분할 레이아웃 (§5.1) */
+.verify-grid {
+  display: grid;
+  grid-template-columns: 1.1fr 1.3fr 1fr;
+  gap: 1rem;
+  align-items: start;
+}
+@media (max-width: 900px) {
+  .verify-grid { grid-template-columns: 1fr; }
+}
+.panel {
+  border: 1px solid var(--bg-panel-border);
+  border-radius: 8px;
+  padding: 0.75rem;
+  min-height: 12rem;
+}
+.verify-list-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+.verify-list-panel h2 { margin-top: 0; }
+.inject-controls {
+  flex: 0 0 auto;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--bg-panel-border);
+}
+.frame-list-region { min-width: 0; }
+#frame-list {
+  height: clamp(18rem, 48vh, 32rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  padding-right: 0.25rem;
+}
+.frame-list-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border-radius: 6px;
+  margin-bottom: 0.25rem;
+}
+.frame-list-item[aria-current="true"] { background: var(--bg-card); }
+
+.hex-view {
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  white-space: pre;
+  overflow-x: auto;
+  line-height: 1.7;
+}
+.hex-line { display: block; }
+.hex-offset { color: var(--fg-muted); margin-right: 0.6em; }
+.hex-nibble {
+  display: inline-block;
+}
+.hex-nibble.hl {
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  font-weight: 700;
+  background: var(--bg-badge);
+}
+
+.field-list { list-style: none; margin: 0.5rem 0 0; padding: 0; }
+.field-list li {
+  padding: 0.3rem 0.4rem;
+  border-radius: 4px;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+.field-list li:hover, .field-list li[aria-selected="true"] {
+  border-color: var(--bg-panel-border);
+  background: var(--bg-card);
+}
+
+.inject-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+}
+@media (max-width: 480px) {
+  .inject-grid { grid-template-columns: 1fr; }
+}
+
+[data-state-message] { color: var(--fg-muted); }
+[aria-busy="true"] .skeleton {
+  background: var(--bg-card);
+  border-radius: 6px;
+  height: 1.2em;
+  margin: 0.3em 0;
+}
+
+.readonly-text {
+  background: var(--bg-card);
+  padding: 0.5rem;
+  border-radius: 6px;
+  white-space: pre-wrap;
+}

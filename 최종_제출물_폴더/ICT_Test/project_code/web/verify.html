@@ -1,0 +1,362 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>기능 2 — 표준 준수 검증</title>
+<link rel="stylesheet" href="static/app.css">
+</head>
+<body>
+<a class="skip" href="#main">본문으로 건너뛰기</a>
+<header>
+  <nav aria-label="주 메뉴">
+    <ul>
+      <li><a href="index.html">대시보드</a></li>
+      <li><a href="verify.html" aria-current="page">표준 준수 검증</a></li>
+      <li><a href="rules.html">규칙·승인</a></li>
+      <li><a href="settings.html">설정</a></li>
+    </ul>
+  </nav>
+  <p id="conn" role="status">실시간 연결됨</p>
+</header>
+
+<main id="main">
+  <h1>표준 준수 검증</h1>
+  <p class="hint">TTAK.KO-10.0943 7.3.1 · 표 7-2 · 표 7-6 · 표 7-14 — 수신한 프레임의 판정은 전부 서버(<code>siap/codec.py</code>)가 내리며, 이 화면은 그 결과를 그대로 옮긴다.</p>
+
+  <div class="verify-grid">
+    <section class="panel verify-list-panel" aria-labelledby="inject-h list-h" data-state="loading">
+      <div class="inject-controls">
+        <h2 id="inject-h">주입 8종 <span class="hint">(simulate · replay 모드에서만 동작)</span></h2>
+        <div class="inject-grid" id="inject-buttons"></div>
+        <p id="inject-status" class="hint" role="status"></p>
+      </div>
+
+      <div class="frame-list-region">
+        <h2 id="list-h">프레임 목록</h2>
+        <label><input type="checkbox" id="violations-only"> 위반만 보기 (<code>GET /frames/violations</code>)</label>
+        <p data-state-message>불러오는 중입니다…</p>
+        <div id="frame-list" role="listbox" aria-label="수신 프레임 목록" tabindex="0"></div>
+      </div>
+    </section>
+
+    <section class="panel" aria-labelledby="hex-h">
+      <h2 id="hex-h">원문 hex</h2>
+      <button type="button" id="copy-hex">hex 전체 복사</button>
+      <p id="copy-status" class="hint sr-only" role="status"></p>
+      <div class="hex-view" id="hex-view"><p class="hint">왼쪽에서 프레임을 선택하세요.</p></div>
+      <h3>필드 분해</h3>
+      <ul class="field-list" id="field-list" role="listbox" aria-label="필드 목록"></ul>
+      <p id="field-detail" class="hint" role="status"></p>
+    </section>
+
+    <section class="panel" aria-labelledby="judge-h">
+      <h2 id="judge-h">판정</h2>
+      <div id="judge-panel"><p class="hint">왼쪽에서 프레임을 선택하세요.</p></div>
+    </section>
+  </div>
+</main>
+
+<div id="live" aria-live="polite" class="sr-only"></div>
+
+<script type="module">
+import { api, ApiError, collectAllPages, describeProblem } from "./static/api.js";
+import { connectStream } from "./static/stream.js";
+import { announce, setConnStatus, setViewState, focusFirst } from "./static/a11y.js";
+import { hexBytes, hexLines, nibbleRange, hex, formatDateTime, epochToIso } from "./static/fmt.js";
+
+const listSection = document.querySelector("#list-h").closest("section");
+const frameListEl = document.getElementById("frame-list");
+const hexViewEl = document.getElementById("hex-view");
+const fieldListEl = document.getElementById("field-list");
+const fieldDetailEl = document.getElementById("field-detail");
+const judgePanelEl = document.getElementById("judge-panel");
+const injectButtonsEl = document.getElementById("inject-buttons");
+const injectStatusEl = document.getElementById("inject-status");
+const violationsOnlyEl = document.getElementById("violations-only");
+
+// 5.3 주입 8종 — 골든 X01~X08 과 1:1. 라벨은 "무엇을 주입하는가"를 설명할
+// 뿐 판정 결과(코드명·조항)를 여기서 만들지 않는다 — 그 값은 서버 응답에서만 온다.
+const INJECT_BUTTONS = [
+  { id: "X01", label: "1. Version 조작" },
+  { id: "X02", label: "2. 미등록 Node ID" },
+  { id: "X03", label: "3. Payload Length 불일치" },
+  { id: "X04", label: "4. Message Type = 0x000E" },
+  { id: "X05", label: "5. Transmission Type = 0x03" },
+  { id: "X06", label: "6. Value Type = 0x03" },
+  { id: "X07", label: "7. 미등록 Subtype" },
+  { id: "X08", label: "8. NEC 배터리 저전력" },
+];
+
+const state = {
+  frames: [],
+  byId: new Map(),
+  alertsByFrame: new Map(),
+  selectedId: null,
+  selectedFieldIdx: null,
+  recoverySince: undefined,
+  loadRevision: 0,
+};
+
+function judgementMeta(j) {
+  if (j === "violation") return { cls: "violation", icon: "⚠", text: "위반" };
+  if (j === "alert") return { cls: "alert", icon: "●", text: "알림" };
+  return { cls: "normal", icon: "✔", text: "정상" };
+}
+
+function frameListItemHtml(f) {
+  const m = judgementMeta(f.judgement);
+  const current = f.id === state.selectedId;
+  return `<button type="button" class="frame-list-item status-line ${m.cls}" role="option"
+      aria-selected="${current}" aria-current="${current}" data-id="${f.id}">
+    ${m.icon} ${f.id} — ${m.text} <span class="hint">(${formatDateTime(new Date(f.t * 1000).toISOString())})</span>
+  </button>`;
+}
+
+function renderFrameList() {
+  if (!state.frames.length) {
+    setViewState(listSection, "empty", "아직 수신한 프레임이 없습니다.");
+    frameListEl.innerHTML = "";
+    return;
+  }
+  setViewState(listSection, "ready", "");
+  frameListEl.innerHTML = state.frames.map(frameListItemHtml).join("");
+  frameListEl.querySelectorAll(".frame-list-item").forEach((btn) => {
+    btn.addEventListener("click", () => selectFrame(btn.dataset.id));
+  });
+}
+
+function frameMatchesCurrentFilter(frame) {
+  return !violationsOnlyEl.checked || frame.judgement === "violation";
+}
+
+function renderHex(frame) {
+  const lines = hexLines(frame.raw_hex);
+  hexViewEl.innerHTML = lines.map((line) => {
+    const nibbles = line.bytes.map((b, bi) => {
+      const globalByte = line.offset + bi;
+      return [0, 1].map((half) => {
+        const nibbleIdx = globalByte * 2 + half;
+        const ch = half === 0 ? b[0] : b[1];
+        return `<span class="hex-nibble" data-nibble="${nibbleIdx}">${ch}</span>`;
+      }).join("");
+    }).join(" ");
+    return `<span class="hex-line"><span class="hex-offset">${String(line.offset).padStart(3, "0")}</span>${nibbles}</span>`;
+  }).join("");
+}
+
+function clearHighlight() {
+  hexViewEl.querySelectorAll(".hex-nibble.hl").forEach((el) => el.classList.remove("hl"));
+}
+
+function highlightField(field) {
+  clearHighlight();
+  const { startNibble, endNibble } = nibbleRange(field.bit_offset, field.bit_width);
+  for (let i = startNibble; i < endNibble; i++) {
+    const el = hexViewEl.querySelector(`.hex-nibble[data-nibble="${i}"]`);
+    if (el) el.classList.add("hl");
+  }
+  const crossesByte = Math.floor(field.bit_offset / 8) !== Math.floor((field.bit_offset + field.bit_width - 1) / 8);
+  const parts = [`${field.name} — ${field.bit_width}bit, 오프셋 ${field.bit_offset}bit`];
+  if (field.display) parts.push(`= ${field.display}`);
+  else parts.push(`raw=${hex(field.raw)}`);
+  if (field.clause) parts.push(`(${field.clause})`);
+  if (crossesByte) parts.push("· 바이트 경계를 넘는 필드");
+  fieldDetailEl.textContent = parts.join(" ");
+  announce(fieldDetailEl.textContent);
+}
+
+function renderFields(frame) {
+  const fields = frame.fields || [];
+  fieldListEl.innerHTML = fields.map((f, i) => {
+    const group = f.element == null ? "고정부" : `요소 ${f.element}`;
+    return `<li role="option" tabindex="0" data-idx="${i}" aria-selected="false">
+      <strong>${f.name}</strong> <span class="hint">${f.bit_width}bit · ${group}${f.clause ? " · " + f.clause : ""}</span>
+    </li>`;
+  }).join("");
+  fieldListEl.querySelectorAll("li").forEach((li) => {
+    const activate = () => {
+      fieldListEl.querySelectorAll("li").forEach((x) => x.setAttribute("aria-selected", "false"));
+      li.setAttribute("aria-selected", "true");
+      highlightField(fields[Number(li.dataset.idx)]);
+    };
+    li.addEventListener("click", activate);
+    li.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); activate(); }
+    });
+  });
+}
+
+function renderJudgement(frame) {
+  const m = judgementMeta(frame.judgement);
+  let body;
+  if (frame.judgement === "violation") {
+    body = (frame.violations || []).map((v) =>
+      `<p class="status-line violation">⚠ ${v.code_name} (${hex(v.code)}) — 0943 ${v.clause}</p><p>${v.detail}</p>`
+    ).join("") || "<p>위반 상세 없음</p>";
+  } else if (frame.judgement === "alert") {
+    const alert = state.alertsByFrame.get(frame.id);
+    body = alert
+      ? `<p class="status-line alert">● ${alert.kind} (siap_nec=${hex(alert.siap_nec)}) — 위반 아님 · 알림</p><p>${alert.message}</p>`
+      : `<p class="status-line alert">● 알림 — 위반 아님</p>`;
+  } else {
+    body = `<p class="status-line normal">✔ 정상 프레임입니다.</p>`;
+  }
+  judgePanelEl.innerHTML = `<p class="badge ${m.cls}">${m.icon} ${m.text}</p>${body}`;
+}
+
+async function selectFrame(id) {
+  state.selectedId = id;
+  state.selectedFieldIdx = null;
+  renderFrameList();
+  // getFrame(frameId) — 목록 항목도 전체 필드 분해를 담고 있지만, 선택
+  // 시점의 최신 판정을 프레임 1건 상세 엔드포인트로 다시 확인한다
+  // (verify.html 읽기: listFrames·listViolations·getFrame).
+  let frame = state.byId.get(id);
+  try {
+    frame = await api.getFrame(id);
+    state.byId.set(id, frame);
+  } catch {
+    // 상세 재조회가 실패해도 목록에서 이미 가진 값으로 계속 보여준다
+  }
+  if (!frame) return;
+  renderHex(frame);
+  renderFields(frame);
+  renderJudgement(frame);
+  focusFirst(judgePanelEl);
+}
+
+async function loadFrames() {
+  const loadRevision = ++state.loadRevision;
+  setViewState(listSection, "loading", "불러오는 중입니다…");
+  const violationsOnly = violationsOnlyEl.checked;
+  try {
+    const [framePage, alertPage] = await Promise.all([
+      violationsOnly ? api.listViolations({ limit: 100 }) : api.listFrames({ limit: 100 }),
+      api.listAlerts({ limit: 100 }),
+    ]);
+    if (loadRevision !== state.loadRevision || violationsOnly !== violationsOnlyEl.checked) return;
+    state.frames = framePage.items
+      .filter(frameMatchesCurrentFilter)
+      .sort((a, b) => b.t - a.t);
+    state.byId = new Map(state.frames.map((f) => [f.id, f]));
+    state.alertsByFrame = new Map(alertPage.items.filter((a) => a.frame_id).map((a) => [a.frame_id, a]));
+    renderFrameList();
+  } catch (err) {
+    if (loadRevision !== state.loadRevision) return;
+    setViewState(listSection, "error", err instanceof ApiError ? err.message : String(err));
+  }
+}
+
+function upsertFrame(frame) {
+  if (!frameMatchesCurrentFilter(frame)) {
+    if (state.byId.delete(frame.id)) {
+      state.frames = state.frames.filter((f) => f.id !== frame.id);
+      renderFrameList();
+    }
+    return false;
+  }
+  if (!state.byId.has(frame.id)) {
+    state.frames.unshift(frame);
+  } else {
+    state.frames = state.frames.map((f) => (f.id === frame.id ? frame : f));
+  }
+  state.byId.set(frame.id, frame);
+  renderFrameList();
+  if (state.selectedId === frame.id) selectFrame(frame.id);
+  return true;
+}
+
+// "누락 보정": 폴백 중 놓친 프레임은 재연결
+// 직후 listFrames?since= 로 채운다. onPollTick(loadFrames)은 폴백 중 매초
+// 최신 100건만 다시 그려 대체로 화면을 살아있게 유지하지만, 그 창(100건)을
+// 넘는 프레임이 끊긴 동안 도착했으면 poll 만으로는 영영 복구되지 않는다.
+// 재연결 시각(until)을 스냅샷으로 고정하고 total까지 offset 페이지를
+// 모두 소비해 "마지막으로 확인한 프레임 이후 전부"를 복구한다. 스냅샷 뒤
+// 프레임은 이미 다시 열린 SSE가 전달하므로 페이지 이동 중 삽입에도 흔들리지 않는다.
+// 최초 단절 순간의 마지막 연속 커서를 폴링 표시 목록과 분리한다.
+// 재연결 복구가 실패하면 다음 재연결에서도 같은 커서를 다시 사용한다.
+function pinRecoveryCursor() {
+  if (state.recoverySince !== undefined) return;
+  state.recoverySince = epochToIso(state.frames.length ? state.frames[0].t : null);
+}
+
+async function recoverMissedFrames() {
+  const since = state.recoverySince;
+  if (!since) {
+    await loadFrames();
+    state.recoverySince = undefined;
+    return;
+  }
+  const violationsOnly = violationsOnlyEl.checked;
+  const until = new Date().toISOString();
+  const listPage = violationsOnly ? api.listViolations : api.listFrames;
+  const beforeIds = new Set(state.byId.keys());
+  const recovered = await collectAllPages(listPage, { since, until }, 100);
+  const unique = [...new Map(recovered.map((frame) => [frame.id, frame])).values()];
+  // 오래된 것부터 upsertFrame(unshift) 해야 배치 안에서도 최신이 맨 위로 온다.
+  const missed = unique.sort((a, b) => a.t - b.t);
+  for (const f of missed) upsertFrame(f);
+  const added = missed.filter((f) => !beforeIds.has(f.id)).length;
+  state.recoverySince = undefined;
+  if (added) announce(`재연결 — 놓친 프레임 ${added}건을 복구했습니다.`);
+}
+
+connectStream({
+  events: ["frame", "violation", "alert"],
+  onStatus: setConnStatus,
+  onEvent: (type, data) => {
+    if (type === "frame" || type === "violation") {
+      upsertFrame(data);
+      announce(`프레임 수신: ${judgementMeta(data.judgement).text}`);
+    } else if (type === "alert" && data.frame_id) {
+      state.alertsByFrame.set(data.frame_id, data);
+      if (state.byId.has(data.frame_id)) upsertFrame(state.byId.get(data.frame_id));
+    }
+  },
+  onPollTick: loadFrames,
+  onDisconnect: pinRecoveryCursor,
+  onReconnect: recoverMissedFrames,
+});
+
+document.getElementById("copy-hex").addEventListener("click", async () => {
+  const frame = state.byId.get(state.selectedId);
+  const statusEl = document.getElementById("copy-status");
+  if (!frame) { statusEl.textContent = "선택된 프레임이 없습니다."; return; }
+  try {
+    await navigator.clipboard.writeText(frame.raw_hex);
+    statusEl.textContent = "hex를 복사했습니다.";
+  } catch {
+    statusEl.textContent = "복사할 수 없습니다 — 브라우저 권한을 확인하세요.";
+  }
+});
+
+injectButtonsEl.innerHTML = INJECT_BUTTONS.map((b) => `<button type="button" data-vector="${b.id}">${b.label}</button>`).join("");
+injectButtonsEl.querySelectorAll("button").forEach((btn) => {
+  btn.addEventListener("click", async () => {
+    const vectorId = btn.dataset.vector;
+    injectStatusEl.textContent = `${vectorId} 주입 중…`;
+    try {
+      const frame = await api.injectVector(vectorId, "demo-user-1");
+      upsertFrame(frame);
+      selectFrame(frame.id);
+      injectStatusEl.textContent = `${vectorId} 주입 완료 — ${judgementMeta(frame.judgement).text}`;
+    } catch (err) {
+      injectStatusEl.textContent = err instanceof ApiError ? describeProblem(err.problem) : String(err);
+    }
+  });
+});
+
+violationsOnlyEl.addEventListener("change", () => {
+  if (violationsOnlyEl.checked) {
+    state.frames = state.frames.filter(frameMatchesCurrentFilter);
+    state.byId = new Map(state.frames.map((frame) => [frame.id, frame]));
+    renderFrameList();
+  }
+  loadFrames();
+});
+
+loadFrames();
+</script>
+</body>
+</html>

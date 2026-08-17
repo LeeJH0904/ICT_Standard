@@ -1,0 +1,434 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>기능 3 — 규칙 · 승인 게이트</title>
+<link rel="stylesheet" href="static/app.css">
+</head>
+<body>
+<a class="skip" href="#main">본문으로 건너뛰기</a>
+<header>
+  <nav aria-label="주 메뉴">
+    <ul>
+      <li><a href="index.html">대시보드</a></li>
+      <li><a href="verify.html">표준 준수 검증</a></li>
+      <li><a href="rules.html" aria-current="page">규칙·승인</a></li>
+      <li><a href="settings.html">설정</a></li>
+    </ul>
+  </nav>
+  <p id="conn" role="status">실시간 연결됨</p>
+</header>
+
+<main id="main">
+  <h1>규칙 초안 · 승인 게이트 · 실행</h1>
+  <p class="hint">TTAK.KO-10.0937 6.3 · 6.5 · 부속서 A 3.2 절차 3 — 사람이 승인하지 않은 규칙은 구동기에 닿지 않는다.</p>
+
+  <section aria-labelledby="pd-h">
+    <h2 id="pd-h">① 공공데이터 (기상청 예보)</h2>
+    <p data-state-message></p>
+    <table id="pd-table">
+      <thead><tr><th>출처</th><th>수집시각</th><th>구역</th><th>항목</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <section aria-labelledby="draft-h">
+    <h2 id="draft-h">② 초안 생성</h2>
+    <form id="draft-form">
+      <div class="field">
+        <label for="draft-origin">생성 방식</label>
+        <select id="draft-origin" name="origin">
+          <option value="AI_DRAFT">AI_DRAFT — 생성형 AI가 초안을 만든다</option>
+          <option value="WIZARD">WIZARD — 위자드 선택 방식</option>
+          <option value="SCRIPT">SCRIPT — 스크립트 직접 입력</option>
+        </select>
+      </div>
+      <div class="field" id="ai-fields">
+        <label for="draft-model">모델 ID</label>
+        <input id="draft-model" name="model_id" list="model-suggestions" placeholder="예: demo-model-llm-irrigation">
+        <datalist id="model-suggestions">
+          <option value="demo-model-llm-irrigation">
+          <option value="demo-model-threshold-tmax">
+        </datalist>
+        <label for="draft-inputs">입력값 (JSON, 모델의 input_spec 을 따른다)</label>
+        <textarea id="draft-inputs" name="inputs" rows="3" placeholder='{"forecast_tmax_c":35,"crop_tmax_c":30}'></textarea>
+        <p class="hint">공공데이터 표의 행을 참고해 예보값을 채워 넣습니다. 서버가 실제로 모델을 실행해 초안을 만듭니다 (draft_text 는 여기서 보내지 않습니다).</p>
+      </div>
+      <div class="field" id="manual-fields" hidden>
+        <label for="draft-text">초안 문장</label>
+        <textarea id="draft-text" name="draft_text" rows="3"></textarea>
+      </div>
+      <div class="field">
+        <label for="draft-cond">조건식 (선택)</label>
+        <input id="draft-cond" name="condition_expr" placeholder="예: forecast.tmax > 33">
+      </div>
+      <button type="submit" class="primary">초안 생성</button>
+      <p id="draft-status" class="hint" role="status"></p>
+    </form>
+  </section>
+
+  <section aria-labelledby="pending-h">
+    <h2 id="pending-h">③ 검토 대기 — 미승인 초안</h2>
+    <p data-state-message></p>
+    <div id="pending-list"></div>
+  </section>
+
+  <section aria-labelledby="approved-h">
+    <h2 id="approved-h">④ 승인됨 — 실행</h2>
+    <p data-state-message></p>
+    <div id="approved-list"></div>
+  </section>
+
+  <section aria-labelledby="manual-h">
+    <h2 id="manual-h">수동/원격 제어</h2>
+    <form id="manual-form">
+      <div class="field">
+        <label for="manual-device">대상 장치</label>
+        <select id="manual-device" name="install_id"></select>
+      </div>
+      <div class="field">
+        <label for="manual-value">값</label>
+        <input id="manual-value" name="value" type="number" step="any" required>
+      </div>
+      <div class="field">
+        <label for="manual-vtype">값 타입</label>
+        <select id="manual-vtype" name="value_type">
+          <option value="UINT">UINT</option>
+          <option value="INT">INT</option>
+          <option value="FLOAT">FLOAT</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="manual-duration">구동 시간(초, 선택)</label>
+        <input id="manual-duration" name="duration_sec" type="number" min="0">
+      </div>
+      <button type="submit" class="primary">제어 실행</button>
+      <p id="manual-status" class="hint" role="status"></p>
+    </form>
+  </section>
+
+  <section aria-labelledby="exec-h">
+    <h2 id="exec-h">실행 이력</h2>
+    <table id="exec-table">
+      <thead><tr><th>출처</th><th>대상</th><th>명령</th><th>지시시각</th><th>결과</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+</main>
+
+<div id="live" aria-live="polite" class="sr-only"></div>
+
+<script type="module">
+import { api, ApiError, describeProblem } from "./static/api.js";
+import { connectStream } from "./static/stream.js";
+import { announce, setConnStatus, setViewState } from "./static/a11y.js";
+import { formatDateTime, hex, escapeHtml } from "./static/fmt.js";
+
+const USER_ID = "demo-user-1"; // localhost 단일 사용자 데모 범위 (X-User-Id 헤더)
+
+const state = { pending: [], approved: [], executions: [], deviceOptions: [], sourcesById: new Map() };
+
+// listPublicDataSources — ①공공데이터 표가 source_id 대신 사람이 읽는
+// 이름·제공기관을 보이도록 출처 메타정보를 한 번 적재한다(0937 6.2).
+async function loadPublicDataSources() {
+  const page = await api.listPublicDataSources();
+  state.sourcesById = new Map(page.items.map((s) => [s.id, s]));
+}
+
+function actionSummary(a) {
+  if (!a) return "—";
+  return `${a.value_type} ${a.value}${a.duration_sec != null ? ` (${a.duration_sec}초)` : ""}`;
+}
+
+// 아래 세 카드 함수는 서버가 돌려준 자유 텍스트(draft_text·
+// condition_expr·reject_reason 등)를 innerHTML 템플릿에 그대로 꽂았다 —
+// 저장형 DOM 주입이 가능했다. 텍스트 노드·속성값 어느 쪽에 들어가는
+// 필드든 신뢰할 수 없는 문자열은 escapeHtml() 을 거친다. id 류(rule.id·
+// device id)는 서버가 발번하지만 형식을 코드가 강제하지 않으므로 같은
+// 원칙으로 함께 이스케이프한다.
+function pendingCardHtml(rule) {
+  const id = escapeHtml(rule.id);
+  const genNote = rule.generation === "THRESHOLD_FALLBACK"
+    ? `<p class="status-line stale">AI 제공자 부재로 threshold 로 폴백했습니다 (THRESHOLD_FALLBACK)</p>` : "";
+  return `<article class="card">
+    <p class="badge unapproved">미승인</p>
+    <p class="hint">생성형 AI 초안 — 사람 검토 필요 · origin=${escapeHtml(rule.origin)}${rule.generation ? ` · generation=${escapeHtml(rule.generation)}` : ""}</p>
+    ${genNote}
+    <p class="readonly-text">${escapeHtml(rule.draft_text)}</p>
+    <details>
+      <summary>승인하기</summary>
+      <form class="approve-form" data-rule="${id}">
+        <div class="field">
+          <label for="cond-${id}">조건식</label>
+          <input id="cond-${id}" name="condition_expr" required value="${escapeHtml(rule.condition_expr ?? "")}">
+        </div>
+        <div class="field">
+          <label for="target-${id}">대상 장치</label>
+          <select id="target-${id}" name="target_install_id" required>
+            ${state.deviceOptions.map((d) => `<option value="${escapeHtml(d.id)}">${escapeHtml(d.label)}</option>`).join("")}
+          </select>
+        </div>
+        <div class="field">
+          <label for="value-${id}">명령 값</label>
+          <input id="value-${id}" name="value" type="number" step="any" required>
+        </div>
+        <div class="field">
+          <label for="vtype-${id}">값 타입</label>
+          <select id="vtype-${id}" name="value_type">
+            <option value="UINT">UINT</option><option value="INT">INT</option><option value="FLOAT">FLOAT</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="dur-${id}">구동 시간(초, 선택)</label>
+          <input id="dur-${id}" name="duration_sec" type="number" min="0">
+        </div>
+        <button type="submit" class="primary">승인</button>
+      </form>
+    </details>
+    <details>
+      <summary>거부하기</summary>
+      <form class="reject-form" data-rule="${id}">
+        <div class="field">
+          <label for="reason-${id}">거부 사유 (필수)</label>
+          <textarea id="reason-${id}" name="reason" required></textarea>
+        </div>
+        <button type="submit">거부</button>
+      </form>
+    </details>
+  </article>`;
+}
+
+function approvedCardHtml(rule) {
+  const id = escapeHtml(rule.id);
+  return `<article class="card">
+    <p class="badge normal">승인됨</p>
+    <p class="hint">generation=${escapeHtml(rule.generation ?? "—")} · 승인자 ${escapeHtml(rule.approved_by ?? "—")} · ${formatDateTime(rule.approved_at)}</p>
+    <p class="readonly-text">${escapeHtml(rule.draft_text)}</p>
+    <p>조건: ${escapeHtml(rule.condition_expr ?? "—")} / 명령: ${escapeHtml(actionSummary(rule.action))} / 대상: ${escapeHtml(rule.target_install_id)}</p>
+    <button type="button" class="primary run-rule" data-rule="${id}">실행</button>
+    <p class="hint run-status" data-rule-status="${id}"></p>
+  </article>`;
+}
+
+function rejectedCardHtml(rule) {
+  return `<article class="card">
+    <p class="badge violation">거부됨</p>
+    <p class="hint">거부자 ${escapeHtml(rule.rejected_by ?? "—")} · ${formatDateTime(rule.rejected_at)}</p>
+    <p class="readonly-text">${escapeHtml(rule.draft_text)}</p>
+    <p>거부 사유: ${escapeHtml(rule.reject_reason)}</p>
+  </article>`;
+}
+
+function renderPending() {
+  const el = document.getElementById("pending-list");
+  const section = document.querySelector("#pending-h").closest("section");
+  const active = state.pending.filter((r) => !r.rejected_at);
+  const rejected = state.pending.filter((r) => r.rejected_at);
+  if (!active.length && !rejected.length) {
+    setViewState(section, "empty", "검토 대기 중인 초안이 없습니다.");
+    el.innerHTML = "";
+    return;
+  }
+  setViewState(section, "ready", "");
+  el.innerHTML = active.map(pendingCardHtml).join("") + rejected.map(rejectedCardHtml).join("");
+  el.querySelectorAll(".approve-form").forEach((f) => f.addEventListener("submit", onApprove));
+  el.querySelectorAll(".reject-form").forEach((f) => f.addEventListener("submit", onReject));
+}
+
+function renderApproved() {
+  const el = document.getElementById("approved-list");
+  const section = document.querySelector("#approved-h").closest("section");
+  if (!state.approved.length) {
+    setViewState(section, "empty", "승인된 규칙이 아직 없습니다.");
+    el.innerHTML = "";
+    return;
+  }
+  setViewState(section, "ready", "");
+  el.innerHTML = state.approved.map(approvedCardHtml).join("");
+  el.querySelectorAll(".run-rule").forEach((btn) => btn.addEventListener("click", onExecute));
+}
+
+function renderExecutions() {
+  const tbody = document.querySelector("#exec-table tbody");
+  tbody.innerHTML = state.executions.map((e) => `<tr>
+    <td>${escapeHtml(e.origin)}</td><td>${escapeHtml(e.install_id)}</td><td>${escapeHtml(actionSummary(e.command))}</td>
+    <td>${formatDateTime(e.issued_at)}</td>
+    <td>${e.result_rsc_name ? `${escapeHtml(e.result_rsc_name)} (${hex(e.result_rsc)})` : "대기 중"}</td>
+  </tr>`).join("");
+}
+
+function renderPublicData(items) {
+  const tbody = document.querySelector("#pd-table tbody");
+  tbody.innerHTML = items.map((r) => {
+    const src = state.sourcesById.get(r.source_id);
+    const srcLabel = src ? `${src.name} (${src.provider})` : r.source_id;
+    return `<tr>
+      <td>${escapeHtml(srcLabel)}</td><td>${formatDateTime(r.fetched_at)}</td><td>${escapeHtml(r.region ?? "—")}</td><td>${escapeHtml(r.item ?? "—")}</td>
+    </tr>`;
+  }).join("");
+}
+
+async function loadDeviceOptions() {
+  const nodePage = await api.listNodes({ limit: 500 });
+  const opts = [];
+  for (const n of nodePage.items) {
+    const devPage = await api.listNodeDevices(n.node_id);
+    for (const d of devPage.items) opts.push({ id: d.id, label: `${d.device_name} (${d.subtype ?? d.id})` });
+  }
+  state.deviceOptions = opts;
+  const sel = document.getElementById("manual-device");
+  sel.innerHTML = opts.map((o) => `<option value="${escapeHtml(o.id)}">${escapeHtml(o.label)}</option>`).join("");
+}
+
+async function loadAll() {
+  try {
+    const [pdPage, rulePendingPage, ruleApprovedPage, execPage] = await Promise.all([
+      api.listPublicDataRecords({ limit: 10 }),
+      api.listRules({ approved: false, limit: 50 }),
+      api.listRules({ approved: true, limit: 50 }),
+      api.listExecutions({ limit: 50 }),
+    ]);
+    renderPublicData(pdPage.items);
+    state.pending = rulePendingPage.items;
+    state.approved = ruleApprovedPage.items;
+    state.executions = execPage.items;
+    renderPending();
+    renderApproved();
+    renderExecutions();
+  } catch (err) {
+    document.getElementById("draft-status").textContent = err instanceof ApiError ? err.message : String(err);
+  }
+}
+
+document.getElementById("draft-origin").addEventListener("change", (ev) => {
+  const isAi = ev.target.value === "AI_DRAFT";
+  document.getElementById("ai-fields").hidden = !isAi;
+  document.getElementById("manual-fields").hidden = isAi;
+});
+
+document.getElementById("draft-form").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const statusEl = document.getElementById("draft-status");
+  const origin = document.getElementById("draft-origin").value;
+  const body = { origin, condition_expr: document.getElementById("draft-cond").value || null };
+  if (origin === "AI_DRAFT") {
+    body.model_id = document.getElementById("draft-model").value || null;
+    const raw = document.getElementById("draft-inputs").value.trim();
+    try { body.inputs = raw ? JSON.parse(raw) : null; }
+    catch { statusEl.textContent = "입력값 JSON 형식이 올바르지 않습니다."; return; }
+  } else {
+    body.draft_text = document.getElementById("draft-text").value;
+  }
+  statusEl.textContent = "생성 중…";
+  try {
+    const created = await api.createRuleDraft(body);
+    // getRule(ruleId) — 생성 응답을 그대로 믿지 않고 저장된 값을 다시 읽어
+    // 확인한다(읽고-쓰기 확인).
+    const rule = await api.getRule(created.id);
+    statusEl.textContent = `초안이 생성되었습니다 (${rule.generation ?? rule.origin}).`;
+    announce("규칙 초안이 생성되었습니다. 사람 검토가 필요합니다.");
+    await loadAll();
+  } catch (err) {
+    statusEl.textContent = err instanceof ApiError ? describeProblem(err.problem) : String(err);
+  }
+});
+
+async function onApprove(ev) {
+  ev.preventDefault();
+  const form = ev.target;
+  const ruleId = form.dataset.rule;
+  const fd = new FormData(form);
+  const body = {
+    condition_expr: fd.get("condition_expr"),
+    target_install_id: fd.get("target_install_id"),
+    action: {
+      value: Number(fd.get("value")),
+      value_type: fd.get("value_type"),
+      duration_sec: fd.get("duration_sec") ? Number(fd.get("duration_sec")) : null,
+    },
+  };
+  try {
+    await api.approveRule(ruleId, body, USER_ID);
+    announce("규칙이 승인되었습니다.");
+    await loadAll();
+  } catch (err) {
+    alertInline(form, err);
+  }
+}
+
+async function onReject(ev) {
+  ev.preventDefault();
+  const form = ev.target;
+  const ruleId = form.dataset.rule;
+  const reason = new FormData(form).get("reason");
+  try {
+    await api.rejectRule(ruleId, reason, USER_ID);
+    announce("규칙이 거부되었습니다.");
+    await loadAll();
+  } catch (err) {
+    alertInline(form, err);
+  }
+}
+
+async function onExecute(ev) {
+  const ruleId = ev.target.dataset.rule;
+  const statusEl = document.querySelector(`[data-rule-status="${ruleId}"]`);
+  statusEl.textContent = "실행 요청 중…";
+  try {
+    const exec = await api.executeRule(ruleId);
+    statusEl.textContent = `실행 기록됨 (msg_id=${exec.siap_msg_id ?? "—"})`;
+    announce("승인된 규칙이 실행되었습니다.");
+    await loadAll();
+  } catch (err) {
+    statusEl.textContent = err instanceof ApiError ? describeProblem(err.problem) : String(err);
+  }
+}
+
+function alertInline(form, err) {
+  const msg = err instanceof ApiError ? describeProblem(err.problem) : String(err);
+  let p = form.querySelector(".form-error");
+  if (!p) {
+    p = document.createElement("p");
+    p.className = "form-error status-line violation";
+    form.appendChild(p);
+  }
+  p.textContent = msg;
+}
+
+document.getElementById("manual-form").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const statusEl = document.getElementById("manual-status");
+  const installId = document.getElementById("manual-device").value;
+  if (!installId) { statusEl.textContent = "대상 장치가 없습니다."; return; }
+  const body = {
+    install_id: installId,
+    action: {
+      value: Number(document.getElementById("manual-value").value),
+      value_type: document.getElementById("manual-vtype").value,
+      duration_sec: document.getElementById("manual-duration").value ? Number(document.getElementById("manual-duration").value) : null,
+    },
+  };
+  statusEl.textContent = "실행 중…";
+  try {
+    const exec = await api.manualControl(body, USER_ID);
+    statusEl.textContent = `실행 기록됨 (msg_id=${exec.siap_msg_id ?? "—"})`;
+    await loadAll();
+  } catch (err) {
+    statusEl.textContent = err instanceof ApiError ? describeProblem(err.problem) : String(err);
+  }
+});
+
+connectStream({
+  events: ["alert", "execution"],
+  onStatus: setConnStatus,
+  onEvent: (type) => {
+    if (type === "execution") loadAll();
+  },
+  onPollTick: loadAll,
+});
+
+Promise.all([loadDeviceOptions(), loadPublicDataSources()]).then(loadAll);
+</script>
+</body>
+</html>
