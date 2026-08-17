@@ -93,6 +93,7 @@
 import { api, ApiError, describeProblem } from "./static/api.js";
 import { connectStream } from "./static/stream.js";
 import { announce, setConnStatus, setViewState } from "./static/a11y.js";
+import { hex } from "./static/fmt.js";
 
 const USER_ID = "demo-user-1";
 const state = { devices: [] };
@@ -108,7 +109,7 @@ document.querySelectorAll('input[name="target-mode"]').forEach((r) => {
 function deviceRowHtml(d) {
   return `<tr>
     <td>${d.device_name} <span class="hint">(${d.subtype ?? "—"})</span></td>
-    <td>${d.siap_node_id ?? "—"}</td>
+    <td>${hex(d.siap_node_id)}</td>
     <td>${d.lower_limit ?? "—"}</td>
     <td>${d.upper_limit ?? "—"}</td>
     <td>${d.precision_val ?? "—"}</td>
