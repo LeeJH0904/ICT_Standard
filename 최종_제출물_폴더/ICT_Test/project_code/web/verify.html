@@ -186,7 +186,7 @@ function highlightField(field) {
   }
   let notes = crossesByte ? "바이트 경계를 넘는 필드" : "";
   if (field.clause) notes += notes ? `(${field.clause})` : field.clause;
-  if (notes) lines.push(`설명: ${notes}`);
+  if (notes) lines.push(notes);
   // 첫 줄(필드명)만 굵게. 나머지는 텍스트 노드로 붙여 주입 위험을 없앤다.
   fieldDetailEl.replaceChildren();
   const nameEl = document.createElement("strong");
