@@ -34,7 +34,13 @@
 
       <div class="frame-list-region">
         <h2 id="list-h">프레임 목록</h2>
-        <label><input type="checkbox" id="violations-only"> 위반만 보기 (<code>GET /frames/violations</code>)</label>
+        <div class="frame-filters">
+          <label><input type="checkbox" id="violations-only"> 위반만 보기 (<code>GET /frames/violations</code>)</label>
+          <label><input type="checkbox" id="alerts-incl"> 전체 알림 보기 (위반 + 알림)</label>
+          <label for="node-filter">노드별 보기
+            <select id="node-filter"><option value="">전체 노드</option></select>
+          </label>
+        </div>
         <p data-state-message>불러오는 중입니다…</p>
         <div id="frame-list" role="listbox" aria-label="수신 프레임 목록" tabindex="0"></div>
       </div>
@@ -74,6 +80,8 @@ const judgePanelEl = document.getElementById("judge-panel");
 const injectButtonsEl = document.getElementById("inject-buttons");
 const injectStatusEl = document.getElementById("inject-status");
 const violationsOnlyEl = document.getElementById("violations-only");
+const alertsInclEl = document.getElementById("alerts-incl");
+const nodeFilterEl = document.getElementById("node-filter");
 
 // 5.3 주입 8종 — 골든 X01~X08 과 1:1. 라벨은 "무엇을 주입하는가"를 설명할
 // 뿐 판정 결과(코드명·조항)를 여기서 만들지 않는다 — 그 값은 서버 응답에서만 온다.
@@ -126,8 +134,18 @@ function renderFrameList() {
   });
 }
 
+// 판정 필터(위반만 / 위반·알림)와 노드 필터를 한곳에서 적용한다. 판정은
+// 전부 서버가 내린 frame.judgement 를 그대로 쓰고, 화면은 걸러 보여줄 뿐
+// 재판정하지 않는다. 노드 필터는 프레임 헤더의 node_id 로 거른다.
 function frameMatchesCurrentFilter(frame) {
-  return !violationsOnlyEl.checked || frame.judgement === "violation";
+  if (violationsOnlyEl.checked) {
+    if (frame.judgement !== "violation") return false;
+  } else if (alertsInclEl.checked) {
+    if (frame.judgement !== "violation" && frame.judgement !== "alert") return false;
+  }
+  const node = nodeFilterEl.value;
+  if (node && String(frame.header?.node_id) !== node) return false;
+  return true;
 }
 
 function renderHex(frame) {
@@ -302,8 +320,23 @@ async function recoverMissedFrames() {
   if (added) announce(`재연결 — 놓친 프레임 ${added}건을 복구했습니다.`);
 }
 
+// 현재 등록된 노드로 "노드별 보기" 드롭다운을 채운다. 새 노드가 붙으면
+// node_up 이벤트에서 다시 부른다. 목록을 못 받아도 프레임 목록은 계속 동작한다.
+async function populateNodeFilter() {
+  try {
+    const page = await api.listNodes({ limit: 500 });
+    const prev = nodeFilterEl.value;
+    const opts = ['<option value="">전체 노드</option>'];
+    for (const n of page.items) opts.push(`<option value="${n.node_id}">Node ${hex(n.node_id)}</option>`);
+    nodeFilterEl.innerHTML = opts.join("");
+    if ([...nodeFilterEl.options].some((o) => o.value === prev)) nodeFilterEl.value = prev;
+  } catch {
+    /* 노드 목록 조회 실패는 무시한다 — 드롭다운은 "전체 노드"만 남는다 */
+  }
+}
+
 connectStream({
-  events: ["frame", "violation", "alert"],
+  events: ["frame", "violation", "alert", "node_up"],
   onStatus: setConnStatus,
   onEvent: (type, data) => {
     if (type === "frame" || type === "violation") {
@@ -312,6 +345,8 @@ connectStream({
     } else if (type === "alert" && data.frame_id) {
       state.alertsByFrame.set(data.frame_id, data);
       if (state.byId.has(data.frame_id)) upsertFrame(state.byId.get(data.frame_id));
+    } else if (type === "node_up") {
+      populateNodeFilter();
     }
   },
   onPollTick: loadFrames,
@@ -347,15 +382,27 @@ injectButtonsEl.querySelectorAll("button").forEach((btn) => {
   });
 });
 
-violationsOnlyEl.addEventListener("change", () => {
-  if (violationsOnlyEl.checked) {
-    state.frames = state.frames.filter(frameMatchesCurrentFilter);
-    state.byId = new Map(state.frames.map((frame) => [frame.id, frame]));
-    renderFrameList();
-  }
+// 필터가 바뀌면 이미 가진 목록에서 즉시 걷어내 화면을 늦지 않게 갱신하고,
+// 이어서 서버에서 현재 필터에 맞는 전체 창을 다시 불러 채운다.
+function applyFilterChange() {
+  state.frames = state.frames.filter(frameMatchesCurrentFilter);
+  state.byId = new Map(state.frames.map((frame) => [frame.id, frame]));
+  renderFrameList();
   loadFrames();
-});
+}
 
+// 두 판정 필터는 상호 배타 — 하나를 켜면 다른 하나는 끈다(겹치는 선택 제거).
+violationsOnlyEl.addEventListener("change", () => {
+  if (violationsOnlyEl.checked) alertsInclEl.checked = false;
+  applyFilterChange();
+});
+alertsInclEl.addEventListener("change", () => {
+  if (alertsInclEl.checked) violationsOnlyEl.checked = false;
+  applyFilterChange();
+});
+nodeFilterEl.addEventListener("change", applyFilterChange);
+
+populateNodeFilter();
 loadFrames();
 </script>
 </body>
