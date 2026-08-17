@@ -6,7 +6,7 @@
 > **불변식**: `표준결함` 행 수 = `CLAUDE.md` §3.6 총계 = 명세서의 장애 지점 합계
 > **자동 검사**: `python fix_log/meta_verify.py` — 인덱스·상세·설계 문서 수치를 기계 대조한다 (F-043)
 
-**다음 ID: `F-236`**
+**다음 ID: `F-241`**
 
 ## 표준결함 (19건) — 고칠 수 없음. 기획서 자산
 
@@ -251,6 +251,11 @@
 | F-233 | 위험 | 코드버그 | `web/verify.html` · `web/static/stream.js` · F-205 | 폴링이 연속 커서를 최신 100건으로 덮어 100건 초과 SSE 누락이 여전히 복구되지 않음 | 수정완료 | F-233_sse_poll_cursor_lost.md |
 | F-234 | 오류 | 코드버그 | `tools/web_source_checks.py` · F-204 | 화살표 함수 헬퍼의 미승인 실행 폼을 두 웹 출구가 놓침 | 수정완료 | F-234_pending_arrow_helper_bypass.md |
 | F-235 | 오류 | 코드버그 | `tools/web_source_checks.py` · F-230 | 프로토콜 상대 URL의 외부 CSS CDN을 두 웹 출구가 놓침 | 수정완료 | F-235_protocol_relative_css_cdn.md |
+| F-236 | 치명 | 요건위반 | 제출 브랜치 `Branch_1` · 단계 8 산출물 | 단계 8 산출물(AVR 2종·board_verify·DHT22 로그)이 제출 브랜치에 없음 | 수정완료 | F-236_stage8_missing_from_submission_branch.md |
+| F-237 | 오류 | 코드버그 | AVR 2종 `uart_write()` | 버퍼 포화(availableForWrite()==0) 시 n=len으로 떨어져 블로킹 쓰기 — §5.8 위반 | 수정완료 | F-237_avr_uart_zero_capacity_blocks.md |
+| F-238 | 오류 | 코드버그 | `tools/where.py` | 단계 8 빌드 판정이 존재하지 않는 Makefile을 요구해 항상 실패 — board_verify와 모순 | 수정완료 | F-238_stage8_build_exit_has_no_makefiles.md |
+| F-239 | 오류 | 문서불일치 | `where.py`·`BUILD.md`·펌웨어 설계서 | SRAM 예산이 40%(슬라이스)와 55%(전체 globals)로 분기 | 수정완료 | F-239_sram_budget_40_55_drift.md |
+| F-240 | 위험 | 요건위반 | `.gitignore`·`tools/offline_verify.py` | 런타임 DB가 제출 대상에 남고 검증기가 탐지·제외하지 못함 | 수정완료 | F-240_runtime_databases_packaging_risk.md |
 
 > **결번**: F-018 ~ F-021. 규약 §2에 따라 번호는 재사용하지 않는다.
 > 직전 라운드에서 Claude가 수신한 인덱스에는 해당 행이 존재하지 않았다 (F-023 처리 기록 참조).
@@ -261,11 +266,11 @@
 
 | 상태 | 건수 | | 분류 | 건수 |
 |---|---|---|---|---|
-| 신규 | 0 | | 요건위반 | 3 |
-| 확인 | 0 | | 코드버그 | 132 |
-| 수정완료 | 210 | | 문서불일치 | 77 |
+| 신규 | 0 | | 요건위반 | 5 |
+| 확인 | 0 | | 코드버그 | 134 |
+| 수정완료 | 215 | | 문서불일치 | 78 |
 | 기각 | 1 | | 표준결함 | 19 |
-| 보류 | 1 | | **합계** | **231** |
+| 보류 | 1 | | **합계** | **236** |
 | 이관 | 19 | | | |
 
 > F-052 는 요청받은 문서화를 마쳐 `수정완료`지만, 그 안에 **보류 결정 1건**(온실관리 기반 인가 제약)이
@@ -286,6 +291,7 @@
 
 | 일시 | 라운드 | 내용 |
 |---|---|---|
+| 2026-08-17 | 단계 8 GPT 재검증 F-236~F-240 | 5건 전량 처리(기각 0). 요건위반(F-236·F-240)→코드버그(F-237·F-238)→문서불일치(F-239) 순. **F-236(치명, 요건위반)**: 신고 시점엔 단계 8 산출물이 `Branch_2`에만 있고 제출 브랜치 `Branch_1`에 없었으나, 직전 세션의 브랜치 복구·push로 `1e69a1e`가 AVR 2종·`board_verify.py`·`session_01_uno_dht22.jsonl`·F-198 선언·DHT22 전량을 `Branch_1` HEAD에 포함(origin과 0 ahead/0 behind)—전제가 해소돼 수정완료. **F-237(오류, 코드버그)**: 두 AVR `uart_write()`가 `n = (avail>0 && avail<len) ? avail : len`이라 `availableForWrite()==0`일 때 `n=len`으로 떨어져 포화 버퍼에 `Serial.write(buf,len)`—공간이 빌 때까지 블로킹해 수신·ACK·타이머 지연(§5.8 위반). `if (avail<=0) return 0;` 가드 후 `n=min(avail,len)`으로 수정, `board_verify.py`에 정적 회귀 검사(가드 존재 확인) 신설—11/12 PASS. **F-238(오류, 코드버그)**: `where.py::_build_and_size`가 존재하지 않는 Makefile(설계상 보드는 Arduino IDE/arduino-cli 빌드, BUILD.md §2)을 요구해 항상 FAIL, 실제 게이트 `board_verify.py`(run_all이 glob으로 실행, 55% 실측)와 모순. 죽은 `_build_and_size`·40% 상수 제거, 물리 빌드는 MANUAL로 남기고 크기는 board_verify에 위임—`check_stage_8`이 MANUAL·board_verify OK·MANUAL로 정리. **F-239(오류, 문서불일치)—판정: 55% 전체-globals가 정본**(§1.5·§3.4·board_verify): `where.py`(40%)·`BUILD.md:74`·`펌웨어_설계서:1129`의 스테일 40%를 55% 전체-globals로 동기화, 40% 슬라이스는 `firmware_verify.py` 전용으로 분리 명기. **F-240(위험, 요건위반)**: `.gitignore *.db`·추적 DB 0개는 이미 반영됐으나, `offline_verify.py`가 gitignore를 무시한 폴더 walk로 온디스크 DB 6개(128MB)를 크기에 포함(138.9MB)하고 탐지도 못 했다—`git ls-files --others --ignored`로 무시 파일을 walk에서 제외(138.9→**16.5MB**, 실제 git-archive와 일치), `check_no_tracked_databases()` 신설(추적 DB 0 확인), `test_offline_verify.py` 회귀 2종 신설. 검증: `board_verify.py` 11/12(FAIL 0) · `test_where.py` 4/4 · `test_offline_verify.py` 2/2 · `where.check_stage_8` 정리 확인. |
 | 2026-08-14 | 신규 오류 F-233~F-235 | 3건 전량 수정완료. F-233은 최초 SSE 단절 커서를 폴링 표시 목록과 분리해 성공적인 전 페이지 복구 뒤에만 해제한다. F-234는 화살표 함수 헬퍼를 미승인 실행 경로 호출 그래프에 포함하고, F-235는 CSS 프로토콜 상대 외부 URL을 차단한다. 세 반례를 메모리에서 재주입해 모두 탐지됨을 확인했다. 검증: 집중 pytest 8/8 · 웹 설계 75/75 · 웹 실물 27/27 · tools 49/49 · dev 78/78 · tools/run_all.py 20/20. |
 | 2026-08-14 | 오류 수정 9단계 | F-207~F-209·F-223·F-224·F-229 문서불일치 6건 전량 수정완료. 골든 명세 수치를 실제 58건·판정 9/1/43으로 동기화하고 문서 선언 대조 3건을 추가했다. 사용자 승인 뒤 연결 실패 응답의 9byte 고정부 계약과 미규정 결정 기록 위치를 정정했으며 동작·타입은 바꾸지 않았다. 아키텍처 실행 결과 소유자와 디바이스 등록 트리거, repository 주석을 실제 경로에 맞췄다. 0937 대조표는 현재 `link`·`ingest`·서비스 진입점을 기록하고 검증기가 7개 Python 소스 AST를 독립 대조한다. 결함 6종 재주입 전부 exit 1/FAIL 확인 후 원복. 검증: 골든 34/34 · 서비스 44/44 · 계약 64/64 · F-208 집중 pytest 16/16 · SIAP·backend·sim 403/403 · tools 46/46 · dev 78/78 · `tools/run_all.py` 20/20. |
 | 2026-08-14 | 오류 수정 8단계 | F-204·F-230~F-232(오류) 처리 후 F-205(위험) 처리, 전량 수정완료. 공통 웹 소스 검사기에 헬퍼 호출 그래프·CSS 외부 참조·인라인 비트 언팩·색 외 상태 표기·SSE 전 페이지 복구 검사를 추가했다. 결함 5종을 두 웹 출구에 각각 재주입해 전부 종료 코드 1로 차단됨을 확인했고, `collectAllPages()` 실제 JavaScript 실행으로 151건을 2페이지에서 전량 회수했다. 검증: 웹 실물 26/26 · 웹 설계 74/74 · 도구 46/46 · backend 251/251 · SIAP·sim 150/150 · `tools/run_all.py` 20/20 · `fix_log/meta_verify.py` 111/111. 브라우저 인스턴스 0개로 4화면 수동 렌더 확인은 수행 불가. |

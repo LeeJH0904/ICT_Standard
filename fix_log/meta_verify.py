@@ -325,6 +325,7 @@ try:
     import offline_verify as _ov
     import where as _wh
     import layer_verify as _lv
+    import board_verify as _bv
 
     # F-105 회귀 — 상대 import(level>0)와 정적 문자열 동적 import
     # (importlib.import_module/__import__)가 계층 위반으로 잡히는가. src 를
@@ -446,46 +447,52 @@ try:
       len(_r7) >= 3, f"{len(_r7)}건: {[d for d, *_ in _r7]}")
     t("F-098 회귀 - 단계 7의 렌더 확인 항목이 MANUAL(None)이지 자동 통과가 아님",
       any(ok is None for _, ok, _ in _r7), "")
+    # F-238/F-239 로 단계 8 구조가 바뀌었다 — 죽은 Makefile 빌드(_build_and_size,
+    # 40% 지표)를 제거하고 avr-size↔예산 실측은 board_verify.py(55% 정본)에 위임,
+    # 물리 3종 빌드는 툴체인 의존이라 MANUAL 로 남겼다. F-098 의 원 취지("board_verify
+    # 하나로 쪼그라들지 않는다 — ①빌드·③로그도 있다")는 그대로 유지되는지 본다.
     _r8 = _wh.check_stage_8()
-    t("F-098 회귀 - 단계 8 출구가 board_verify.py 하나가 아니라 보드 3종 빌드를 포함",
-      len(_r8) >= 5, f"{len(_r8)}건: {[d for d, *_ in _r8]}")
-    t("F-098 회귀 - 단계 8의 실측 로그 항목이 MANUAL(None)이지 자동 통과가 아님",
-      any(ok is None for _, ok, _ in _r8), "")
+    _r8_labels = [d for d, *_ in _r8]
+    t("F-098 회귀 - 단계 8 출구가 board_verify.py 하나가 아니라 빌드(①)·로그(③)도 포함",
+      len(_r8) >= 3
+      and any("board_verify.py" in d for d in _r8_labels)
+      and any("빌드" in d for d in _r8_labels)
+      and any(("replay" in d or "logs" in d) for d in _r8_labels),
+      f"{len(_r8)}건: {_r8_labels}")
+    t("F-098 회귀 - 단계 8의 실측 로그·물리 빌드 항목이 MANUAL(None)이지 자동 통과가 아님",
+      sum(1 for _, ok, _ in _r8 if ok is None) >= 2, "")
 
     # F-104 반례 — avr-size 출력을 실제로 파싱해 SRAM 예산과 비교하는가.
     # (이전에는 avr-size 종료 코드 0만 보고, 999,999,999 byte 도 통과시켰다.)
+    # F-238/F-239 이후 이 파싱·예산 비교는 board_verify.py(_parse_sram_used·
+    # _check_avr_size, 전체-globals 55%)가 정본으로 소유한다 — where.py 가 아니다.
     _huge = "   text\t   data\t    bss\t    dec\t    hex\tfilename\n" \
             "999999999\t999999999\t999999999\t2999999997\tb2d05dff\tfirmware.elf\n"
     _small = "   text\t   data\t    bss\t    dec\t    hex\tfilename\n" \
              "8900\t20\t300\t9220\t2404\tfirmware.elf\n"
-    t("F-104 회귀 - avr-size 파싱이 정상 값을 뽑음", _wh._parse_avr_size(_small) == (8900, 20, 300))
-    with tempfile.TemporaryDirectory() as _tmp5:
-        _bdir = Path(_tmp5) / "arduino_sensor_node"
-        _bdir.mkdir()
-        (_bdir / "Makefile").write_text("all:\n", encoding="utf-8")
-        (_bdir / "firmware.elf").write_bytes(b"")
-        _orig_run = _wh._run
-        def _fake_run(cmd, cwd=None, timeout=180, _out=_huge):
-            if cmd[0] == "make": return True, ""
-            if cmd[0] == "avr-size": return True, _out
-            return _orig_run(cmd, cwd, timeout)
-        _wh._run = _fake_run
-        try:
-            _r104_bad = _wh._build_and_size(_bdir)
-            _wh._run = lambda cmd, cwd=None, timeout=180, _out=_small: (
-                (True, "") if cmd[0] == "make" else
-                (True, _out) if cmd[0] == "avr-size" else _orig_run(cmd, cwd, timeout))
-            _r104_good = _wh._build_and_size(_bdir)
-        finally:
-            _wh._run = _orig_run
-    _budget_bad = [r for r in _r104_bad if "SRAM 예산" in r[0]]
-    _budget_good = [r for r in _r104_good if "SRAM 예산" in r[0]]
-    t("F-104 회귀 - 999,999,999B 짜리 가짜 avr-size 출력을 예산 초과로 차단",
-      bool(_budget_bad) and _budget_bad[0][1] is False,
-      str(_budget_bad[0]) if _budget_bad else "SRAM 예산 항목 자체가 없음(F-104 미수정)")
-    t("F-104 회귀 - 정상 크기(320B/2048B)는 통과",
-      bool(_budget_good) and _budget_good[0][1] is True,
-      str(_budget_good[0]) if _budget_good else "SRAM 예산 항목 자체가 없음")
+    t("F-104 회귀 - avr-size(berkeley) 파싱이 data+bss 를 뽑음",
+      _bv._parse_sram_used(_small) == 320)
+    t("F-104 회귀 - Arduino IDE 'Global variables use' 형식도 파싱됨",
+      _bv._parse_sram_used("Global variables use 1025 bytes (50%) of dynamic memory") == 1025)
+    # board_verify._check_avr_size 는 <board>/size_report.txt 를 읽어 55% 와 대조한다.
+    # FW_DIR 를 임시 디렉터리로 갈아끼워 가짜/정상 실측을 실제 판정 경로에 태운다.
+    def _budget_verdict(report_text: str):
+        with tempfile.TemporaryDirectory() as _tmp5:
+            _bdir = Path(_tmp5) / "arduino_sensor_node"
+            _bdir.mkdir(parents=True)
+            (_bdir / "size_report.txt").write_text(report_text, encoding="utf-8")
+            _orig_fw = _bv.FW_DIR
+            _bv.FW_DIR = Path(_tmp5)
+            try:
+                return _bv._check_avr_size()
+            finally:
+                _bv.FW_DIR = _orig_fw
+    _v_bad = _budget_verdict(_huge)
+    _v_good = _budget_verdict(_small)
+    t("F-104 회귀 - 999,999,999B 짜리 가짜 avr-size 실측을 55% 예산 초과로 차단",
+      _v_bad[1] is False, str(_v_bad))
+    t("F-104 회귀 - 정상 크기(320B/2048B)는 55% 예산 안으로 통과",
+      _v_good[1] is True, str(_v_good))
 except Exception as e:
     t("F-097·F-098·F-103·F-104 회귀 테스트 로드 및 실행", False, f"{type(e).__name__}: {e}")
 

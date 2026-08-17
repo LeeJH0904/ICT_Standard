@@ -373,97 +373,25 @@ def check_stage_7() -> list[CheckResult]:
     ]
 
 
-# CLAUDE.md §2 디렉터리 구조 정본 — firmware/ 아래 보드 3종 디렉터리 이름.
-# backend/ 노드 종류 하드코딩 금지(§1-6)는 서버 코드에 적용되며, 이미 설계로
-# 고정된 firmware 디렉터리 이름을 진단 스크립트가 아는 것은 그 규칙과 무관하다.
-BOARD_DIRS = ["arduino_sensor_node", "arduino_actuator_node", "esp32_node"]
-
-# 펌웨어 설계서 §3.1(타깃 제원)·§3.4(정적 메모리 표) 의 정본 SRAM 용량과,
-# 개발_착수_지시서 §1.5 의 예산선("SRAM 40% 이하")을 그대로 옮긴다. ESP32는
-# §3.1 이 "여유가 있으므로 제약이 되지 않는다"고 명시해 대상에서 뺀다 — 대신
-# avr-size 자체가 AVR 전용 도구라 ESP32 .elf 에는 애초에 적용하지 않는다.
-SRAM_BUDGET_BYTES = {"arduino_sensor_node": 2048, "arduino_actuator_node": 2048}
-SRAM_BUDGET_RATIO = 0.40
-
-# avr-size 기본(berkeley) 출력의 데이터 행: "   text   data    bss    dec    hex  file"
-_AVR_SIZE_RE = re.compile(r"^\s*(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+[0-9A-Fa-f]+\s+\S+\s*$")
-
-
-def _parse_avr_size(output: str) -> tuple[int, int, int] | None:
-    """avr-size 출력에서 (text, data, bss) 를 뽑는다. 헤더 행은 숫자로 시작하지
-    않으므로 자동으로 걸러진다. F-104: 이전에는 이 파싱이 아예 없어 avr-size
-    가 종료 코드 0만 내면(크기와 무관하게) 통과했다 — 999,999,999 byte 짜리
-    가짜 출력도 그대로 OK였다."""
-    for line in output.splitlines():
-        m = _AVR_SIZE_RE.match(line)
-        if m:
-            return int(m.group(1)), int(m.group(2)), int(m.group(3))
-    return None
-
-
-def _build_and_size(board_dir: Path) -> list[CheckResult]:
-    """보드 디렉터리를 실제로 재빌드하고 avr-size 를 실측한 뒤, AVR 보드 2종은
-    펌웨어 설계서 §3.1·§3.4 의 SRAM 예산과 실제로 비교한다. 결과를 재사용하지
-    않는다 — §1.5 "실측값이 설계서의 추정치를 대체한다"의 실측이 매번 새로 나와야
-    한다."""
-    name = board_dir.name
-    if not board_dir.exists():
-        return [(f"{name}: 빌드", False, "디렉터리 없음")]
-    makefile = board_dir / "Makefile"
-    if not makefile.exists():
-        return [(f"{name}: 빌드", False, "Makefile 없음")]
-
-    results: list[CheckResult] = []
-    ok, out = _run(["make"], cwd=board_dir, timeout=180)
-    results.append((f"{name}: make", ok, out if not ok else ""))
-    if not ok:
-        return results
-
-    artifacts = list(board_dir.glob("*.elf"))
-    if not artifacts:
-        results.append((f"{name}: 빌드 산출물(.elf)", False, ".elf 없음"))
-        return results
-    size_ok, size_out = _run(["avr-size", str(artifacts[0])], cwd=board_dir)
-    results.append((f"{name}: avr-size 실측", size_ok, size_out))
-    if not size_ok:
-        return results
-
-    budget = SRAM_BUDGET_BYTES.get(name)
-    if budget is None:
-        # ESP32 — §3.1 상 제약이 아니므로 예산 비교 항목 자체를 만들지 않는다
-        # (자동화 불가를 MANUAL 로 남기는 것과 다르다: 여기는 설계서가 이미
-        # "제약 아님"이라고 판정을 끝낸 경우다).
-        return results
-
-    parsed = _parse_avr_size(size_out)
-    if parsed is None:
-        results.append((f"{name}: avr-size 출력 해석", False,
-                         f"text/data/bss 파싱 실패:\n{size_out}"))
-        return results
-    text, data, bss = parsed
-    sram_used = data + bss
-    ratio = sram_used / budget
-    within = ratio <= SRAM_BUDGET_RATIO
-    results.append((
-        f"{name}: SRAM 예산 대조 (실측 {sram_used}B / {budget}B = {ratio:.1%}, "
-        f"상한 {SRAM_BUDGET_RATIO:.0%})",
-        within,
-        "" if within else
-        (f"펌웨어 설계서 §3.1·§3.4, 개발_착수_지시서 §1.5 SRAM 40% 예산 초과 "
-         f"(text={text} data={data} bss={bss})"),
-    ))
-    return results
-
-
 def check_stage_8() -> list[CheckResult]:
     # §3.10 출구: ① 3종 빌드 + avr-size 실측이 설계서 예산 안
-    # ② board_verify.py — core/ 오브젝트 해시 3종 동일
+    # ② board_verify.py — core/ 소스·오브젝트 경계 + avr-size ↔ SRAM 예산(전체 globals 55%)
     # ③ project_code/logs/*.jsonl 실측 캡처가 replay 로 재생
     # F-098: 이전에는 ②(board_verify.py) 만 실행하고 ①③은 아예 실행하지 않았다.
+    # F-238/F-239: ①의 "빌드 + avr-size 실측"은 board_verify.py 가 정본으로 소유한다
+    #   — size_report.txt 를 전체-globals 55%(펌웨어 설계서 §3.4, 개발_착수_지시서
+    #   §1.5) 와 대조하고, 툴체인·실측이 없으면 SKIP 한다. 여기서 별도로 Makefile
+    #   빌드(40% 슬라이스 지표)를 다시 돌리던 _build_and_size 는 (가) 보드에 Makefile
+    #   이 설계상 없어(BUILD.md §2, Arduino IDE/arduino-cli 빌드) 항상 실패했고
+    #   (나) 예산 지표(40%)가 정본(55%)과 어긋나 board_verify.py 와 모순됐다. 제거하고
+    #   물리 빌드는 사람 확인(MANUAL)으로 남긴다.
     results: list[CheckResult] = []
-    firmware_dir = REPO_ROOT / "project_code" / "firmware"
-    for board_name in BOARD_DIRS:
-        results.extend(_build_and_size(firmware_dir / board_name))
+    results.append(_manual(
+        "보드 3종 실물 빌드 성공 (Arduino IDE / arduino-cli, BUILD.md §2)",
+        "AVR 2종·ESP32 는 Makefile 없이 Arduino 툴체인으로 빌드한다(설계 결정). "
+        "빌드 자체는 심사자 툴체인에서 사람이 확인하고, avr-size 실측(전체 globals "
+        "55% 예산)은 <board>/size_report.txt 로 커밋하면 board_verify.py 가 자동 대조한다.",
+    ))
     results.append(_run_py("tools/board_verify.py"))
     results.append(_manual(
         "project_code/logs/*.jsonl 실측 캡처가 replay 로 재생",

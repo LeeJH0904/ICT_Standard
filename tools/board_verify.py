@@ -78,6 +78,9 @@ _PLATFORM_HEADER_RE = re.compile(
 _INCLUDE_RE = re.compile(r'^\s*#\s*include\s*[<"]([^">]+)[">]')
 # 보드 소스에서 디바이스 Subtype 을 뽑는다 — subtype_registry.h 의 열거 이름 참조.
 _SUBTYPE_TOKEN_RE = re.compile(r'\bSIAP_SUBTYPE_[A-Z0-9_]+\b')
+# uart_write 정의 본문을 뽑는다(F-237 회귀). 시그니처의 괄호 다음 첫 `{` 부터
+# 열(column) 0 의 닫는 `}` 까지 — uart_write 본문엔 중첩 블록이 없다.
+_UART_WRITE_RE = re.compile(r'uart_write\s*\([^)]*\)\s*\{(.*?)\n\}', re.DOTALL)
 
 
 def _strip_comments(text: str) -> str:
@@ -158,6 +161,30 @@ def _check_board_uses_platform(name: str) -> tuple[bool, str]:
     if not uses_platform:
         return False, "플랫폼 헤더를 쓰지 않음 — 전송 계층 바인딩이 비어 있다"
     return True, ""
+
+
+# ── C보강. uart_write 논블로킹 (F-237 회귀) ─────────────────────────
+def _check_uart_nonblocking() -> list[str]:
+    """AVR 보드의 uart_write 가 버퍼 포화(availableForWrite()==0)에서 블로킹하지
+    않는지 정적으로 확인한다(펌웨어 설계서 §5.8, F-237). 여유가 없을 때 즉시 0을
+    돌려주는 가드(`avail <= 0` → return 0)가 있어야 한다 — 이 가드가 없으면 쓰기
+    길이가 len 으로 떨어져 포화 버퍼에 블로킹 쓰기가 된다. 정적 검사라 avr 툴체인
+    없이 항상 돈다(F-237 재발 방지)."""
+    bad: list[str] = []
+    for name in ("arduino_sensor_node", "arduino_actuator_node"):
+        ino = _board_dir(name) / f"{name}.ino"
+        if not ino.exists():
+            continue
+        body_m = _UART_WRITE_RE.search(_strip_comments(ino.read_text(encoding="utf-8", errors="replace")))
+        if not body_m:
+            bad.append(f"{name}: uart_write 정의를 찾지 못함")
+            continue
+        body = body_m.group(1)
+        if "availableForWrite" not in body:
+            bad.append(f"{name}: uart_write 가 availableForWrite 로 여유를 확인하지 않음")
+        elif not (re.search(r"avail\s*<=\s*0\b", body) and re.search(r"return\s+0\b", body)):
+            bad.append(f"{name}: 여유 0에서 0을 돌려주는 논블로킹 가드(avail <= 0)가 없음 (F-237)")
+    return bad
 
 
 # ── C. 보드 완결성 ──────────────────────────────────────────────────
@@ -347,6 +374,10 @@ def main() -> int:
     # C
     missing = _check_completeness()
     t("C. 데모 보드 3종이 §7.2~§7.4 필수 파일을 갖춤", not missing, "; ".join(missing))
+
+    # C보강 — uart_write 논블로킹 가드(F-237)
+    bad_uart = _check_uart_nonblocking()
+    t("C. AVR uart_write 가 버퍼 포화에서 블로킹하지 않음 (§5.8, F-237)", not bad_uart, "; ".join(bad_uart))
 
     # B 보강 — 존재하는 보드가 실제로 core+플랫폼을 결선했는가
     for name in _present_boards(DEMO_BOARDS):

@@ -71,8 +71,12 @@ C 링크로 부르기 위해서다. 하드웨어를 만지는 콜백(`uart_read_
 
 ## 4. 빌드 후 `avr-size` 실측 (출구 ①)
 
-AVR 보드 2종은 SRAM 예산(2048B의 40% = 819B) 안이어야 한다(펌웨어 설계서 §3.5,
-개발_착수_지시서 §1.5). 빌드 후 실측을 각 보드 디렉터리에 커밋한다:
+AVR 보드 2종은 SRAM 예산(전체 globals 기준 2048B의 55% = 1126B) 안이어야 한다
+(펌웨어 설계서 §3.4, 개발_착수_지시서 §1.5). 여기서 예산의 분모는 `avr-size` /
+Arduino "Global variables use" 가 보고하는 **전체 globals**(Arduino 런타임 포함)다 —
+`tools/board_verify.py` 가 `size_report.txt` 를 이 55% 와 실측 대조한다. (§3.5 표의
+40%는 이와 분모가 다른 *펌웨어 데이터 슬라이스* 추정 지표로, `firmware_verify.py`
+전용이다. F-239.) 빌드 후 실측을 각 보드 디렉터리에 커밋한다:
 
 ```bash
 avr-size <빌드된 .elf>        # 또는 arduino-cli 빌드 산출물의 .elf

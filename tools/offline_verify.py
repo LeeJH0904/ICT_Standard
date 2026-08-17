@@ -7,6 +7,10 @@
   3) .hex/.bin/.elf/.exe/.apk 0개
   4) CLAUDE.md §2.1 제외 대상(표준 문서 md 파일/ · .omc/ · __pycache__/ · _to_delete/)이
      .gitignore 와 패키징에서 빠지는가
+  5) 런타임/디버그 SQLite DB(*.db 등)가 git 에 추적되지 않는가 (F-240·F-160)
+
+크기·실행파일 스캔은 git 이 무시하는 파일(런타임 DB 등)을 제외하고 계산해 실제
+제출물(git 추적 파일)과 일치시킨다 (F-240).
 
 실행: python tools/offline_verify.py   (저장소 루트에서)
 종료 코드: 전부 통과 0 / 하나라도 실패 1
@@ -14,6 +18,7 @@
 
 from __future__ import annotations
 
+import functools
 import re
 import shutil
 import subprocess
@@ -60,6 +65,31 @@ REQUIRED_PACKAGES = ["fastapi", "uvicorn", "pyserial"]
 MAX_ZIP_BYTES = 200 * 1024 * 1024
 
 
+@functools.lru_cache(maxsize=1)
+def _gitignored_files() -> frozenset[Path]:
+    """git 이 무시하는(추적하지 않고 .gitignore 에 걸리는) 파일의 절대경로 집합.
+    실제 제출물은 git 추적 파일(또는 git archive)이므로, 저장소 폴더를 그대로 walk
+    하는 이 검증기도 같은 기준으로 무시 파일을 빼야 크기·실행파일 스캔이 실제
+    제출물과 일치한다 (F-240 — 런타임 SQLite DB 6개가 .gitignore 됐는데도 폴더
+    walk 에는 잡혀 138.9MB 로 부풀던 문제). git 이 없으면 빈 집합(사전 검사 생략)."""
+    git_exe = shutil.which("git")
+    if not git_exe:
+        return frozenset()
+    proc = subprocess.run(
+        [git_exe, "ls-files", "--others", "--ignored", "--exclude-standard", "-z"],
+        cwd=str(REPO_ROOT), capture_output=True, text=True,
+        encoding="utf-8", errors="replace", timeout=60,
+    )
+    if proc.returncode != 0:
+        return frozenset()
+    out: set[Path] = set()
+    for rel in proc.stdout.split("\0"):
+        rel = rel.strip()
+        if rel:
+            out.add((REPO_ROOT / rel).resolve())
+    return frozenset(out)
+
+
 def _is_excluded(path: Path) -> bool:
     parts = path.relative_to(REPO_ROOT).parts
     for part in parts:
@@ -69,6 +99,9 @@ def _is_excluded(path: Path) -> bool:
             prefix = pattern.rstrip("*")
             if part.startswith(prefix):
                 return True
+    # F-240 — git 이 무시하는 파일(런타임 DB 등)은 실제 제출물에 들어가지 않는다.
+    if path.resolve() in _gitignored_files():
+        return True
     return False
 
 
@@ -327,12 +360,38 @@ def check_gitignore_excludes() -> tuple[bool, str]:
     return True, f"제외 대상 {n}종이 git check-ignore 로 실제 확인됨 (.git/ 은 gitignore 대상 아님 - 패키징 스캔에서만 제외)"
 
 
+def check_no_tracked_databases() -> tuple[bool, str]:
+    """런타임/디버그 SQLite DB 가 git 에 추적되면 전체 소스 ZIP 에 실행 데이터가
+    섞인다(F-240·F-160, 공고문 "빌드 산출물·실행파일 제외"). .gitignore 가 *.db 를
+    무시해도 과거처럼 실수로 커밋되면(`git add -f` 등) 무시가 무력화되므로, 추적
+    목록(git ls-files)을 직접 확인해 하나라도 있으면 실패시킨다 — DB 내용·크기는
+    실행마다 달라 재현성·제출물 청결성을 흔든다."""
+    git_exe = shutil.which("git")
+    if not git_exe:
+        return False, "git 실행 파일을 찾을 수 없어 추적 DB 를 확인할 수 없음"
+    proc = subprocess.run(
+        [git_exe, "ls-files", "-z"],
+        cwd=str(REPO_ROOT), capture_output=True, text=True,
+        encoding="utf-8", errors="replace", timeout=60,
+    )
+    if proc.returncode != 0:
+        return False, f"git ls-files 실패: {proc.stderr.strip()}"
+    db_suffixes = (".db", ".db-wal", ".db-shm", ".db-journal")
+    tracked_db = [rel.strip() for rel in proc.stdout.split("\0")
+                  if rel.strip() and rel.strip().endswith(db_suffixes)]
+    if tracked_db:
+        return False, (f"git 이 추적 중인 런타임 DB {len(tracked_db)}개 — "
+                       f"`git rm --cached` 로 제외: {tracked_db[:10]}")
+    return True, "추적 중인 *.db/-wal/-shm/-journal 0개 (.gitignore 로 제외 확인)"
+
+
 CHECKS = [
     ("휠 3종 + 전이 의존성 존재(파일명)", check_wheels_present),
     ("오프라인 설치 실제 성공(win/linux, py311~313)", check_offline_install),
     ("제출 zip 예상 크기 <= 200MB", check_zip_size),
     ("실행파일(.hex/.bin/.elf/.exe/.apk) 0개", check_no_binaries),
     ("§2.1 제외 대상이 .gitignore 에 반영", check_gitignore_excludes),
+    ("런타임 DB(*.db 등)가 git 에 추적되지 않음 (F-240)", check_no_tracked_databases),
 ]
 
 

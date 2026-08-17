@@ -103,10 +103,13 @@ extern "C" int8_t uart_read_byte(void *ctx, uint8_t *out) {
 
 extern "C" int16_t uart_write(void *ctx, const uint8_t *buf, uint16_t len) {
     (void)ctx;
-    /* 논블로킹 부분 쓰기 — 버퍼에 들어갈 만큼만 쓴다(§2.2 write 계약). */
+    /* 논블로킹 부분 쓰기 — 버퍼에 들어갈 만큼만 쓴다(§2.2 write 계약, §5.8).
+       F-237: 여유가 0이면 한 바이트도 쓰지 않고 0을 돌려준다. 이 가드가 없으면
+       avail==0 일 때 n=len 으로 떨어져 포화된 버퍼에 Serial.write(buf,len) 을
+       호출, 공간이 빌 때까지 블로킹해 그동안 수신·ACK·타이머가 지연된다. */
     int avail = Serial.availableForWrite();
-    uint16_t n = (avail > 0 && (uint16_t)avail < len) ? (uint16_t)avail : len;
-    if (n == 0u) return 0;
+    if (avail <= 0) return 0;
+    uint16_t n = ((uint16_t)avail < len) ? (uint16_t)avail : len;
     return (int16_t)Serial.write(buf, n);
 }
 
