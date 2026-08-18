@@ -60,8 +60,8 @@
         <textarea id="draft-text" name="draft_text" rows="3"></textarea>
       </div>
       <div class="field">
-        <label for="draft-cond">조건식 (선택)</label>
-        <input id="draft-cond" name="condition_expr" placeholder="예: forecast.tmax > 33">
+        <label for="draft-cond">실행 판단 조건 (선택)</label>
+        <input id="draft-cond" name="condition_expr" placeholder="예: 실내 온도 30℃ 이상">
       </div>
       <button type="submit" class="primary">초안 생성</button>
       <p id="draft-status" class="hint" role="status"></p>
@@ -160,7 +160,7 @@ function pendingCardHtml(rule) {
       <summary>승인하기</summary>
       <form class="approve-form" data-rule="${id}">
         <div class="field">
-          <label for="cond-${id}">조건식</label>
+          <label for="cond-${id}">실행 판단 조건</label>
           <input id="cond-${id}" name="condition_expr" required value="${escapeHtml(rule.condition_expr ?? "")}">
         </div>
         <div class="field">
@@ -206,7 +206,7 @@ function approvedCardHtml(rule) {
     <p class="badge normal">승인됨</p>
     <p class="hint">generation=${escapeHtml(rule.generation ?? "—")} · 승인자 ${escapeHtml(rule.approved_by ?? "—")} · ${formatDateTime(rule.approved_at)}</p>
     <p class="readonly-text">${escapeHtml(rule.draft_text)}</p>
-    <p>조건: ${escapeHtml(rule.condition_expr ?? "—")} / 명령: ${escapeHtml(actionSummary(rule.action))} / 대상: ${escapeHtml(installLabel(rule.target_install_id))}</p>
+    <p>실행 판단 조건: ${escapeHtml(rule.condition_expr ?? "—")} / 명령: ${escapeHtml(actionSummary(rule.action))} / 대상: ${escapeHtml(installLabel(rule.target_install_id))}</p>
     <button type="button" class="primary run-rule" data-rule="${id}">실행</button>
     <p class="hint run-status" data-rule-status="${id}"></p>
   </article>`;
