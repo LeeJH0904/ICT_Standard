@@ -6,7 +6,7 @@
 > **불변식**: `표준결함` 행 수 = `CLAUDE.md` §3.6 총계 = 명세서의 장애 지점 합계
 > **자동 검사**: `python fix_log/meta_verify.py` — 인덱스·상세·설계 문서 수치를 기계 대조한다 (F-043)
 
-**다음 ID: `F-242`**
+**다음 ID: `F-250`**
 
 ## 표준결함 (19건) — 고칠 수 없음. 기획서 자산
 
@@ -257,6 +257,14 @@
 | F-239 | 오류 | 문서불일치 | `where.py`·`BUILD.md`·펌웨어 설계서 | SRAM 예산이 40%(슬라이스)와 55%(전체 globals)로 분기 | 수정완료 | F-239_sram_budget_40_55_drift.md |
 | F-240 | 위험 | 요건위반 | `.gitignore`·`tools/offline_verify.py` | 런타임 DB가 제출 대상에 남고 검증기가 탐지·제외하지 못함 | 수정완료 | F-240_runtime_databases_packaging_risk.md |
 | F-241 | 오류 | 코드버그 | `sim/virtual_node.py`·`sim/_wire.py` | simulate 모드 가상 노드가 `REQ_SET_DEVICE_PROPERTY`를 미처리(else)해 설정 적용이 504 타임아웃 — settings 페이지가 유일 실행 모드에서 미동작 | 수정완료 | F-241_sim_device_property_no_handler.md |
+| F-242 | 오류 | 코드버그 | 제출본 `siap/codec.py` · `siap/link.py` | 로컬과 다른 GCG ID의 연결 요청을 위반 없이 SUCCESS 승인하고 응답 헤더·페이로드 GCG ID도 충돌 | 신규 | F-242_gcg_id_not_validated.md |
+| F-243 | 오류 | 문서불일치 | 제출본 `README.md` · `backend/api.py` | 0937 6.1 전체 적용 표기와 달리 장치 삭제 능력이 없음 | 신규 | F-243_ems_delete_capability_missing.md |
+| F-244 | 오류 | 문서불일치 | 제출본 `README.md` · `backend/services/dms.py` | 0937 6.2 전체 적용 표기와 달리 수집 데이터 수정·삭제 능력이 없음 | 신규 | F-244_dms_update_delete_missing.md |
+| F-245 | 오류 | 문서불일치 | 제출본 `README.md` · `backend/services/mms.py` · `backend/api.py` | 0937 6.3 전체 적용 표기와 달리 모델 등록·수정·인증·사용량 집계 능력이 없음 | 신규 | F-245_mms_capabilities_incomplete.md |
+| F-246 | 오류 | 코드버그 | 제출본 `firmware/tests/dump_golden.c` | 블록 주석이 9행에서 조기 종료되어 C/Python 골든 교차검증 덤프가 컴파일 불가 | 신규 | F-246_dump_golden_comment_breaks_build.md |
+| F-247 | 위험 | 코드버그 | 제출본 `siap/codec.py` · `siap/link.py` · `backend/ingest.py` | Device Type/Subtype 불일치 요청을 SUCCESS 승인한 뒤 백엔드에서 조용히 폐기 | 신규 | F-247_type_subtype_success_then_drop.md |
+| F-248 | 위험 | 문서불일치 | 제출본 `README.md` | 0937 선택 적용·후속 과제·FOS 제외 범위를 밝히지 않아 전체 준수 주장으로 오인 가능 | 신규 | F-248_readme_0937_scope_overstated.md |
+| F-249 | 위험 | 문서불일치 | 제출본 `backend/schema.sql` | 환경 측정 서브타입 CHECK는 10종인데 설명 주석은 9종으로 표기 | 신규 | F-249_environment_subtype_count_comment.md |
 
 > **결번**: F-018 ~ F-021. 규약 §2에 따라 번호는 재사용하지 않는다.
 > 직전 라운드에서 Claude가 수신한 인덱스에는 해당 행이 존재하지 않았다 (F-023 처리 기록 참조).
@@ -267,11 +275,11 @@
 
 | 상태 | 건수 | | 분류 | 건수 |
 |---|---|---|---|---|
-| 신규 | 0 | | 요건위반 | 5 |
-| 확인 | 0 | | 코드버그 | 134 |
-| 수정완료 | 215 | | 문서불일치 | 78 |
+| 신규 | 8 | | 요건위반 | 5 |
+| 확인 | 0 | | 코드버그 | 138 |
+| 수정완료 | 216 | | 문서불일치 | 83 |
 | 기각 | 1 | | 표준결함 | 19 |
-| 보류 | 1 | | **합계** | **236** |
+| 보류 | 1 | | **합계** | **245** |
 | 이관 | 19 | | | |
 
 > F-052 는 요청받은 문서화를 마쳐 `수정완료`지만, 그 안에 **보류 결정 1건**(온실관리 기반 인가 제약)이
