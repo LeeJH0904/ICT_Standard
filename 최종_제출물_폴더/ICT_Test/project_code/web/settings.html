@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>설정 — 수집 주기 · 임계값</title>
+<title>설정 — 수집 주기 · 전송 모드</title>
 <link rel="stylesheet" href="static/app.css">
 </head>
 <body>
@@ -21,8 +21,8 @@
 </header>
 
 <main id="main">
-  <h1>수집 주기 · 임계값 설정</h1>
-  <p class="hint">TTAK.KO-10.0937 6.4-2 · 부속서 A 1.3 — TTAK.KO-10.0943 표 7-15 DEVICE_PROPERTY 중 사용자가 정하는 4개 필드 설정</p>
+  <h1>수집 주기 · 전송 모드 설정</h1>
+  <p class="hint">TTAK.KO-10.0937 6.4-2 · 부속서 A 1.3 — TTAK.KO-10.0943 표 7-15 DEVICE_PROPERTY 중 전송 모드·수집 주기 설정</p>
 
   <form id="prop-form">
     <fieldset>
@@ -49,7 +49,7 @@
     </fieldset>
 
     <fieldset>
-      <legend>설정 — 표 7-15 사용자 지정 4필드 중 최소 1개</legend>
+      <legend>설정 — 전송 모드·수집 주기 (표 7-15, 최소 1개)</legend>
       <div class="field">
         <label for="f-transfer">전송 모드 <span class="hint">(Transfer Mode, 2bit)</span></label>
         <select id="f-transfer" name="transfer_mode">
@@ -63,14 +63,6 @@
         <label for="f-period">수집 주기 (Period, 14bit, 초) <span class="hint">0 ~ 16383</span></label>
         <input id="f-period" name="period_sec" type="number" min="0" max="16383">
       </div>
-      <div class="field">
-        <label for="f-lower">하한값 (Lower Value, 32bit) <span class="hint">이하이면 전송</span></label>
-        <input id="f-lower" name="lower_value" type="number" step="any">
-      </div>
-      <div class="field">
-        <label for="f-upper">상한값 (Upper Value, 32bit) <span class="hint">초과이면 전송</span></label>
-        <input id="f-upper" name="upper_value" type="number" step="any">
-      </div>
     </fieldset>
 
     <button type="submit" class="primary">적용</button>
@@ -81,7 +73,7 @@
     <h2 id="dev-h">전체 디바이스 목록 <span class="hint">(물리 특성은 읽기만 — 설치 시 확정)</span></h2>
     <p data-state-message></p>
     <table id="dev-table">
-      <thead><tr><th>장치</th><th>노드</th><th>종류</th><th>Lower Limit</th><th>Upper Limit</th><th>Precision</th></tr></thead>
+      <thead><tr><th>장치</th><th>노드</th><th>종류</th><th>전송모드</th><th>주기(초)</th><th>Lower Limit</th><th>Upper Limit</th><th>Precision</th></tr></thead>
       <tbody></tbody>
     </table>
   </section>
@@ -108,13 +100,18 @@ document.querySelectorAll('input[name="target-mode"]').forEach((r) => {
 
 function deviceRowHtml(d) {
   const kindLabel = d.device_kind === "ACTUATOR" ? "구동기" : d.device_kind === "SENSOR" ? "센서" : "—";
+  // Precision(오차범위)은 소수점 한 자리까지만 — FLOAT 왕복에서 생기는
+  // 0.10000000149 같은 잡값을 그대로 노출하지 않는다.
+  const fmtPrecision = (v) => (v == null ? "—" : (+v).toFixed(1));
   return `<tr>
     <td>${d.device_name} <span class="hint">(${d.subtype ?? "—"})</span></td>
     <td>${hex(d.siap_node_id)}</td>
     <td>${kindLabel}</td>
+    <td>${d.transfer_mode ?? "—"}</td>
+    <td>${d.period_sec ?? "—"}</td>
     <td>${d.lower_limit ?? "—"}</td>
     <td>${d.upper_limit ?? "—"}</td>
-    <td>${d.precision_val ?? "—"}</td>
+    <td>${fmtPrecision(d.precision_val)}</td>
   </tr>`;
 }
 
@@ -172,10 +169,6 @@ document.getElementById("prop-form").addEventListener("submit", async (ev) => {
   if (transfer) property.transfer_mode = transfer;
   const period = document.getElementById("f-period").value;
   if (period !== "") property.period_sec = Number(period);
-  const lower = document.getElementById("f-lower").value;
-  if (lower !== "") property.lower_value = Number(lower);
-  const upper = document.getElementById("f-upper").value;
-  if (upper !== "") property.upper_value = Number(upper);
 
   if (Object.keys(property).length === 0) {
     statusEl.textContent = "설정값을 최소 1개 입력하세요.";

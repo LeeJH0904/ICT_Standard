@@ -134,6 +134,15 @@ class SimDevice:
     subtype: int
     value_type: int
     value: int              # 32bit raw (INT 2의 보수/UINT/FLOAT 비트패턴)
+    # F-241 — 게이트웨이가 REQ_SET_DEVICE_PROPERTY(8.1.3.2)로 설정한 값을
+    # 노드가 기억한다. None 이면 아직 설정된 적 없음 → _device_property() 가
+    # 선언 시 subtype 기본 범위/전송주기를 쓴다. 값이 있으면 그 값으로
+    # (재)선언한다 — 노드가 설정을 실제로 받아들였음을 선언에서도 일관되게
+    # 드러낸다. lower/upper 는 32bit raw(value_type 관례).
+    set_transfer_mode: int | None = None
+    set_period: int | None = None
+    set_lower_value: int | None = None
+    set_upper_value: int | None = None
 
 
 @dataclass
@@ -171,15 +180,23 @@ def _device_property(d: SimDevice, period_sec: int) -> "wire.WireDP":
     실제 NOTI_DEVICE_VALUE 송신 주기와 같은 값을 그대로 쓴다(아키텍처
     설계서 §5.5 결정 표) — 선언한 주기와 실제 전송 주기가 어긋나지 않는다.
     Lower/Upper Value 는 이 데모에 별도의 "목표 운용 범위" 개념이 없으므로
-    Lower/Upper Limit(유효범위)과 같은 값을 재사용한다."""
+    Lower/Upper Limit(유효범위)과 같은 값을 재사용한다.
+
+    F-241 — 게이트웨이가 REQ_SET_DEVICE_PROPERTY 로 설정한 값이 있으면
+    (`set_*` 필드) 선언에도 그 값을 반영한다 — 노드가 받아들인 설정과
+    (재)선언이 어긋나지 않는다. 설정된 적 없으면 subtype 기본값을 쓴다."""
     lo, hi, prec = _PROPERTY_RANGES.get(d.subtype, (0.0, 0.0, 0.0))
     lo_raw, hi_raw, prec_raw = (_pack_by_type(lo, d.value_type),
                                 _pack_by_type(hi, d.value_type),
                                 _pack_by_type(prec, d.value_type))
+    transfer_mode = d.set_transfer_mode if d.set_transfer_mode is not None else wire.TM_PERIODIC
+    period = d.set_period if d.set_period is not None else period_sec
+    lower_value = d.set_lower_value if d.set_lower_value is not None else lo_raw
+    upper_value = d.set_upper_value if d.set_upper_value is not None else hi_raw
     dmi = wire.WireDMI(d.device_id, d.dev_type, d.subtype, d.value_type, d.value)
     return wire.WireDP(
-        main=dmi, transfer_mode=wire.TM_PERIODIC, period=period_sec,
-        lower_value=lo_raw, upper_value=hi_raw,
+        main=dmi, transfer_mode=transfer_mode, period=period,
+        lower_value=lower_value, upper_value=upper_value,
         lower_limit=lo_raw, upper_limit=hi_raw,
         precision=prec_raw, status=wire.STATUS_NORMAL,
     )
@@ -425,6 +442,35 @@ class VirtualNodeServer:
             log.info("노드 %s 디바이스 구성 선언 응답 RSC=0x%02X", h.node_id, rsc)
         elif h.msg_type == wire.MT_ACK:
             log.debug("노드 %s ACK msg_id=%s", h.node_id, h.msg_id)
+        elif h.msg_type == wire.MT_REQ_SET_DEVICE_PROPERTY:
+            # F-241 — 게이트웨이가 8.1.3.2로 보낸 수집 주기·전송 모드·전송
+            # 임계 설정. 대상 device_id 를 전량 검증한 뒤에만 반영하고
+            # (부분 적용 방지, 제어 경로와 같은 원칙) RES 로 회신한다.
+            try:
+                dps = wire.decode_req_set_device_property(payload)
+            except ValueError:
+                return
+            rsc = wire.RSC_SUCCESS
+            targets: list[tuple[SimDevice, "wire.WireDP"]] = []
+            if node is None:
+                rsc = wire.RSC_INVALID_NODE_ID
+            else:
+                for dp in dps:
+                    dev = next((d for d in node.devices if d.device_id == dp.main.device_id), None)
+                    if dev is None:
+                        rsc = wire.RSC_INVALID_DEVICE_ID
+                        break
+                    targets.append((dev, dp))
+            if rsc == wire.RSC_SUCCESS:
+                for dev, dp in targets:
+                    dev.set_transfer_mode = dp.transfer_mode
+                    dev.set_period = dp.period
+                    dev.set_lower_value = dp.lower_value
+                    dev.set_upper_value = dp.upper_value
+                    log.info("노드 %s 디바이스 %s 속성 설정: mode=%d period=%d",
+                             h.node_id, dev.device_id, dp.transfer_mode, dp.period)
+            self._send(conn, wire.build_res_set_device_property(
+                h.msg_id, h.gcg_id, h.node_id, rsc))
         elif h.msg_type == wire.MT_REQ_SET_DEVICE_CONTROL:
             try:
                 dmis = wire.decode_req_set_device_control(payload)

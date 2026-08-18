@@ -6,7 +6,7 @@
 > **불변식**: `표준결함` 행 수 = `CLAUDE.md` §3.6 총계 = 명세서의 장애 지점 합계
 > **자동 검사**: `python fix_log/meta_verify.py` — 인덱스·상세·설계 문서 수치를 기계 대조한다 (F-043)
 
-**다음 ID: `F-241`**
+**다음 ID: `F-242`**
 
 ## 표준결함 (19건) — 고칠 수 없음. 기획서 자산
 
@@ -256,6 +256,7 @@
 | F-238 | 오류 | 코드버그 | `tools/where.py` | 단계 8 빌드 판정이 존재하지 않는 Makefile을 요구해 항상 실패 — board_verify와 모순 | 수정완료 | F-238_stage8_build_exit_has_no_makefiles.md |
 | F-239 | 오류 | 문서불일치 | `where.py`·`BUILD.md`·펌웨어 설계서 | SRAM 예산이 40%(슬라이스)와 55%(전체 globals)로 분기 | 수정완료 | F-239_sram_budget_40_55_drift.md |
 | F-240 | 위험 | 요건위반 | `.gitignore`·`tools/offline_verify.py` | 런타임 DB가 제출 대상에 남고 검증기가 탐지·제외하지 못함 | 수정완료 | F-240_runtime_databases_packaging_risk.md |
+| F-241 | 오류 | 코드버그 | `sim/virtual_node.py`·`sim/_wire.py` | simulate 모드 가상 노드가 `REQ_SET_DEVICE_PROPERTY`를 미처리(else)해 설정 적용이 504 타임아웃 — settings 페이지가 유일 실행 모드에서 미동작 | 수정완료 | F-241_sim_device_property_no_handler.md |
 
 > **결번**: F-018 ~ F-021. 규약 §2에 따라 번호는 재사용하지 않는다.
 > 직전 라운드에서 Claude가 수신한 인덱스에는 해당 행이 존재하지 않았다 (F-023 처리 기록 참조).
