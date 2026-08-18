@@ -1,5 +1,5 @@
 /*
- * 이 파일은 "컴파일이 실패해야 통과"다 (F-113).
+ * 이 파일은 "컴파일이 실패해야 통과"다.
  *
  * bp_write() 반환값을 일부러 버린다. SIAP_WUR(bitpack.h)와
  * -Werror=unused-result(Makefile) 가 둘 다 살아 있으면 이 파일은

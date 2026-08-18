@@ -5,7 +5,7 @@ sim/replayer.py — `replay` 모드 TCP 서버 (아키텍처 설계서 §5.3~§5
 파일의 `dir=="rx"` 레코드는 원래 간격을 정규화해 그대로 흘려보내고,
 `dir=="tx"` 레코드는 같은 시점의 게이트웨이 실제 송신과 바이트 대조한다.
 
-F-042 — `dir=="tx"` 레코드는 주입하지 않는다. 그 레코드는 "그 세션에서
+`dir=="tx"` 레코드는 주입하지 않는다. 그 레코드는 "그 세션에서
 게이트웨이가 실제로 보냈던 바이트"이지 재생 입력이 아니다(아키텍처
 설계서 §5.4-a). 무시하면 과거의 `RES_SET_CONNECTION`이 현재 세션의
 수신으로 들어와 `INVALID_NODE_ID` 같은 조작 없는 위반이 발생한다.
@@ -61,7 +61,7 @@ class Replayer:
                 except (json.JSONDecodeError, ValueError) as exc:
                     raise ValueError(f"{self._log_path.name}:{lineno}: {exc}") from exc
                 d = rec.get("dir")
-                if d == "rx":                        # F-042 — tx는 주입하지 않는다
+                if d == "rx":                        # tx는 주입하지 않는다
                     records.append(rec)
                 elif d == "tx":
                     records.append(rec)
@@ -105,7 +105,7 @@ class Replayer:
             try:
                 self._play(conn)
             except Exception as exc:
-                # F-219 — daemon 작업 스레드의 traceback은 호출자에게 전달되지
+                # daemon 작업 스레드의 traceback은 호출자에게 전달되지
                 # 않는다. 오류를 명시적으로 보관하고 done과 함께 공개한다.
                 self.error = exc
             # 마지막 프레임을 보낸 직후 바로 close() 하면(그 다음 줄), 상대

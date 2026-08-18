@@ -62,7 +62,7 @@ def _register_node(link, node_id=3, gcg_id=1, num_devices=1):
 
 def _register_link_device(link, node_id, device_id, dev_type, subtype, value_type=ValueType.UINT, value=0):
     """`link.devices(node_id)` — `ems.set_device_property()`가 대상의 현재
-    Value Type 을 확인하는 유일한 출처다(F-137과 같은 원칙: 임의로 대체하지
+    Value Type 을 확인하는 유일한 출처다(과 같은 원칙: 임의로 대체하지
     않는다). `_register_device_install()`(DB)과는 별개로, 링크(런타임 세션)
     쪽에도 등록해야 한다."""
     existing = link._devices.get(node_id, ())
@@ -177,7 +177,7 @@ def test_list_alerts_0937_6_4_3(app, tmp_path):
 
 
 def test_list_alerts_triggers_stale_device_check_f191(app, monkeypatch):
-    """F-191 — `GET /api/v1/alerts`가 `fms.check_stale_devices()`를 실제로
+    """`GET /api/v1/alerts`가 `fms.check_stale_devices()`를 실제로
     호출하는가(check-on-read). 이전에는 이 함수가 정의만 되고 어디서도
     불리지 않아 0937 6.4-3 미수집 알림이 영구히 생기지 않았다."""
     from backend.services import fms as fms_module
@@ -211,7 +211,7 @@ def test_list_frames_and_get_frame_0943_7_3(app, tmp_path):
 
 
 def test_frame_fields_includes_payload_element_decomposition_f187(app, tmp_path):
-    """F-187 — elements_json 이 있는 프레임은 헤더 7필드 뒤에 가변 요소
+    """elements_json 이 있는 프레임은 헤더 7필드 뒤에 가변 요소
     (DEVICE_MAIN_INFO) 필드도 이어붙어야 한다."""
     import json
     con = db.connect(tmp_path / "api.db")
@@ -320,7 +320,7 @@ def test_create_ai_draft_falls_back_to_threshold_f083(app):
 
 
 def test_create_ai_draft_without_crop_threshold_says_so_f190(app):
-    """F-190 — 임계값은 서버 상수가 아니라 inputs.crop_tmax_c 로 온다.
+    """임계값은 서버 상수가 아니라 inputs.crop_tmax_c 로 온다.
     생략하면 추측하지 않고 그렇게 말한다."""
     r = call(app, "POST", "/api/v1/rules",
              json={"origin": "AI_DRAFT", "model_id": "demo-model-threshold-tmax"})

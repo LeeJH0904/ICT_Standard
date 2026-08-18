@@ -4,9 +4,9 @@ siap/build.py — FrameBuilder 구현 (contracts/siap_iface.py 의 Protocol).
 두 묶음(Frame 구조 명세서 §5.1):
   (1) 게이트웨이발 Request 5종 — `link.send()` 경유. msg_id 는 이 파일이
       발번한다(0943 7.2.2 "0~65535 순환, 송신마다 +1, 65535 다음 0". 초기값
-      0 — 0도 유효한 순번이다, F-135. 펌웨어 설계서 §6.4 가 정한 노드측
+      0 — 0도 유효한 순번이다. 펌웨어 설계서 §6.4 가 정한 노드측
       규칙과 대칭이 되도록 게이트웨이 쪽도 같은 규약을 쓴다).
-  (2) 노드발 메시지에 대한 즉시 회신 7종 — `ingest.handle()` 의 반환값(F-040).
+  (2) 노드발 메시지에 대한 즉시 회신 7종 — `ingest.handle()` 의 반환값.
       msg_id·GCG ID·Node ID 를 원본 Frame 에서 그대로 복사한다(7.2.2) — 새로
       발번하지 않는다.
 
@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import threading
 
-try:                    # F-025 — 패키지로 import될 때
+try:                    # 패키지로 import될 때
     from contracts.frame import (
         DeviceMainInfo, DeviceProperty, DevType, Frame, Header, LAYOUT, MsgKind,
         NodeProperty, RSC, RSC_BYTES, Status, TransType, ValueType,
@@ -39,10 +39,10 @@ except ImportError:     # 스크립트로 직접 실행되거나 project_code �
 class MsgIdAllocator:
     """0943 7.2.2 원문 — "Message Identifier는 … '0'에서 '65535'까지 사용할
     수 있다. 일련번호는 데이터 전송 시마다 +1을 하며 만료되면 0부터 다시
-    시작한다." 0을 건너뛰지 않는다(F-135) — 이전 버전은 "0은 미할당
+    시작한다." 0을 건너뛰지 않는다 — 이전 버전은 "0은 미할당
     표시로 예약"이라며 펌웨어 §6.4 의 결정을 그대로 옮겼지만, 그 예약은
     `pending.kind==SIAP_KIND_NONE` 하나로 이미 충분한 "비어 있음" 판정을
-    msg_id 에도 중복 적용한 근거 없는 결정이었다(node_state.c 쪽도 F-135로
+    msg_id 에도 중복 적용한 근거 없는 결정이었다(node_state.c 쪽도로
     같이 고쳤다)."""
 
     def __init__(self) -> None:
@@ -80,7 +80,7 @@ class FrameBuilderImpl:
                       payload_len=payload_len, gcg_id=self._gcg_id, node_id=node_id)
 
     def _reply_header(self, req: Frame, kind: MsgKind, payload_len: int) -> Header:
-        """F-040 — msg_id·GCG ID·Node ID 를 원본에서 복사한다(7.2.2). 새로
+        """msg_id·GCG ID·Node ID 를 원본에서 복사한다(7.2.2). 새로
         발번하면 노드가 중복 요청으로 처리한다(표준 미규정 → 자체 결정,
         CLAUDE.md §3.5)."""
         if req.header is None:
@@ -99,7 +99,7 @@ class FrameBuilderImpl:
         여부는 사용자 보고 예정). `registry` 에서 그 노드의 실제
         DEVICE_MAIN_INFO 를 device_id 로 찾아 채운다.
 
-        F-137 — 이전에는 registry 가 없거나 조회에 실패하면 `ACTUATOR +
+        이전에는 registry 가 없거나 조회에 실패하면 `ACTUATOR +
         WINDOW_OPENER` 로 조용히 대체했다. 이는 CLAUDE.md §1-1(합성 데이터
         금지)의 정신과 같은 문제다 — 실제로 존재하지 않거나 확인 못 한
         디바이스 종류를 지어내 제어 프레임에 실으면, 엉뚱한 종류로 해석하는
@@ -115,7 +115,7 @@ class FrameBuilderImpl:
                 return dmi.dev_type, dmi.subtype
         raise ValueError(
             f"device_control(node_id={node_id}): device_id={device_id} 가 "
-            f"registry 에 등록되어 있지 않다 — 임의 Type/Subtype 으로 대체하지 않는다(F-137)"
+            f"registry 에 등록되어 있지 않다 — 임의 Type/Subtype 으로 대체하지 않는다"
         )
 
     # ── (1) 게이트웨이발 Request ──────────────────────────────
@@ -204,7 +204,7 @@ class FrameBuilderImpl:
         if rk is None:
             return None                                   # 해석 불가 msg_type — 어떤 Response 인지 못 정한다
         if rk is MsgKind.ACK:
-            return None                                    # ACK 는 헤더뿐 — 오류를 실을 수단이 없다(F-040)
+            return None                                    # ACK 는 헤더뿐 — 오류를 실을 수단이 없다
         if rk is MsgKind.RES_SET_CONNECTION:
             return self.res_set_connection(req, rsc)
         if rk is MsgKind.RES_SET_NODE_PROPERTY:

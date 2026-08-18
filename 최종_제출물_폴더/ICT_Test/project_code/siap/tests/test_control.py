@@ -1,4 +1,4 @@
-"""siap/control.py 검증 — F-046 응답 매칭, F-041 재전송·타임아웃.
+"""siap/control.py 검증 — 응답 매칭 재전송·타임아웃.
 
 가짜 시계(now_fn 주입)로 실제 sleep 없이 재전송·타임아웃을 재현한다.
 """
@@ -56,7 +56,7 @@ def test_register_returns_pending_for_request():
 
 
 def test_match_requires_node_id_msg_id_and_kind_f046():
-    """F-046 — Node ID + Message Identifier + Message Type 셋 다 맞아야
+    """Node ID + Message Identifier + Message Type 셋 다 맞아야
     대기 항목이 소비된다. 종류가 다르면(예: ACK 가 RES_* 를 대신할 수 없다)
     소비하지 않는다."""
     clock = FakeClock()
@@ -88,7 +88,7 @@ def test_match_requires_node_id_msg_id_and_kind_f046():
 
 
 def test_retransmit_keeps_msg_id_f041():
-    """F-041 — 재전송 시 Message Identifier 를 유지한다(새로 발번하지 않는다)."""
+    """재전송 시 Message Identifier 를 유지한다(새로 발번하지 않는다)."""
     clock = FakeClock()
     pt = PendingTable(_profile(timeout=2, retry=2), now_fn=clock)
     b = FrameBuilderImpl(gcg_id=1)

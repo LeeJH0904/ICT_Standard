@@ -1,12 +1,12 @@
-// stream.js — SSE 단일 구독 + 폴링 폴백 (화면_설계서.md §3.2)
+// stream.js — SSE 단일 구독 + 폴링 폴백
 //
 //   GET /api/v1/stream (화면당 1개) ── node_up/node_down/frame/violation/alert/execution
 //   onerror -> 1초 폴링 폴백, 지수 백오프 1·2·4·8초(상한)로 재연결 시도
-//   상태 3종: "실시간 연결됨" / "폴링 중 (1초)" / "연결 끊김" — 색 + 문자 함께(§8.2)
+//   상태 3종: "실시간 연결됨" / "폴링 중 (1초)" / "연결 끊김" — 색 + 문자 함께
 //
-// 제어 명령이 이 경로로 들어올 자리는 없다(§3.2 — SSE 는 단방향, CLAUDE.md §1-7).
+// 제어 명령이 이 경로로 들어올 자리는 없다(SSE 는 단방향).
 //
-// F-200 — §3.2 "누락 보정" 행: "폴백 중 놓친 프레임은 재연결 직후
+// "누락 보정": 폴백 중 놓친 프레임은 재연결 직후
 // listFrames?since= 로 채운다". 재연결(EventSource 가 onerror 로 끊겼다가
 // 다시 onopen 하는 것)은 이 파일이 유일하게 아는 지점이라, 그 사실을
 // `onReconnect` 콜백으로 호출자에게 알린다 — "언제 since= 조회를 할지"는
@@ -31,7 +31,7 @@ export const STATUS = {
  * @param {(status: {code:string, text:string}) => void} opts.onStatus
  * @param {() => Promise<void>} [opts.onPollTick]  폴링 폴백 중 1초마다 호출 (즉시 보정 없이 다음 재연결까지 미뤄도 되는 화면용)
  * @param {() => void} [opts.onDisconnect]  SSE 최초 단절 시 폴링이 표시 목록을 바꾸기 전에 연속 커서를 고정
- * @param {() => Promise<void>} [opts.onReconnect]  F-200 — 폴백을 거쳐 SSE 가 다시 열렸을 때(최초 연결 제외) 1회 호출. `listFrames?since=`로 폴백 중 놓친 프레임을 채우는 자리
+ * @param {() => Promise<void>} [opts.onReconnect]  폴백을 거쳐 SSE 가 다시 열렸을 때(최초 연결 제외) 1회 호출. `listFrames?since=`로 폴백 중 놓친 프레임을 채우는 자리
  * @returns {() => void} 구독 해제 함수
  */
 export function connectStream({ events, onEvent, onStatus, onPollTick, onDisconnect, onReconnect }) {

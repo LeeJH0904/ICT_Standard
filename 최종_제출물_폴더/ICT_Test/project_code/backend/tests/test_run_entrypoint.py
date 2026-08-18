@@ -1,4 +1,4 @@
-"""backend/tests/test_run_entrypoint.py — 실제 진입점(`run.py`)의 DB 결속 (F-160).
+"""backend/tests/test_run_entrypoint.py — 실제 진입점(`run.py`)의 DB 결속.
 
 이 파일은 예외적으로 `run.py`(→ `siap.link`)를 import한다 — `backend/`가
 `siap/` 내부 심볼을 import하지 않는다는 CLAUDE.md §2.2 계약은 애플리케이션
@@ -6,8 +6,8 @@
 지점(CLAUDE.md §2)이다. 이 파일은 그 교차 지점이 실제로 결선돼 있는가만
 검증한다 — `backend/`나 `siap/` 어디에도 새 계층 위반을 추가하지 않는다.
 
-F-160 — GPT 검증이 실제 `run.py`의 세 실행 경로(`--mode simulate/replay/
-hardware`) 모두 `link.start(...)`에 `on_frame`을 넘기지 않아, F-154·F-060이
+GPT 검증이 실제 `run.py`의 세 실행 경로(`--mode simulate/replay/
+hardware`) 모두 `link.start(...)`에 `on_frame`을 넘기지 않아이
 문서로만 성립하고 실행 경로에서는 DB 저장이 일어나지 않음을 지적했다.
 회귀 가드는 두 갈래다:
   1. `_prepare_db_path()`가 실제로 스키마+시드를 적용한 DB 파일을 만드는가
@@ -16,7 +16,7 @@ hardware`) 모두 `link.start(...)`에 `on_frame`을 넘기지 않아, F-154·F-
      스레드**에서 호출해도(즉 실제 운용과 같은 조건) 프레임이 DB에 반영되는가.
      최초 구현은 메인 스레드에서 연 연결을 그대로 넘겨 `sqlite3.
      ProgrammingError: SQLite objects created in a thread can only be
-     used in that same thread`로 죽었다(F-160 재현, 아래
+     used in that same thread`로 죽었다( 재현, 아래
      `test_on_frame_callback_survives_cross_thread_invocation_f160`가
      그 실패 조건을 재현해 회귀를 막는다)."""
 from __future__ import annotations
@@ -91,7 +91,7 @@ def test_prepare_db_path_does_not_reseed_existing_file_f160(tmp_path):
 
 
 def test_on_frame_callback_survives_cross_thread_invocation_f160(tmp_path):
-    """F-160 핵심 회귀 — SIAP I/O 스레드를 흉내낸 별도 스레드에서 호출해도
+    """ 핵심 회귀 — SIAP I/O 스레드를 흉내낸 별도 스레드에서 호출해도
     죽지 않고 DB에 반영돼야 한다. 최초 구현(메인 스레드에서 연 연결을
     `bind()`에 넘김)은 여기서 `sqlite3.ProgrammingError`를 던졌다."""
     db_path = tmp_path / "thread.db"

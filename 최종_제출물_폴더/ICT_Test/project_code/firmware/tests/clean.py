@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""firmware/tests/ 빌드 산출물 정리 — 셸 `rm` 에 기대지 않는다 (F-111·F-113).
+"""firmware/tests/ 빌드 산출물 정리 — 셸 `rm` 에 기대지 않는다.
 
 MinGW GCC 는 `-o test_bitpack` 로 지정해도 Windows 에서 `test_bitpack.exe`
 를 만들고, `rm` 자체가 PATH에 없는 셸(POSIX sh 를 못 찾아 cmd.exe 로

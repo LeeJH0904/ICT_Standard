@@ -55,9 +55,9 @@ static void case_element_count(void)
     check("EC4: NOTI_DEVICE_VALUE plen=24 -> 거부(7의 배수 아님)",
           siap_element_count(SIAP_NOTI_DEVICE_VALUE, 24) == -1);
 
-    /* F-120 — 노드당 디바이스 상한 N=16 (CLAUDE.md §3.5/F-064). 16은 허용,
+    /* 노드당 디바이스 상한 N=16 (CLAUDE.md §3.5). 16은 허용,
        17은 거부 — 골든 B03(N=16 허용)·B11(N=17 거부)과 짝을 이룬다.
-       결함 재현(F-120 보고서)이 정확히 이 두 조합이었다: REQ_SET_DEVICE_CONTROL
+       결함 재현( 보고서)이 정확히 이 두 조합이었다: REQ_SET_DEVICE_CONTROL
        plen=119(N=17), RES_SET_CONNECTION plen=519(N=17). */
     check("EC5: REQ_SET_DEVICE_CONTROL plen=112(N=16) -> 허용",
           siap_element_count(SIAP_REQ_SET_DEVICE_CONTROL, 112) == 16);
@@ -79,7 +79,7 @@ static void case_resolve_kind(void)
     check("RK1: 0x0000/plen0 -> REQ_SET_CONNECTION",
           siap_resolve_kind(0x0000, 0, SIAP_MODE_STRICT, &cl) == SIAP_REQ_SET_CONNECTION);
 
-    /* F-119/B02 — 단일 후보 코드는 이 Payload Length 가 구조적으로 무효해도
+    /*/B02 — 단일 후보 코드는 이 Payload Length 가 구조적으로 무효해도
        resolve_kind() 는 그대로 그 kind 를 확정한다(contracts/frame.py 원본과
        동일 구조 — 후보가 하나면 element_count() 를 보지 않는다). 무효성은
        "그다음에" 호출자가 별도로 element_count() 를 불러 판정한다. */
@@ -111,7 +111,7 @@ static void case_resolve_kind(void)
     k = siap_resolve_kind(0x0801, 0, SIAP_MODE_STRICT, &cl);
     check("RK6: strict 0x0801/plen0 -> NOTI_DISCONNECT", k == SIAP_NOTI_DISCONNECT);
 
-    /* F-119 처리 중 발견 — 0x0801 은 extended 모드에서 단일 후보(NOTI_DEVICE_VALUE)
+    /* 처리 중 발견 — 0x0801 은 extended 모드에서 단일 후보(NOTI_DEVICE_VALUE)
        이므로 resolve_kind() 는 element_count() 와 무관하게 그 후보를 그대로
        확정한다(contracts/frame.py 원본과 동일 — 후보가 하나면 N 유효성은
        별도 element_count() 호출로 판정한다, B02 와 같은 구조). plen=0 이
@@ -198,7 +198,7 @@ static void case_struct_roundtrip(void)
           && mcp2.noti_error_interval == mcp.noti_error_interval
           && mcp2.keep_alive_interval == mcp.keep_alive_interval);
 
-    /* 위반 케이스 6·7 — 디코더뿐 아니라 인코더도 같은 기준으로 거부한다 (F-047) */
+    /* 위반 케이스 6·7 — 디코더뿐 아니라 인코더도 같은 기준으로 거부한다 */
     siap_dmi_t bad_vt = { 0x01, SIAP_DEV_SENSOR, SIAP_SUBTYPE_TEMPERATURE,
                            SIAP_VALUE_TYPE_RESERVED, 0 };
     bp = 0; r = siap_encode_dmi(buf, &bp, &bad_vt);
@@ -209,8 +209,8 @@ static void case_struct_roundtrip(void)
     check("ST8: 미등록 Subtype(0x40) 인코드 거부", !r.ok && r.rsc == SIAP_RSC_INVALID_DATA_SUBTYPE
                                                         && r.clause == SIAP_CLAUSE_TABLE_7_14);
 
-    /* F-127 — 표 7-10/7-12/7-13/7-15의 예약값 4종. 인코더도 같은 기준으로
-       거부해야 한다(디코더만 막으면 F-047과 같은 구멍이 남는다). */
+    /* 표 7-10/7-12/7-13/7-15의 예약값 4종. 인코더도 같은 기준으로
+       거부해야 한다(디코더만 막으면과 같은 구멍이 남는다). */
     siap_np_t bad_np = { 0x10, 0x00001, 0x00003, 0x03 /* RESERVED */, 2 };
     bp = 0; ok = siap_encode_np(buf, &bp, &bad_np);
     check("ST9: NODE_PROPERTY.Status=RESERVED(0x03) 인코드 거부", !ok);
@@ -305,7 +305,7 @@ static void feed_bytes(siap_dec_t *d, const uint8_t *buf, size_t len)
 }
 
 /* siap_encode_hdr 는 SIAP_WUR — 반환값을 실제로 확인해야 (void) 캐스팅으로
-   빠져나갈 수 없다(F-078과 같은 원칙). 테스트 셋업에서 반복 호출되므로
+   빠져나갈 수 없다(과 같은 원칙). 테스트 셋업에서 반복 호출되므로
    호출 자체를 통과 항목 하나로 세어 묻어간다. */
 static void enc_hdr_ok(const char *label, uint8_t *buf, size_t *bp, const siap_hdr_t *h)
 {
@@ -452,7 +452,7 @@ static void case_stream_violations(void)
           c.end_calls == 1 && c.end_rsc == SIAP_RSC_INVALID_DATA_SUBTYPE && c.end_clause == SIAP_CLAUSE_TABLE_7_14);
 
     /* #8 NEC=ERROR_BATTERY_LOW(0x07) — 위반이 아니다. 코덱은 정상 디코드하고
-       게이트웨이(F-060)가 alert 로 분류한다. */
+       게이트웨이가 alert 로 분류한다. */
     siap_hdr_t h8 = { SIAP_VERSION, siap_wire_code(SIAP_NOTI_ERROR, SIAP_MODE_STRICT),
                        SIAP_TRANS_UNICAST, 57, 1, 0x00001, 0x00003 };
     bp = 0; enc_hdr_ok("V8: 헤더 인코드 성공", buf, &bp, &h8);
@@ -464,7 +464,7 @@ static void case_stream_violations(void)
           c.end_calls == 1 && c.end_rsc == SIAP_RSC_SUCCESS);
     check("V8: on_fixed 로 NEC 값 전달", c.fixed_calls == 1 && c.fixed_buf[0] == SIAP_NEC_ERROR_BATTERY_LOW);
 
-    /* #9 (F-116/F-119, CLAUDE.md 6.3의 8종에는 없지만 골든 B02와 같은 경계
+    /* #9 (, CLAUDE.md 6.3의 8종에는 없지만 골든 B02와 같은 경계
        사례) — REQ_SET_DEVICE_CONTROL(0x000C, 단일 후보) plen=0. resolve_kind()
        는 그 자리에서 kind 를 확정하지만(위 RK1b), FSM 은 그 직후 별도
        element_count() 로 이를 거부해야 한다 — resync_check() 와 다른 코드
@@ -481,7 +481,7 @@ static void case_stream_violations(void)
     check("V9: on_header 는 호출되지 않는다(resolve_kind 이후 element_count 단계에서 이미 거부)",
           c.header_calls == 0);
 
-    /* #10 (F-126, CLAUDE.md 6.3의 8종에는 없지만 표 7-13/7-16 불변식 반례) —
+    /* #10 (, CLAUDE.md 6.3의 8종에는 없지만 표 7-13/7-16 불변식 반례) —
        RES_SET_CONNECTION 에 NODE_PROPERTY.Num. of Devices=2 를 넣고 실제
        DEVICE_PROPERTY 는 1개(Payload Length=39 -> 역산 N=1)만 보낸다.
        보고된 반례 그대로: 같은 프레임이 디바이스 수를 2 와 1 로 동시에
@@ -514,7 +514,7 @@ static void case_stream_violations(void)
               c.fixed_calls == 0 && c.elem_calls == 0);
     }
 
-    /* #11~#14 (F-127, CLAUDE.md 6.3의 8종에는 없지만 표 7-10/7-12/7-13/7-15
+    /* #11~#14 (, CLAUDE.md 6.3의 8종에는 없지만 표 7-10/7-12/7-13/7-15
        예약값 반례) — 인코더가 이제 예약값을 거부하므로(ST9~ST13), 여기서는
        bp_write 로 직접 원시 바이트를 구성해 "공격자가 이미 만든 프레임"을
        흉내낸다. */
@@ -635,7 +635,7 @@ static void case_resync(void)
           c.end_calls == 2 && c.end_rsc == SIAP_RSC_SUCCESS);
 }
 
-/* F-141 — RS1(위 case_resync)의 위반 헤더는 payload_len=0이라 우연히 이
+/* RS1(위 case_resync)의 위반 헤더는 payload_len=0이라 우연히 이
    결함을 가리지 못했다(begin_drain(remaining=0)은 고친 뒤에도 전과 동일하게
    동작한다). payload_len 이 0이 아닌 헤더 위반을 재현한다: Version=0x99에
    payload_len=12(뒤따르는 정상 ACK 프레임과 우연히 같은 길이)를 실어 보내면,
@@ -653,7 +653,7 @@ static void case_resync_header_violation_nonzero_payload_len_f141(void)
     enc_hdr_ok("RSN1: 위반용 헤더(payload_len=12) 인코드 성공", bad, &bp, &hbad);
     feed_bytes(&d, bad, 12);
     check("RSN1: Version 위반 보고", c.end_calls == 1 && c.end_rsc == SIAP_RSC_INVALID_VERSION);
-    check("RSN1: F-141 — 신뢰할 수 없는 payload_len 으로 S_DRAIN 에 들어가지 않고 즉시 재동기(HDR/resync)",
+    check("RSN1: 신뢰할 수 없는 payload_len 으로 S_DRAIN 에 들어가지 않고 즉시 재동기(HDR/resync)",
           d.state == SIAP_DEC_ST_HDR && d.resync == true && d.drain_remaining == 0);
 
     uint8_t good[12]; bp = 0;
@@ -661,7 +661,7 @@ static void case_resync_header_violation_nonzero_payload_len_f141(void)
                           SIAP_TRANS_UNICAST, 99, 0, 0x00001, 0x00003 };
     enc_hdr_ok("RSN2: 뒤따르는 정상 ACK 헤더 인코드 성공", good, &bp, &hgood);
     feed_bytes(&d, good, 12);
-    check("RSN2: F-141 — 위반 헤더 바로 뒤 정상 프레임이 드레인으로 삼켜지지 않고 인식된다",
+    check("RSN2: 위반 헤더 바로 뒤 정상 프레임이 드레인으로 삼켜지지 않고 인식된다",
           c.header_calls == 1 && c.last_kind == SIAP_ACK
           && c.end_calls == 2 && c.end_rsc == SIAP_RSC_SUCCESS);
 }
@@ -728,7 +728,7 @@ static void case_tx_ack_and_flush(void)
     check("TX1: flush 즉시 완료", st == SIAP_TX_DONE && sim.out_len == 12);
 
     siap_hdr_t got; size_t bp = 0; siap_decode_hdr(sim.out, &bp, &got);
-    check("TX1: msg_id/GCG ID/Node ID 가 원 요청에서 복사됨 (F-040)",
+    check("TX1: msg_id/GCG ID/Node ID 가 원 요청에서 복사됨",
           got.msg_id == req.msg_id && got.gcg_id == req.gcg_id && got.node_id == req.node_id);
     check("TX1: msg_type == ACK wire code", got.msg_type == siap_wire_code(SIAP_ACK, SIAP_MODE_STRICT));
     check("TX1: payload_len == 0 (ACK 는 페이로드 없음, 7.2/표 7-1)", got.payload_len == 0);
@@ -753,7 +753,7 @@ static void case_tx_ack_and_flush(void)
 }
 
 /* ═══════════════════════════════════════════════════════════════
- *  케이스 6 — F-123 : 51byte 송신 윈도우 용량 강제
+ *  케이스 6 — 51byte 송신 윈도우 용량 강제
  * ═══════════════════════════════════════════════════════════════ */
 /* 헤더 12 + RSC 1 + NODE_PROPERTY 8 + DEVICE_PROPERTY 30 = 51byte 로 윈도우를
    정확히 채운 뒤, 그 이상은 어떤 put 도 실패해야 하고(false/ok==false)
@@ -791,7 +791,7 @@ static void case_tx_window_capacity(void)
     bool over_device_id = siap_tx_put_device_id(&e, 0x5A);
     check("TXCAP2: 꽉 찬 윈도우에 1byte 추가 put 은 false", !over_device_id);
     check("TXCAP2: 실패한 put 후 bitpos 불변", e.bitpos == bitpos_before);
-    check("TXCAP2: 실패한 put 후 윈도우 밖 카나리 불변(배열 밖 쓰기 없음, F-123)",
+    check("TXCAP2: 실패한 put 후 윈도우 밖 카나리 불변(배열 밖 쓰기 없음)",
           raw[sizeof(e.win)] == canary);
 
     /* N=2 통합 속성 — flush 없이 두 번째 DEVICE_PROPERTY(30byte)를 이어

@@ -132,7 +132,7 @@ static void test_wire_code_table_7_2_to_7_4(void)
     }
     check("WIRE: Request+0x0400==Response, 14쌍 전량 성립", pairs_ok);
 
-    /* strict — 0x0800 중복 1건, 그 외 32종은 서로 다른 코드 (표 7-4 결함, F-001) */
+    /* strict — 0x0800 중복 1건, 그 외 32종은 서로 다른 코드 (표 7-4 결함) */
     check("WIRE: strict NOTI_ERROR==NOTI_DEVICE_VALUE==0x0800 (표준 원문 중복)",
           siap_wire_code(SIAP_NOTI_ERROR, SIAP_MODE_STRICT) == 0x0800
           && siap_wire_code(SIAP_NOTI_DEVICE_VALUE, SIAP_MODE_STRICT) == 0x0800);

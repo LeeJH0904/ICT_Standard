@@ -3,7 +3,7 @@ backend/services/dms.py — TTAK.KO-10.0937 6.2 DMS(데이터관리서비스).
 
 "공공데이터(Public Data)서비스로부터 필요한 외부 데이터를 수집하여
 데이터베이스에 기록하는 서비스"(0937 6.2). 노드·디바이스 속성 설정은
-여기 없다 — 그건 6.1 EMS의 일이다(F-079, `ems.py` 참조).
+여기 없다 — 그건 6.1 EMS의 일이다(, `ems.py` 참조).
 
 담당 조항: 6.2 전부 · A.2-2·3·4 (0937_요구사항_대조표.md §4.1)
 진입점: fetch_public_data · get_source · list_records
@@ -17,7 +17,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-try:                    # F-025 와 같은 원칙
+try:                    # 와 같은 원칙
     from backend import repository
 except ImportError:
     import pathlib

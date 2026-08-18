@@ -17,7 +17,7 @@ void bp_memcpy(void *dst, const void *src, size_t len)
 
 bool bp_write(uint8_t *buf, size_t *bitpos, uint32_t val, uint8_t nbits)
 {
-    /* 범위 검사식 — 시프트를 쓰지 않는다 (F-078).
+    /* 범위 검사식 — 시프트를 쓰지 않는다.
        nbits==32 는 uint32_t 전 범위이므로 검사가 필요 없다.
        1..31 은 마스크로 상한을 만든다 — (1u << nbits) 를 쓰지 않는다:
          · AVR 의 unsigned int 는 16bit 라 nbits>=16 에서 시프트 폭 초과(UB)

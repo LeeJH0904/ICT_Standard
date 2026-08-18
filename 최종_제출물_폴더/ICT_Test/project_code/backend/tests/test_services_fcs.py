@@ -1,6 +1,6 @@
 """backend/tests/test_services_fcs.py — backend/services/fcs.py 단위 테스트.
 
-F-191 회귀 테스트 전용 — `link.send()`가 재전송을 모두 소진해 `None`을
+ 회귀 테스트 전용 — `link.send()`가 재전송을 모두 소진해 `None`을
 반환할 때(0943 표 7-18 `Timeout × (Retry Count + 1)`), 0937 6.5-2 "긴급
 상황시 사용자 알림"이 요구하는 `alert(kind='CONTROL_TIMEOUT')`이 실제로
 생기는지를 HTTP 계층 없이 직접 확인한다.

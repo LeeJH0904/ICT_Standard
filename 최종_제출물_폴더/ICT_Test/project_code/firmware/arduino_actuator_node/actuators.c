@@ -9,7 +9,7 @@
 #include <stdbool.h>
 
 /* 마지막으로 지시받은 값 — read_value 가 이걸 돌려줘 노드가 현재 상태를 보고한다.
- * device_id 는 1..N, SIAP 상한 16(F-064). */
+ * device_id 는 1..N, SIAP 상한 16. */
 static uint32_t g_state[16];
 
 void actuator_set_state(uint8_t device_id, uint32_t raw) {

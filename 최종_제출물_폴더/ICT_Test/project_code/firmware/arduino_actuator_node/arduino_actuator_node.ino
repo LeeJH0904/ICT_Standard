@@ -35,7 +35,7 @@ extern "C" int8_t uart_read_byte(void *ctx, uint8_t *out) {
 
 extern "C" int16_t uart_write(void *ctx, const uint8_t *buf, uint16_t len) {
     (void)ctx;
-    /* 논블로킹 부분 쓰기(§2.2·§5.8). F-237: 여유 0이면 0을 돌려준다 — 가드가
+    /* 논블로킹 부분 쓰기(§2.2·§5.8). 여유 0이면 0을 돌려준다 — 가드가
        없으면 avail==0 에서 n=len 으로 떨어져 포화 버퍼에 블로킹 쓰기가 된다. */
     int avail = Serial.availableForWrite();
     if (avail <= 0) return 0;

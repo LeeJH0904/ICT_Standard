@@ -17,7 +17,7 @@ import sqlite3
 import uuid
 from datetime import datetime, timezone
 
-try:                    # F-025 와 같은 원칙 — 패키지로 import될 때
+try:                    # 와 같은 원칙 — 패키지로 import될 때
     from backend import models
 except ImportError:     # 스크립트로 직접 실행되거나 project_code 가 sys.path 밖일 때
     import pathlib
@@ -43,7 +43,7 @@ def now_iso() -> str:
 def record_config_change(conn: sqlite3.Connection, *, table_name: str, row_id: str, operation: str,
                           changes: dict | None = None, user_id: str | None = None,
                           changed_at: str | None = None) -> str:
-    """F-182 — 1369-P1 6.2.1 "설정형 데이터는... 변경(생성, 수정, 삭제)에
+    """1369-P1 6.2.1 "설정형 데이터는... 변경(생성, 수정, 삭제)에
     대해 이력이 관리되어야 한다". 시드 로더(`fixtures/seed.sql`)만 이
     테이블을 쓴다고 알려져 있었으나(아키텍처 §4.4-a①), 실제 설정형 데이터
     변경 대부분은 런타임의 `REQ_SET_DEVICE_PROPERTY`·
@@ -51,7 +51,7 @@ def record_config_change(conn: sqlite3.Connection, *, table_name: str, row_id: s
     경로가 함수를 부르지 않아 동적 등록·재선언의 변경 이력이 항상 0건이었다
     (재현 확인). `user_id`는 nullable — 노드발 Plug & Play 경로는 사람이
     유발하지 않아 None이고, 사용자발 설정은 `api.py`가 호출한 서비스가
-    API 스레드에서 실제 사용자 ID를 넘긴다(F-221).
+    API 스레드에서 실제 사용자 ID를 넘긴다.
     `version`은 DEFAULT 1을 그대로 쓴다 — 이 참조 구현은 행 단위 버전
     카운터를 별도로 올리지 않는다(표준 미규정, 필요 시 CLAUDE.md §3.5
     갱신 대상)."""
@@ -90,13 +90,13 @@ def get_or_create_device_info(conn: sqlite3.Connection, *, device_kind: str,
     `model_name`은 오직 SIAP `Subtype` 코드에서 유도되며 호출자(ingest.py)가
     어느 보드인지는 이 함수에 전달되지도 않는다.
 
-    F-185 — `device_characteristics`는 `manufacturer`와 같은 자격이다:
-    0943 DEVICE_PROPERTY(표 7-15, F-198)가 나르지 않는 속성이라 이 참조 구현의
+    `device_characteristics`는 `manufacturer`와 같은 자격이다:
+    0943 DEVICE_PROPERTY(표 7-15)가 나르지 않는 속성이라 이 참조 구현의
     동적 등록 경로(`ingest.py::_handle_device_property`)는 채우지 않고 항상 `None`을
-    넘긴다 — 6.2.4가 요구하는 컬럼 자체는 존재해야 하므로(F-185) 저장할
+    넘긴다 — 6.2.4가 요구하는 컬럼 자체는 존재해야 하므로 저장할
     수단은 열어 둔다.
 
-    F-182 — 실제로 새 행을 만들 때만(재사용 시에는 아무것도 바뀌지 않으므로
+    실제로 새 행을 만들 때만(재사용 시에는 아무것도 바뀌지 않으므로
     이력이 아니다) `config_change_log`에 CREATE 1건을 남긴다."""
     row = conn.execute("SELECT id FROM device_info WHERE model_name = ?", (model_name,)).fetchone()
     if row is not None:
@@ -138,12 +138,12 @@ def upsert_device_install_info(conn: sqlite3.Connection, *, device_info_id: str,
     `REQ_SET_NODE_DEVICE_PROPERTY_ALL`이며, `id`·`created_at`은
     불변이라 건드리지 않는다.
 
-    F-158 — `installed_at`(6.2.5 설치일자)도 최초 설치 시점의 사실이므로
+    `installed_at`(6.2.5 설치일자)도 최초 설치 시점의 사실이므로
     재연결 UPDATE 에서는 건드리지 않는다(의미상 `created_at`과 같은 부류).
     호출자가 넘기지 않으면 최초 등록 시각(`now_iso()`)을 그대로 쓴다 —
     이 참조 구현에서 "설치"는 곧 "첫 디바이스 속성 선언 등록"이다.
 
-    F-169 — 재연결로 장치 종류(subtype)가 바뀌면 `device_info_id`도 함께
+    재연결로 장치 종류(subtype)가 바뀌면 `device_info_id`도 함께
     갱신해야 한다. 이전에는 UPDATE 절에서 이 컬럼이 빠져 있어 `siap_subtype`
     만 새 값으로 바뀌고 `device_info_id`는 예전 모델(예: TEMPERATURE)을
     계속 참조했다 — 이후 값 알림이 새 subtype(예: HUMIDITY)으로 들어와도
@@ -151,22 +151,22 @@ def upsert_device_install_info(conn: sqlite3.Connection, *, device_info_id: str,
     어긋났다(1369-P1 §7.1(6) "장치 설치 정보는 정확히 하나의 장치 기본
     정보를 가진다", §7.2.2.5 "device_info_id는 갱신 가능").
 
-    F-170 — `install_location`·`install_loc_unit`·`unit`은 이전에는 호출자
+    `install_location`·`install_loc_unit`·`unit`은 이전에는 호출자
     (`ingest.py::_handle_device_property`)가 넘길 수단이 없어 항상 `None`으로
     들어왔다. UPDATE가 그 `None`을 그대로 덮어쓰면 서버가 (장차 API 등
     다른 경로로) 관리하던 값을 재연결마다 지운다 — `COALESCE`로 "호출자가
     실제 값을 줬을 때만 갱신"하도록 바꿔 `unit`처럼 한 번 설정된 값이
     이후 정보 없는 재연결에 의해 사라지지 않게 한다.
 
-    F-183 — 이제 호출자는 **최초 등록(CREATE)에서만** 온실 위치를 기본값
+    이제 호출자는 **최초 등록(CREATE)에서만** 온실 위치를 기본값
     으로 넘기고(`repository.get_greenhouse_location`), 재연결(UPDATE)
-    에서는 `None`을 넘긴다 — 그래야 위 F-170의 COALESCE가 그대로 지켜진다.
+    에서는 `None`을 넘긴다 — 그래야 위의 COALESCE가 그대로 지켜진다.
     호출자가 매 재연결마다 같은 기본값을 계속 넘기면 COALESCE가 매번
     "새 값이 왔다"고 보고 덮어써, 장차 더 구체적인 위치가 다른 경로로
-    설정되더라도 재연결 한 번에 다시 온실 기본값으로 되돌아간다 — F-170이
+    설정되더라도 재연결 한 번에 다시 온실 기본값으로 되돌아간다 —이
     막으려던 것과 같은 문제가 다른 값으로 재발한다.
 
-    F-182 — 실제 CREATE/UPDATE가 일어날 때만 `config_change_log`에 남긴다."""
+    실제 CREATE/UPDATE가 일어날 때만 `config_change_log`에 남긴다."""
     existing = find_device_install_by_siap(conn, siap_node_id, siap_device_id)
     now = now_iso()
     if existing is not None:
@@ -180,7 +180,7 @@ def upsert_device_install_info(conn: sqlite3.Connection, *, device_info_id: str,
             (now, device_name, device_info_id, install_location, install_loc_unit, siap_subtype, siap_value_type,
              transfer_mode, period_sec, unit, lower_limit, upper_limit, precision_val, existing["id"]),
         )
-        # F-182 — 재연결도 6.2.1의 "수정" 이다. 이 UPDATE가 실제로 무엇을
+        # 재연결도 6.2.1의 "수정" 이다. 이 UPDATE가 실제로 무엇을
         # 바꿨는지(예: siap_subtype)를 남긴다 — 재연결 자체가 이력이다.
         record_config_change(conn, table_name="device_install_info", row_id=existing["id"], operation="UPDATE",
                               changes={"device_name": device_name, "device_info_id": device_info_id,
@@ -221,7 +221,7 @@ def link_device_install(conn: sqlite3.Connection, greenhouse_id: str, install_id
 def get_greenhouse_manager_user_id(conn: sqlite3.Connection, greenhouse_id: str) -> str | None:
     """1369-P1 §7.1(3) "온실은 정확히 1명의 사용자가 관리한다"
     (`greenhouse_manage`, `UNIQUE(greenhouse_id)`) — 그 온실의 관리자를
-    돌려준다. `link_device_manage()`(F-176)의 호출자가 "이 장치의 관리자는
+    돌려준다. `link_device_manage()`의 호출자가 "이 장치의 관리자는
     누구인가"를 결정하는 데 쓴다. 없으면 None — 시드 누락 등 방어적 상황."""
     row = conn.execute(
         "SELECT user_id FROM greenhouse_manage WHERE greenhouse_id = ?", (greenhouse_id,)
@@ -230,7 +230,7 @@ def get_greenhouse_manager_user_id(conn: sqlite3.Connection, greenhouse_id: str)
 
 
 def link_device_manage(conn: sqlite3.Connection, user_id: str, install_id: str) -> None:
-    """F-176 — 1369-P1 §7.1(7) "설치된 장치들은 1명의 사용자에 의해
+    """1369-P1 §7.1(7) "설치된 장치들은 1명의 사용자에 의해
     관리된다" / §7.2.2.10. `UNIQUE(install_id)`가 강제하므로 이미 관리자가
     있으면 조용히 건너뛴다(재연결 시 재삽입 금지 — `link_device_install()`
     과 같은 멱등 패턴)."""
@@ -243,11 +243,11 @@ def link_device_manage(conn: sqlite3.Connection, user_id: str, install_id: str) 
 
 
 def get_greenhouse_location(conn: sqlite3.Connection, greenhouse_id: str) -> tuple[str | None, str | None]:
-    """F-183 — 1369-P1 6.2.5 "장치설치정보에는... 설치위치 등이 포함되어야
+    """1369-P1 6.2.5 "장치설치정보에는... 설치위치 등이 포함되어야
     한다" / 7.2.2.5 "설치 위치 속성은 속성값과 단위가 함께 포함되어야
     한다". 이 참조 구현에는 장치별 세부 설치위치를 입력할 별도 수단이
     없다(0943 REQ_SET_CONNECTION은 위치를 나르지 않는다, API 명세서 §3
-    쓰기 7건에도 없다) — F-176(장치 관리자 = 소속 온실 관리자)과 같은
+    쓰기 7건에도 없다) —(장치 관리자 = 소속 온실 관리자)과 같은
     근거로, 그 장치가 설치된 온실 자신의 위치(`greenhouse_info.location`/
     `location_unit`)를 기본값으로 쓴다. 온실 위치도 없으면 (None, None) —
     지어내지 않는다(CLAUDE.md §1-1)."""
@@ -353,7 +353,7 @@ def record_device_state(conn: sqlite3.Connection, *, install_id: str, subtype: s
         conn.execute("INSERT INTO dsd_fan(id,power,wind_level,valid_range) VALUES(?,?,NULL,?)",
                      (dsd_id, 1 if value else 0, valid_range))
     elif subtype == "COOLING_HEATER":
-        # F-157 — power 하나만 주 필드로 채운다(FAN과 같은 패턴). 이전에는
+        # power 하나만 주 필드로 채운다(FAN과 같은 패턴). 이전에는
         # 같은 value를 power와 temperature 두 필드에 중복 기입해, 관측
         # 근거가 하나인데 두 물리량을 관측한 것처럼 보였다 — 위 §3.5
         # 결정("주 필드에만 값을 싣고 나머지는 NULL") 자체를 어겼다.
@@ -368,14 +368,14 @@ def record_operating_env(conn: sqlite3.Connection, *, device_state_id: str, env_
     """작동 환경 — 1369-P1 7.2.3.4 / 7.1(10). "특정한 시간에 온실 내 설치된
     장치의 상태"(장치상태)와 그 시점의 환경상태를 묶는다. `UNIQUE(env_state_id)`
     가 강제하므로 환경상태 1건은 정확히 하나의 장치상태에만 귀속된다 — 호출자
-    (ingest.py, F-156)가 그 유일성을 보장한 뒤에만 부른다."""
+    (ingest.py)가 그 유일성을 보장한 뒤에만 부른다."""
     conn.execute("INSERT INTO operating_env(device_state_id,env_state_id) VALUES(?,?)",
                  (device_state_id, env_state_id))
 
 
 # ═══════════════════════════════════════════════════════════════
-#  F-6 — alert — NOTI_ERROR/NOTI_DISCONNECT 결과(SIAP I/O 스레드)와
-#  CONTROL_TIMEOUT/NO_DATA(API 스레드, F-191)가 함께 쓴다. F-186과 같은
+#  alert — NOTI_ERROR/NOTI_DISCONNECT 결과(SIAP I/O 스레드)와
+#  CONTROL_TIMEOUT/NO_DATA(API 스레드)가 함께 쓴다.과 같은
 #  원칙 — `SiapLink.send()`가 동기 반환이라 재전송 소진을 API 스레드가
 #  그 자리에서 알고, 미수집 판정(`check_stale_devices`)도 조회 시점에
 #  API 스레드에서 돈다(전용 스케줄러 스레드를 새로 두지 않는다).
@@ -384,10 +384,10 @@ def record_operating_env(conn: sqlite3.Connection, *, device_state_id: str, env_
 def record_alert(conn: sqlite3.Connection, *, kind: str, severity: str, message: str,
                   install_id: str | None = None, siap_nec: int | None = None,
                   frame_id: str | None = None, raised_at: str | None = None) -> str:
-    """F-092 CHECK — `siap_nec`가 있으면 `frame_id`도 반드시 있어야 한다.
+    """ CHECK — `siap_nec`가 있으면 `frame_id`도 반드시 있어야 한다.
     호출자(ingest.py)가 NEC 알림을 기록할 때는 항상 `frame_id`를 함께 넘긴다."""
     if siap_nec is not None and frame_id is None:
-        raise ValueError("siap_nec 가 있으면 frame_id 가 필수다 (0943 8.2.1.1, F-092)")
+        raise ValueError("siap_nec 가 있으면 frame_id 가 필수다 (0943 8.2.1.1)")
     id_ = new_id()
     raised_at = raised_at or now_iso()
     conn.execute(
@@ -480,7 +480,7 @@ def list_frame_violations(conn: sqlite3.Connection, frame_id: str) -> list[model
 #  쓰기 소유권은 여전히 호출자(API 스레드)가 지킨다 — 이 파일은 SQL만 안다.
 # ═══════════════════════════════════════════════════════════════
 
-try:                    # F-025 와 같은 원칙
+try:                    # 와 같은 원칙
     from contracts.frame import MsgKind, WIRE_CODE, WIRE_CODE_EXT
 except ImportError:
     import pathlib as _pathlib
@@ -609,7 +609,7 @@ def reject_control_rule(conn: sqlite3.Connection, rule_id: str, *, reason: str,
     )
 
 
-# ── control_execution — 0937 6.5 FCS (교차 소유, §4.4-a④ · F-186) ─────────
+# ── control_execution — 0937 6.5 FCS (교차 소유, §4.4-a④) ─────────
 
 def insert_control_execution(conn: sqlite3.Connection, *, origin: str, install_id: str,
                               command: dict, rule_id: str | None = None,
@@ -631,7 +631,7 @@ def insert_control_execution(conn: sqlite3.Connection, *, origin: str, install_i
 def update_execution_result(conn: sqlite3.Connection, exec_id: str, *,
                              siap_msg_id: int | None, result_rsc: int | None,
                              responded_at: str | None) -> None:
-    """F-186 — `SiapLink.send()`가 응답을 동기 반환하므로 API 스레드가 이
+    """`SiapLink.send()`가 응답을 동기 반환하므로 API 스레드가 이
     UPDATE도 (같은 커넥션으로) 직접 수행한다(아키텍처 §4.4-a④ 정정)."""
     conn.execute(
         "UPDATE control_execution SET siap_msg_id=?, result_rsc=?, responded_at=? WHERE id=?",
@@ -689,7 +689,7 @@ def list_device_installs_by_node(conn: sqlite3.Connection, siap_node_id: int) ->
 def list_device_installs_by_selector(conn: sqlite3.Connection, *, greenhouse_id: str | None = None,
                                       install_location: str | None = None,
                                       subtype: int | None = None) -> list[models.DeviceInstallInfo]:
-    """0937 6.4-2 구역 일괄 선택 — `PATCH /device-property`(API 명세서 F-093).
+    """0937 6.4-2 구역 일괄 선택 — `PATCH /device-property`(API 명세서).
     구역의 기본 의미는 온실 전체이며 `install_location`·`subtype`은 좁히는
     선택 항목이다."""
     where: list[str] = []
@@ -713,9 +713,9 @@ def update_device_property(conn: sqlite3.Connection, install_id: str, *,
                             property_patch: dict, user_id: str) -> bool:
     """사용자발 `PATCH /device-property`의 ACK 성공 결과를 저장한다.
 
-    F-220 — 누락 필드는 UPDATE 대상에서 빼 기존값을 보존한다. API 계약은
+    누락 필드는 UPDATE 대상에서 빼 기존값을 보존한다. API 계약은
     명시적 null을 허용하지 않으므로 여기까지 오는 키는 모두 실제 값이다.
-    F-221 — 실제로 바뀐 설정 필드와 사용자를 같은 트랜잭션의
+    실제로 바뀐 설정 필드와 사용자를 같은 트랜잭션의
     `config_change_log`에 남긴다. 호출자가 이 UPDATE와 이력 INSERT를 함께
     commit하므로 둘 중 하나만 영속되는 상태가 없다. 반환값은 실질 변경
     여부다."""
@@ -906,9 +906,9 @@ def get_frame(conn: sqlite3.Connection, frame_id: str) -> models.FrameLog | None
 
 
 def frame_judgement(conn: sqlite3.Connection, frame: models.FrameLog) -> str:
-    """F-060·F-085 — `violations`가 비어도 alert 일 수 있다(정상 NEC 알림).
+    """`violations`가 비어도 alert 일 수 있다(정상 NEC 알림).
     is_valid=0 이면 언제나 violation. is_valid=1 이면 이 프레임을 원인으로
-    삼은 `alert` 행이 있는지로 가른다(`alert.frame_id`, F-092)."""
+    삼은 `alert` 행이 있는지로 가른다(`alert.frame_id`)."""
     if not frame.is_valid:
         return "violation"
     row = conn.execute("SELECT 1 FROM alert WHERE frame_id = ? LIMIT 1", (frame.id,)).fetchone()

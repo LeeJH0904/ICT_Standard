@@ -29,7 +29,7 @@ typedef enum {
     SIAP_CLAUSE_TABLE_7_2,   /* 표 7-2     — 미정의 Message Type */
     SIAP_CLAUSE_TABLE_7_6,   /* 표 7-6     — 미정의 Transmission Type */
     SIAP_CLAUSE_TABLE_7_14,  /* 표 7-14    — Value Type / Subtype */
-    SIAP_CLAUSE_7_3_2,       /* 7.3.2      — NEC. 코덱은 생성하지 않는다(게이트웨이 전용, F-060) */
+    SIAP_CLAUSE_7_3_2,       /* 7.3.2      — NEC. 코덱은 생성하지 않는다(게이트웨이 전용) */
 } siap_clause_t;
 
 /* ═══════════════════════════════════════════════════════════════
@@ -166,7 +166,7 @@ siap_result_t siap_tx_put_dp(siap_enc_t *e, const siap_dp_t *dp);
    윈도우에 남긴다 — 블로킹하지 않는다(그래야 그동안 수신 바이트가 안 새지 않는다). */
 siap_tx_status_t siap_tx_flush(siap_enc_t *e, siap_io_write_fn write, void *io_ctx);
 
-/* ACK — F-040 계약. msg_id·GCG ID·Node ID 를 원 요청에서 복사한다 (7.2.2). */
+/* ACK — 계약. msg_id·GCG ID·Node ID 를 원 요청에서 복사한다 (7.2.2). */
 SIAP_WUR bool siap_encode_ack(const siap_hdr_t *req, siap_mode_t mode, siap_enc_t *e);
 
 #ifdef __cplusplus

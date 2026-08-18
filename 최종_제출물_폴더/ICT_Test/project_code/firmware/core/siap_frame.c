@@ -12,7 +12,7 @@
  *   5 Transmission Type     -> S_HDR
  *   6 Value Type            -> S_ELEM  (DEVICE_MAIN_INFO/DEVICE_PROPERTY 디코드)
  *   7 Subtype                -> S_ELEM  (위와 동일 지점, value_type 통과 후)
- *   8 NEC                    -> 코덱 밖 (게이트웨이 전용 판정, F-060)
+ *   8 NEC                    -> 코덱 밖 (게이트웨이 전용 판정)
  */
 #include "siap_frame.h"
 
@@ -30,7 +30,7 @@ int32_t siap_element_count(siap_kind_t k, uint16_t payload_len)
     if (rest % lay->elem) return -1;
     int32_t n = rest / lay->elem;
     if (n == 0 && lay->fixed == 0) return -1;   /* 가변부만 있는 메시지는 N>=1 */
-    /* F-120 — 노드당 디바이스 상한(CLAUDE.md §3.5, contracts/frame.py 와
+    /* 노드당 디바이스 상한(CLAUDE.md §3.5, contracts/frame.py 와
        동일한 MAX_DEVICES_PER_NODE=16). N=17 이상은 표준 미규정 영역을
        이 프로젝트가 자체 결정으로 닫은 것이지 표준 위반은 아니지만,
        Timeout·메모리 산정의 전제가 깨지므로 INVALID_FORMAT 으로 거부한다. */
@@ -38,7 +38,7 @@ int32_t siap_element_count(siap_kind_t k, uint16_t payload_len)
     return n;
 }
 
-/* F-119 처리 중 발견 — contracts/frame.py::resolve_kind() 는 후보가
+/* 처리 중 발견 — contracts/frame.py::resolve_kind() 는 후보가
    하나뿐이면 element_count() 를 전혀 보지 않고 그 후보를 바로 확정한다
    (0943 표 7-2~7-4 코드공간이 정하는 것은 "이 코드가 무엇을 뜻하는가"이지
    "이 Payload Length 가 유효한가"가 아니다 — 후자는 호출자가 별도로
@@ -111,7 +111,7 @@ void siap_decode_hdr(const uint8_t *buf, size_t *bitpos, siap_hdr_t *h)
 
 bool siap_encode_np(uint8_t *buf, size_t *bitpos, const siap_np_t *np)
 {
-    /* F-127 — 표 7-13 Status(0x03~0xFF)는 Reserved. bp_write 를 하나도 부르기
+    /* 표 7-13 Status(0x03~0xFF)는 Reserved. bp_write 를 하나도 부르기
        전에 검사해 실패 시 아무것도 기록하지 않는다(bitpack.c 의 "범위 초과 시
        아무것도 안 씀" 계약과 같은 원칙). */
     if (!siap_status_valid(np->status)) return false;
@@ -134,7 +134,7 @@ void siap_decode_np(const uint8_t *buf, size_t *bitpos, siap_np_t *np)
 siap_result_t siap_encode_dmi(uint8_t *buf, size_t *bitpos, const siap_dmi_t *dmi)
 {
     /* 위반 케이스 6·7 — 인코딩 쪽도 디코딩과 동일 기준으로 거부한다
-       (SIAP 메시지 명세서 §10.4 F-047: 한쪽만 막으면 판정 기준이 무너진다). */
+       (SIAP 메시지 명세서 §10.4 한쪽만 막으면 판정 기준이 무너진다). */
     if (dmi->value_type > SIAP_VALUE_TYPE_FLOAT)
         return (siap_result_t){ false, SIAP_RSC_INVALID_DATA_TYPE, SIAP_CLAUSE_TABLE_7_14 };
     if (!siap_subtype_valid(dmi->subtype))
@@ -161,7 +161,7 @@ siap_result_t siap_decode_dmi(const uint8_t *buf, size_t *bitpos, siap_dmi_t *dm
 
     /* 순서가 결과에 영향을 준다: 위반 케이스 6(Value Type=RESERVED)과 7(미등록
        Subtype)이 같은 요소에 동시에 있을 수는 없지만(값 하나만 조작), Value
-       Type을 먼저 판정한다 — SIAP 메시지 명세서 §10.4 F-047. */
+       Type을 먼저 판정한다 — SIAP 메시지 명세서 §10.4. */
     if (dmi->value_type == SIAP_VALUE_TYPE_RESERVED)
         return (siap_result_t){ false, SIAP_RSC_INVALID_DATA_TYPE, SIAP_CLAUSE_TABLE_7_14 };
     if (!siap_subtype_valid(dmi->subtype))
@@ -171,7 +171,7 @@ siap_result_t siap_decode_dmi(const uint8_t *buf, size_t *bitpos, siap_dmi_t *dm
 
 siap_result_t siap_encode_dp(uint8_t *buf, size_t *bitpos, const siap_dp_t *dp)
 {
-    /* F-127 — 표 7-15 Transfer Mode(0x03)·Status(0x03~0xFF)는 Reserved.
+    /* 표 7-15 Transfer Mode(0x03)·Status(0x03~0xFF)는 Reserved.
        main(DMI) 인코딩보다 먼저 검사해, 실패 시 main 의 7byte 도 쓰지 않는다
        (요소 전체가 all-or-nothing). */
     if (!siap_transfer_mode_valid(dp->transfer_mode))
@@ -214,7 +214,7 @@ siap_result_t siap_decode_dp(const uint8_t *buf, size_t *bitpos, siap_dp_t *dp)
     dp->upper_limit   = bp_read(buf, bitpos, 32);
     dp->precision     = bp_read(buf, bitpos, 32);
     dp->status        = (uint8_t)bp_read(buf, bitpos, 8);
-    /* F-127 — 표 7-15 Transfer Mode(0x03)·Status(0x03~0xFF)는 Reserved.
+    /* 표 7-15 Transfer Mode(0x03)·Status(0x03~0xFF)는 Reserved.
        30byte 를 전부 읽은 뒤 판정한다 — 요소는 자기완결적이고 고정폭이므로
        (§5.6) 실패해도 *bitpos 는 이미 정확한 요소 경계에 있다. */
     if (!siap_transfer_mode_valid(dp->transfer_mode))
@@ -278,7 +278,7 @@ static void begin_drain(siap_dec_t *d, uint16_t remaining)
     }
 }
 
-/* F-127 — 고정부 안에 RSC/NODE_PROPERTY 가 있는지는 opaque byte 크기만으로는
+/* 고정부 안에 RSC/NODE_PROPERTY 가 있는지는 opaque byte 크기만으로는
    판정할 수 없다(예: RSC+MCP 도 우연히 8byte). 종류로 직접 식별한다. */
 static bool _kind_has_leading_rsc(siap_kind_t k)
 {
@@ -334,7 +334,7 @@ static void handle_header_complete(siap_dec_t *d)
         size_t bp = 0;
         siap_decode_hdr(d->buf, &bp, &h);
 
-        /* F-141 — 아래 다섯 위반은 전부 "헤더 자체가 위반"인 경우다. 이 헤더의
+        /* 아래 다섯 위반은 전부 "헤더 자체가 위반"인 경우다. 이 헤더의
            payload_len 은 아직 어떤 구조로도 확인되지 않았으므로(잡음·손상
            바이트가 우연히 헤더 형태로 보인 것일 수도 있다) 그 값만큼
            `S_DRAIN` 으로 선폐기하면 안 된다 — 잡음이 아니라 마침 뒤따라온
@@ -351,22 +351,22 @@ static void handle_header_complete(siap_dec_t *d)
         siap_clause_t cl;
         k = siap_resolve_kind(h.msg_type, h.payload_len, d->mode, &cl);
         if (k == SIAP_KIND_NONE) {                                 /* 위반 3(다중 후보 전부 실패)·4 */
-            begin_drain(d, 0);                                     /* F-141 */
+            begin_drain(d, 0);                                     /* */
             d->sink.on_end(d->sink.ctx, SIAP_RSC_INVALID_FORMAT, cl);
             return;
         }
-        /* B02(F-116/F-119) — 단일 후보 코드는 resolve_kind() 가 element_count
+        /* B02 — 단일 후보 코드는 resolve_kind() 가 element_count
            를 보지 않고 확정하므로(Python 원본과 동일), 그 유효성은 여기서
            별도로 확인해야 한다. 고정부 없이 가변부만 있는 메시지의 N=0 이
            바로 이 경로로 걸린다(Frame 구조 명세서 §4.1, 7.3.1). */
         n = siap_element_count(k, h.payload_len);
         if (n < 0) {                                                /* 위반 3(단일 후보, B02 류) */
-            begin_drain(d, 0);                                     /* F-141 */
+            begin_drain(d, 0);                                     /* */
             d->sink.on_end(d->sink.ctx, SIAP_RSC_INVALID_FORMAT, SIAP_CLAUSE_7_3_1);
             return;
         }
         if (!siap_trans_type_valid(h.trans_type)) {                /* 위반 5 */
-            begin_drain(d, 0);                                     /* F-141 */
+            begin_drain(d, 0);                                     /* */
             d->sink.on_end(d->sink.ctx, SIAP_RSC_INVALID_TRANSMISSION_TYPE, SIAP_CLAUSE_TABLE_7_6);
             return;
         }
@@ -379,7 +379,7 @@ static void handle_header_complete(siap_dec_t *d)
 
     /* 위반 2(미등록 Node ID) 는 여기서 콜백으로 위임한다 — core/ 는 "내
        주소"를 모른다(node_state.c 의 몫). 콜백이 -(rsc) 를 돌려주면 거부.
-       F-141 — 이 시점에는 Version·resolve_kind·element_count·Transmission
+       이 시점에는 Version·resolve_kind·element_count·Transmission
        Type 4조건이 전부 통과해 h.payload_len 이 구조적으로 검증된
        뒤이지만, "헤더 위반은 payload_len 을 신뢰하지 않는다"는 규칙을
        위반 종류로 나누지 않고 5종 전부 동일하게 적용한다 — 검증·추론이
@@ -387,7 +387,7 @@ static void handle_header_complete(siap_dec_t *d)
        로직을 두 갈래로 쪼개는 비용이 더 크다. */
     int8_t hr = d->sink.on_header(d->sink.ctx, &h, k, (uint16_t)n);
     if (hr < 0) {
-        begin_drain(d, 0);                                         /* F-141 */
+        begin_drain(d, 0);                                         /* */
         d->sink.on_end(d->sink.ctx, (siap_rsc_t)(-hr), SIAP_CLAUSE_7_3_1);
         return;
     }
@@ -436,7 +436,7 @@ void siap_dec_feed(siap_dec_t *d, uint8_t byte)
         if (d->buf_len == d->fixed_len) {
             uint8_t flen = d->buf_len;
 
-            /* F-126 — COMBINED_PROPERTY 3종(REQ_SET_NODE_DEVICE_PROPERTY_ALL·
+            /* COMBINED_PROPERTY 3종(REQ_SET_NODE_DEVICE_PROPERTY_ALL·
                RES_SET_CONNECTION·RES_GET_NODE_DEVICE_PROPERTY_ALL, 0943
                §7.3.3.4)은 디바이스 개수를 두 번 주장한다: 고정부
                NODE_PROPERTY.Num. of Devices(표 7-13)와 Payload Length 로
@@ -459,9 +459,9 @@ void siap_dec_feed(siap_dec_t *d, uint8_t byte)
                 }
             }
 
-            /* F-127 — 표 7-10(RSC)·표 7-12(NEC)·표 7-13(NODE_PROPERTY.Status)의
+            /* 표 7-10(RSC)·표 7-12(NEC)·표 7-13(NODE_PROPERTY.Status)의
                예약값을 고정부 완료 시점에 거부한다. on_fixed 는 원시 바이트만
-               받으므로 여기서 걸러야 한다 — F-126 과 같은 이유. */
+               받으므로 여기서 걸러야 한다 — 과 같은 이유. */
             if (_kind_has_leading_rsc(d->kind) && !siap_rsc_valid(d->buf[0])) {
                 d->buf_len = 0;
                 uint16_t remaining = (uint16_t)(d->elem_len * d->n);
@@ -566,7 +566,7 @@ void siap_dec_on_gap(siap_dec_t *d)
  *  4. 송신 — Payload Length 선산출 + 51byte 윈도우 (펌웨어 설계서 §5.8)
  * ═══════════════════════════════════════════════════════════════ */
 
-/* F-123 — bp_write/siap_encode_* 는 버퍼 크기를 모른다(bitpack.c 의 4개
+/* bp_write/siap_encode_* 는 버퍼 크기를 모른다(bitpack.c 의 4개
    함수 계약에 capacity 인자가 없다, CLAUDE.md §4.2). 그래서 각 진입점을
    부르기 *전에* 여기서 남은 용량을 확인해야 한다 — 쓰고 나서 bitpos 만
    되돌리는 방식은 이미 win[] 배열 밖에 발생한 메모리 쓰기 자체를 되돌리지
@@ -592,7 +592,7 @@ bool siap_tx_put_hdr(siap_enc_t *e, const siap_hdr_t *h)
 bool siap_tx_put_rsc(siap_enc_t *e, siap_rsc_t rsc)
 {
     if (!_tx_has_room(e, SIAP_RSC_BYTES)) return false;
-    /* F-127 — 표 7-10 0x0A~0xFF 는 Reserved. 호출자가 enum 밖 값을 캐스팅해
+    /* 표 7-10 0x0A~0xFF 는 Reserved. 호출자가 enum 밖 값을 캐스팅해
        넘겨도 여기서 막는다. */
     if (!siap_rsc_valid((uint8_t)rsc)) return false;
     return bp_write(e->win, &e->bitpos, (uint32_t)rsc, 8);
@@ -601,7 +601,7 @@ bool siap_tx_put_rsc(siap_enc_t *e, siap_rsc_t rsc)
 bool siap_tx_put_nec(siap_enc_t *e, siap_nec_t nec)
 {
     if (!_tx_has_room(e, SIAP_NEC_BYTES)) return false;
-    /* F-127 — 표 7-12 0x0A~0xFF 는 Reserved. */
+    /* 표 7-12 0x0A~0xFF 는 Reserved. */
     if (!siap_nec_valid((uint8_t)nec)) return false;
     return bp_write(e->win, &e->bitpos, (uint32_t)nec, 8);
 }
@@ -657,7 +657,7 @@ siap_tx_status_t siap_tx_flush(siap_enc_t *e, siap_io_write_fn write, void *io_c
 
 bool siap_encode_ack(const siap_hdr_t *req, siap_mode_t mode, siap_enc_t *e)
 {
-    /* F-040 — msg_id·GCG ID·Node ID 를 원 요청에서 복사한다 (7.2.2). */
+    /* msg_id·GCG ID·Node ID 를 원 요청에서 복사한다 (7.2.2). */
     siap_hdr_t h;
     h.version     = SIAP_VERSION;
     h.msg_type    = siap_wire_code(SIAP_ACK, mode);

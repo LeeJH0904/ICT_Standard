@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import sqlite3
 
-try:                    # F-025 와 같은 원칙
+try:                    # 와 같은 원칙
     from backend import repository
 except ImportError:
     import pathlib
@@ -57,7 +57,7 @@ def check_stale_devices(conn: sqlite3.Connection, now: str) -> list[str]:
     살아 있고 특정 디바이스의 `NOTI_DEVICE_VALUE`만 멈춘 경우는 Keep Alive로
     잡히지 않는다 — 이 함수가 그 간극을 메운다.
 
-    F-191 — 전용 스케줄러 스레드는 두지 않는다(새 스레드는 CLAUDE.md §4.3
+    전용 스케줄러 스레드는 두지 않는다(새 스레드는 CLAUDE.md §4.3
     동시성 모델 확장이라 그 자체로 별도 결정이 필요하다). 대신 `api.py`가
     `GET /api/v1/alerts`(조회 시점, check-on-read)와 `GET /api/v1/stream`
     (SSE, 0.5초 틱마다)에서 이 함수를 호출한다 — 함수 자체는 DB만 보고

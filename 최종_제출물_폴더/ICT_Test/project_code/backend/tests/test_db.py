@@ -74,7 +74,7 @@ def test_seed_loads_single_farm_greenhouse_user(fresh_db):
 
 def test_seed_owned_tables_stay_empty_without_runtime_writer(fresh_db):
     """아키텍처 설계서 §4.4-a① — `device_manage`는 REQ_SET_CONNECTION 런타임
-    등록(F-176) 전까지 시드 이후 어느 스레드도 쓰지 않는다."""
+    등록 전까지 시드 이후 어느 스레드도 쓰지 않는다."""
     assert fresh_db.execute("SELECT COUNT(*) FROM device_manage").fetchone()[0] == 0
 
 

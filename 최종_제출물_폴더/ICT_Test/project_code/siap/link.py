@@ -9,19 +9,19 @@ siap/link.py — `SiapLink` 구현 (contracts/siap_iface.py Protocol).
 은 `backend/` 를 import 하지 않는다(CLAUDE.md §2.2)는 계층 규칙을 지키면서도,
 아키텍처 설계서 §3.1-b 의사코드가 그리는 "I/O 스레드가 `ingest.handle()` 을
 직접 부른다" 동작을 실현하는 유일한 방법이 의존성 주입이다 — `run.py`(단계 5,
-F-160)가 `link.start(..., on_frame=_make_on_frame(db_path))` 로 연결한다.
+)가 `link.start(..., on_frame=_make_on_frame(db_path))` 로 연결한다.
 
-F-167 — 여기 꽂는 콜백은 `backend.ingest.bind(conn)` 을 **그대로** 쓰지
+여기 꽂는 콜백은 `backend.ingest.bind(conn)` 을 **그대로** 쓰지
 않는다. `on_frame` 은 이 파일의 SIAP I/O 스레드 안에서 호출되는데,
 `bind(conn)` 은 호출자가 미리 연 연결을 클로저에 가둘 뿐이라 그 연결을
 다른 스레드(보통 `run.py` 의 메인 스레드)에서 열면 `sqlite3.
 ProgrammingError` 로 죽는다(아키텍처 설계서 §4.1 "스레드별 연결",
-`check_same_thread=False` 금지 — F-160 재현 실측). `run.py::_make_on_frame()`
+`check_same_thread=False` 금지 — 재현 실측). `run.py::_make_on_frame()`
 은 DB 파일 **경로**만 받아 이 스레드 안에서 첫 호출 시점에 지연 연결한다.
 `bind(conn)` 은 스레드 경계가 이미 보장된 호출자(테스트 등)를 위해
 `backend/ingest.py`에 남아 있다.
 
-F-154 — **`on_frame` 은 회신을 대신 만들지 않는다.** 회신 구성("REQ_SET_
+**`on_frame` 은 회신을 대신 만들지 않는다.** 회신 구성("REQ_SET_
 CONNECTION 에 어떤 NODE_PROPERTY 로 응답할까" 같은 판정)은 표준 해석이고,
 표준 해석은 프로토콜 계층에만 있다(CLAUDE.md §3.4) — `backend/` 가 그 판정을
 다시 하면 두 곳에서 서로 다르게 해석될 위험이 생긴다. 그래서 회신은 **항상**
@@ -49,7 +49,7 @@ import threading
 import time
 from typing import Callable, Iterator
 
-try:                    # F-025 — 패키지로 import될 때
+try:                    # 패키지로 import될 때
     from contracts.frame import (
         DeviceMainInfo, Frame, Mode, MsgControlProfile, MsgKind, NodeProperty,
         NODE_ORIGINATED_NOTIFIES, NODE_ORIGINATED_REQUESTS, RSC, Status,
@@ -95,7 +95,7 @@ class SiapNodeLink:
         self._transport: transport.Transport | None = None
         self._txq: "queue.Queue" = queue.Queue()
         self._recvq: "queue.Queue" = queue.Queue()
-        self._on_frame: Callable[[Frame], Frame | None] | None = None   # F-154: 부수효과 전용, 반환값 무시
+        self._on_frame: Callable[[Frame], Frame | None] | None = None   # 부수효과 전용, 반환값 무시
         # 실측 캡처(단계 8 출구 ③). None 이면 비활성 — 기본 동작 불변. I/O 스레드가
         # rx(각 frame.raw, 위반 프레임의 원시 바이트도 그대로)·tx(전송 성공 프레임)
         # 마다 capture(dir, raw) 를 부른다. 파일 포맷·시각은 호출자(run.py)가 정한다.
@@ -142,7 +142,7 @@ class SiapNodeLink:
         """Request → Response Frame 반환 / Notify → None. 큐에 넣고 기다릴
         뿐이다 — 호출자는 I/O 스레드를 의식하지 않는다(계약).
 
-        F-138 — 대기 상한(`Timeout × (Retry Count + 1)`)은 pending 등록 *이후*
+        대기 상한(`Timeout × (Retry Count + 1)`)은 pending 등록 *이후*
         뿐 아니라 큐잉부터 회신까지 **호출 전체**에 걸린다. I/O 스레드가
         전송 계층 오류로 계속 막혀 있으면(과거에는 `_io_loop()` 가 그 회차의
         큐 처리·만료 검사를 통째로 건너뛰어 pending 등록 자체가 무한정
@@ -158,7 +158,7 @@ class SiapNodeLink:
         except queue.Empty:
             return None                       # I/O 스레드가 상한 안에 등록조차 못 했다(링크 다운)
         if req is None:
-            return None                       # 회신을 기다리지 않는 송신(RES_*·ACK, F-046)
+            return None                       # 회신을 기다리지 않는 송신(RES_*·ACK)
         return self._pending.wait(req, timeout=max(deadline - time.monotonic(), 0.0))
 
     def registry(self) -> dict[int, NodeProperty]:
@@ -177,7 +177,7 @@ class SiapNodeLink:
         """부분 쓰기를 재시도해 전량 내보낸다(펌웨어 설계서 §5.8 의 논블로킹
         부분 쓰기 계약을 host 쪽에서 흡수).
 
-        F-139 — `write()` 가 0을 돌려주는 것은 "지금은 못 썼다"는 뜻이지
+        `write()` 가 0을 돌려주는 것은 "지금은 못 썼다"는 뜻이지
         "더 쓸 수 없다"는 뜻이 아니다(Transport.write 계약). 예전에는 그
         자리에서 `break` 해 잔여 바이트를 조용히 버리면서도 `stats['tx']`
         는 성공으로 셌다 — 프레임이 절단된 채로 "정상 송신"처럼 보였다.
@@ -207,7 +207,7 @@ class SiapNodeLink:
         while not self._stop.is_set():
             # ① 수신 — timeout 이 지나면 b"" 를 돌려주고 넘어간다.
             # 전송 계층 예외(상대가 연결을 끊는 등)도 이 회차의 ②·③ 은
-            # 반드시 계속 돈다(F-138) — 예전에는 여기서 continue 해 read
+            # 반드시 계속 돈다 — 예전에는 여기서 continue 해 read
             # 오류가 계속되는 동안 송신 큐 처리·pending 만료가 통째로
             # 멈췄다. 그러면 `send()` 가 등록조차 못 해 표 7-18 상한
             # 계산 자체에 도달하지 못하고 무한 대기했다.
@@ -217,7 +217,7 @@ class SiapNodeLink:
                 chunk = b""
             if chunk:
                 for frame in self._decoder.feed(chunk):
-                    # F-203 — decode_frame() 은 바이트를 해석할 뿐 수신 시각을
+                    # decode_frame() 은 바이트를 해석할 뿐 수신 시각을
                     # 모른다(자기 완결적 순수 함수, 골든 벡터 재생·단독 코덱
                     # 테스트에서 결정론이 깨지면 안 되므로 일부러 그렇다).
                     # 실제 수신 시각(Frame 구조 명세서 §3)은 이 스레드가
@@ -233,7 +233,7 @@ class SiapNodeLink:
                     self._recvq.put(frame)                    # frame_log 대응 — RES_*/ACK 도 남긴다
                     if not self._pending.match(frame):
                         reply = self._dispatch(frame)
-                        self._apply_registry_effects(frame, reply)     # F-137
+                        self._apply_registry_effects(frame, reply)
                         if reply is not None:
                             self._write(codec.encode_frame(reply, self._proto_mode))
             # ② API 가 넣어둔 송신 요청 — 수신 여부와 무관하게 매 회 처리한다
@@ -255,7 +255,7 @@ class SiapNodeLink:
             out.put(self._pending.register(frame))
 
     def _dispatch(self, frame: Frame) -> Frame | None:
-        """F-154 — 회신은 항상 `_default_reply()` 가 만든다(표준 해석은
+        """회신은 항상 `_default_reply()` 가 만든다(표준 해석은
         프로토콜 계층에만, CLAUDE.md §3.4). `on_frame` 은 설정돼 있으면
         부수효과(예: `backend.ingest.handle` 의 DB 반영)로 추가 호출될
         뿐이고, 반환값은 쓰지 않는다 — 이전에는 `on_frame` 이 설정되면
@@ -268,7 +268,7 @@ class SiapNodeLink:
 
     def _apply_registry_effects(self, frame: Frame, reply: Frame | None) -> None:
         """레지스트리 갱신은 회신 경로(내장 기본 처리기 / 주입된 `on_frame`)와
-        무관하게 이 한 곳에서만 일어난다(F-137) — `on_frame` 이
+        무관하게 이 한 곳에서만 일어난다 — `on_frame` 이
         `backend.ingest.handle` 로 교체돼도 `registry()`/`devices()` 가
         실제 연결 상태를 반영하도록 보장한다. `_default_reply()` 는 더 이상
         직접 `register()`/`unregister()` 를 부르지 않는다 — 중복 갱신을
@@ -292,7 +292,7 @@ class SiapNodeLink:
         elif (frame.kind is MsgKind.REQ_SET_NODE_DEVICE_PROPERTY_ALL and reply is not None
                 and reply.kind is MsgKind.RES_SET_NODE_DEVICE_PROPERTY_ALL
                 and reply.rsc == RSC.SUCCESS and frame.node_property is not None):
-            # F-198 — REQ_SET_CONNECTION 은 페이로드가 없어(LAYOUT (0,0)) 디바이스
+            # REQ_SET_CONNECTION 은 페이로드가 없어(LAYOUT (0,0)) 디바이스
             # 구성을 실을 수 없다. 노드가 연결 성공 뒤 이 메시지로 전체 구성을
             # 선언하면 그때 registry 를 갱신한다("ALL"이므로 전체 교체).
             self._registry.replace_node_and_device_properties(
@@ -310,7 +310,7 @@ class SiapNodeLink:
                 frame.header.node_id, frame.device_properties, replace=False)
 
     def _replace_profile(self, profile: MsgControlProfile) -> None:
-        """F-213 — 링크 대기 상한과 PendingTable 재전송 정책을 한 갱신점에서
+        """링크 대기 상한과 PendingTable 재전송 정책을 한 갱신점에서
         교체한다. send()의 프로파일 읽기도 같은 잠금으로 직렬화한다."""
         with self._profile_lock:
             self._pending.update_profile(profile)

@@ -27,7 +27,7 @@ void bp_memcpy(void *dst, const void *src, size_t len);
 
 /* GCC · Clang · AVR-GCC 공통. 미지원 컴파일러에서는 빈 매크로가 되지만
    호스트 테스트(펌웨어 설계서 §4.4)가 GCC/Clang 으로 도는 한 누락은
-   거기서 잡힌다 (F-078). */
+   거기서 잡힌다. */
 #if defined(__GNUC__)
 #  define SIAP_WUR __attribute__((warn_unused_result))
 #else
@@ -42,13 +42,13 @@ void bp_memcpy(void *dst, const void *src, size_t len);
  *   바이트 순서 : big-endian (표준 미규정 → 자체 결정, CLAUDE.md §3.5).
  *   nbits       : 1~32. 벗어나면 false.
  *   범위 초과   : val 이 nbits 폭을 넘으면 아무것도 기록하지 않고 false를
- *                반환한다 — 마스킹 래핑 금지(F-044)를 구조로 강제한다.
+ *                반환한다 — 마스킹 래핑 금지를 구조로 강제한다.
  *   성공 시     : *bitpos 가 nbits 만큼 증가한다.
  *   실패 시     : buf 와 *bitpos 어느 쪽도 바뀌지 않는다.
  *
  * 반환값을 버리면 SIAP_WUR 때문에 컴파일 경고가 나고,
  * firmware/tests/Makefile 의 -Werror=unused-result 가 그 경고를 빌드
- * 실패로 만든다(F-078) — 검사 누락이 관습이 아니라 구조로 막힌다.
+ * 실패로 만든다 — 검사 누락이 관습이 아니라 구조로 막힌다.
  */
 SIAP_WUR bool bp_write(uint8_t *buf, size_t *bitpos, uint32_t val, uint8_t nbits);
 

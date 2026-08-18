@@ -1,6 +1,6 @@
 """backend/tests/test_services_mms.py — backend/services/mms.py 단위 테스트.
 
-F-190 회귀 테스트 전용 — HTTP 계층을 거치지 않고 서비스 함수를 직접 호출해
+ 회귀 테스트 전용 — HTTP 계층을 거치지 않고 서비스 함수를 직접 호출해
 "장치 종류가 다른 모델을 추가해도 mms.py 소스가 한 글자도 바뀌지 않는다"는
 CLAUDE.md §0 주장 3을 증명한다. `control_model` 행을 seed 가 아니라 이
 테스트가 직접 INSERT 해서 검증하는 것이 핵심이다 — seed.sql 만 통과하는
@@ -36,7 +36,7 @@ def _insert_model(conn, *, model_id: str, recommend_action: str, exec_method: st
 
 
 def test_threshold_draft_uses_model_recommend_action_not_hardcoded_f190(conn):
-    """F-190 — 새 장치(송풍기) 모델을 코드 변경 없이 등록했을 때, 초안
+    """새 장치(송풍기) 모델을 코드 변경 없이 등록했을 때, 초안
     문구가 그 모델의 output_spec.recommend_action 을 그대로 쓴다.
     소스에 "송풍기"라는 문자열은 어디에도 없다(tools/nodetype_verify.py
     가 이를 정적으로도 확인한다)."""

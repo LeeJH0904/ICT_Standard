@@ -13,7 +13,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 
-try:                    # F-025 — 패키지로 import될 때
+try:                    # 패키지로 import될 때
     from contracts.frame import Frame, MsgControlProfile, MsgKind, expected_reply
 except ImportError:     # 스크립트로 직접 실행되거나 project_code 가 sys.path 밖일 때
     import pathlib
@@ -33,8 +33,8 @@ class PendingRequest:
 
 
 class PendingTable:
-    """F-046 매칭(`Node ID` + `Message Identifier` + **`Message Type`**) ·
-    F-041 재전송(`msg_id` 유지)·타임아웃(`Timeout × (Retry Count + 1)`)을
+    """ 매칭(`Node ID` + `Message Identifier` + **`Message Type`**) ·
+    재전송(`msg_id` 유지)·타임아웃(`Timeout × (Retry Count + 1)`)을
     구현한다. 시간 소스(`now_fn`)를 주입할 수 있어 재전송·타임아웃을 실제
     `sleep` 없이 테스트한다."""
 
@@ -45,7 +45,7 @@ class PendingTable:
         self._pending: dict[tuple[int, int], PendingRequest] = {}
 
     def update_profile(self, profile: MsgControlProfile) -> None:
-        """F-213 — 역방향 프로파일 설정 성공 뒤 새 pending부터 즉시 적용한다.
+        """역방향 프로파일 설정 성공 뒤 새 pending부터 즉시 적용한다.
         프로파일 교체와 register()/expire()의 판정을 같은 잠금으로 직렬화한다."""
         with self._lock:
             self._profile = profile
@@ -72,7 +72,7 @@ class PendingTable:
         return req
 
     def match(self, frame: Frame) -> bool:
-        """수신 프레임을 대기 항목과 맞춘다(`_match_pending`, F-046). 소비했으면
+        """수신 프레임을 대기 항목과 맞춘다(`_match_pending`). 소비했으면
         True. 기대와 다른 프레임(kind 불일치)은 대기 항목을 소비하지 않고
         흘려보낸다 — 진짜 Response 가 아직 올 수 있다. 타임아웃 판단은
         `expire()` 의 몫이다."""
@@ -94,7 +94,7 @@ class PendingTable:
         """타임아웃을 넘긴 대기 항목을 재전송하거나(재시도 남음, 표 7-18
         `Num. of Retry`) 포기한다(`_expire_pending`). `write_fn(frame)` 은
         재전송 바이트를 실제로 내보내는 콜백(link.py 가 주입) — `msg_id` 는
-        그대로 유지한다(F-041, 새로 발번하면 노드가 중복 요청으로 처리한다)."""
+        그대로 유지한다(, 새로 발번하면 노드가 중복 요청으로 처리한다)."""
         now = self._now()
         with self._lock:
             items = list(self._pending.items())

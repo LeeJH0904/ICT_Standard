@@ -1,5 +1,5 @@
 """siap/build.py 검증 — FrameBuilder Protocol 이행 12종(게이트웨이발 5 + 회신 7),
-msg_id 발번(초기값 0, F-135), F-040 회신 복사 규칙, F-137(미등록 디바이스 제어 거부).
+msg_id 발번(초기값 0) 회신 복사 규칙(미등록 디바이스 제어 거부).
 """
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from siap.build import FrameBuilderImpl, MsgIdAllocator
 
 def test_msg_id_allocator_starts_at_0_and_wraps_to_0_f135():
     """0943 7.2.2 원문 — "0에서 65535까지 사용… 만료되면 0부터 다시
-    시작한다." 0을 건너뛰지 않는다(F-135 — 이전에는 "0은 미할당 표시로
+    시작한다." 0을 건너뛰지 않는다(이전에는 "0은 미할당 표시로
     예약"이라며 1부터 시작해 0xFFFF 다음 1로 돌아갔다. 표준 문구와
     직접 어긋났고, 그 예약을 실제로 참조하는 코드도 없었다)."""
     a = MsgIdAllocator()
@@ -45,7 +45,7 @@ def test_gateway_originated_builders_encode_cleanly(kind, build_call):
 
 
 def test_device_control_encodes_cleanly_with_registry():
-    """REQ_SET_DEVICE_CONTROL 은 registry 조회가 있어야 인코딩된다(F-137) —
+    """REQ_SET_DEVICE_CONTROL 은 registry 조회가 있어야 인코딩된다 —
     다른 4종과 파라미터화하지 않은 이유가 그것이다."""
     from siap.registry import NodeRegistry
 
@@ -104,7 +104,7 @@ def test_res_set_connection_error_path_is_valid_wire_frame():
 
 @pytest.mark.parametrize("rsc", [RSC.SUCCESS, RSC.INVALID_NODE_ID])
 def test_res_set_connection_fake_and_real_payloads_match_f208(rsc):
-    """F-208 — Protocol 설명을 다시 '오류면 RSC 1byte만'으로 바꾸거나
+    """Protocol 설명을 다시 '오류면 RSC 1byte만'으로 바꾸거나
     Fake/실제 빌더 중 하나만 고정부를 줄이면 payload byte 대조가 깨진다."""
     req = codec.decode_frame(
         bytes.fromhex("120000000100000000100003"),
@@ -163,7 +163,7 @@ def test_device_control_looks_up_subtype_from_registry():
 
 
 def test_device_control_fails_without_registry_f137():
-    """F-137 — registry 가 없으면 ACTUATOR/WINDOW_OPENER 로 조용히 대체하지
+    """registry 가 없으면 ACTUATOR/WINDOW_OPENER 로 조용히 대체하지
     않고 실패한다(합성 데이터로 실제 제어 프레임을 만들지 않는다)."""
     b = FrameBuilderImpl(gcg_id=1)                      # registry=None
     with pytest.raises(ValueError):
@@ -171,7 +171,7 @@ def test_device_control_fails_without_registry_f137():
 
 
 def test_device_control_fails_for_unregistered_device_f137():
-    """F-137 — registry 는 있지만 그 device_id 가 없으면 역시 실패한다."""
+    """registry 는 있지만 그 device_id 가 없으면 역시 실패한다."""
     from siap.registry import NodeRegistry
 
     reg = NodeRegistry()

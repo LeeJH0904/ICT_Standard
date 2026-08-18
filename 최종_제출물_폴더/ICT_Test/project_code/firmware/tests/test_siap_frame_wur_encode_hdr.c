@@ -1,5 +1,5 @@
 /*
- * "컴파일이 실패해야 통과"다 (F-113/F-114 재발 방지).
+ * "컴파일이 실패해야 통과"다 ( 재발 방지).
  * siap_encode_hdr() 반환값을 일부러 버린다 — SIAP_WUR(siap_frame.h)와
  * -Werror=unused-result 가 둘 다 살아 있으면 컴파일 자체가 실패한다.
  * test_bitpack_wur_bp_write.c 와 같은 계약을 siap_frame.h 의 새 WUR

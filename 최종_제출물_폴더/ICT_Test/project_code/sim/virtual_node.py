@@ -21,14 +21,14 @@ golden.jsonl`의 `judgement=normal` DEVICE_MAIN_INFO.Value 값(사람이
 (합성 데이터 금지) 위반이 아니다. 단계 8에서 실측 캡처가 준비되면
 `_load_value_pool()`을 실측 로그 기반으로 교체한다(§5.5 결정 표 참조).
 
-디바이스 구성 선언 — **F-198.** `REQ_SET_CONNECTION`(8.1.1)은 페이로드가
+디바이스 구성 선언 — **.** `REQ_SET_CONNECTION`(8.1.1)은 페이로드가
 없어(`contracts/frame.py::LAYOUT (0,0)`) 디바이스 구성을 실을 수 없다.
 이 서버는 `RES_SET_CONNECTION`(RSC=SUCCESS) 수신 직후 `REQ_SET_NODE_
 DEVICE_PROPERTY_ALL`(8.1.3.3, 노드→GCG) 1회로 자신의 전체 디바이스
 구성을 게이트웨이에 선언한다(CLAUDE.md §3.5 결정). 회신(`RES_SET_NODE_
 DEVICE_PROPERTY_ALL`)을 받을 때까지 유한 횟수 재전송한다 — fire-and-
 forget으로 두면 그 프레임 하나가 유실됐을 때 "장치 0개"로 조용히
-되돌아간다(F-198 GPT 검증 지적). `DEVICE_PROPERTY`의 USER DEPENDENT
+되돌아간다( GPT 검증 지적). `DEVICE_PROPERTY`의 USER DEPENDENT
 5필드(하한·상한값/한계·정밀도)에 쓰는 물리적 범위 상수(`_PROPERTY_RANGES`)
 는 손으로 고른 설정값이지 "측정값"이 아니다 — CLAUDE.md §1-1이 금지하는
 무작위·주기함수 생성 대상이 아니다.
@@ -65,7 +65,7 @@ SUBTYPE_COOLING_HEATER = 0x86     # 6.3.4.7
 # DEVICE_PROPERTY(표 7-15) USER DEPENDENT 5필드 중 하한·상한(Lower/Upper
 # Limit·Value 는 같은 범위를 재사용한다, 근거는 아래 함수 참고) — 손으로
 # 고른 물리적으로 합당한 설정 상수다. §1-1이 금지하는 것은 무작위·주기
-# 함수로 만든 "측정값"이지, 이런 설정용 상수가 아니다(F-198).
+# 함수로 만든 "측정값"이지, 이런 설정용 상수가 아니다.
 # {subtype: (lower_limit, upper_limit, precision)}
 _PROPERTY_RANGES: dict[int, tuple[float, float, float]] = {
     SUBTYPE_TEMPERATURE: (-10.0, 60.0, 0.1),
@@ -74,7 +74,7 @@ _PROPERTY_RANGES: dict[int, tuple[float, float, float]] = {
     SUBTYPE_COOLING_HEATER: (10.0, 40.0, 1.0),   # 냉난방기 목표온도(℃) 설정 범위
 }
 
-# F-198 — 노드가 자신의 디바이스 구성을 선언하는 REQ_SET_NODE_DEVICE_
+# 노드가 자신의 디바이스 구성을 선언하는 REQ_SET_NODE_DEVICE_
 # PROPERTY_ALL 은 fire-and-forget이 아니다(응답을 기다리고 유한 재전송한다).
 # siap/link.py::DEFAULT_PROFILE(recv_timeout=2, num_retry=2)과 같은 이유로
 # 고른 값이지만 이 파일은 siap/를 import하지 않으므로(§5.5 독립성 원칙)
@@ -85,7 +85,7 @@ PROPERTY_DECLARE_MAX_ATTEMPTS = 3
 
 def _pack_by_type(value: float, value_type: int) -> int:
     """DEVICE_PROPERTY 의 USER DEPENDENT 필드를 main.value_type 규칙대로
-    32bit raw 로 packing한다(F-022, WireDMI.value 와 같은 관례)."""
+    32bit raw 로 packing한다(, WireDMI.value 와 같은 관례)."""
     if value_type == wire.VT_FLOAT:
         return wire.float_to_raw(float(value))
     return int(value) & 0xFFFFFFFF   # VT_UINT · VT_INT(2의 보수) 공통
@@ -134,7 +134,7 @@ class SimDevice:
     subtype: int
     value_type: int
     value: int              # 32bit raw (INT 2의 보수/UINT/FLOAT 비트패턴)
-    # F-241 — 게이트웨이가 REQ_SET_DEVICE_PROPERTY(8.1.3.2)로 설정한 값을
+    # 게이트웨이가 REQ_SET_DEVICE_PROPERTY(8.1.3.2)로 설정한 값을
     # 노드가 기억한다. None 이면 아직 설정된 적 없음 → _device_property() 가
     # 선언 시 subtype 기본 범위/전송주기를 쓴다. 값이 있으면 그 값으로
     # (재)선언한다 — 노드가 설정을 실제로 받아들였음을 선언에서도 일관되게
@@ -152,7 +152,7 @@ class SimNode:
     devices: list[SimDevice]
     msg_id: int = 0
     connected: bool = False
-    # F-198 — 디바이스 구성 선언(REQ_SET_NODE_DEVICE_PROPERTY_ALL) 상태.
+    # 디바이스 구성 선언(REQ_SET_NODE_DEVICE_PROPERTY_ALL) 상태.
     # property_declared 는 게이트웨이가 RSC=SUCCESS 로 확인해 줬을 때만 True —
     # 그전까지는 재전송 대상이다. next_declare_at 은 None 이면 "아직 보낼
     # 때가 아니다"(RES_SET_CONNECTION 성공을 기다리는 중), 값이 있으면
@@ -162,7 +162,7 @@ class SimNode:
     declare_attempts: int = 0
 
     def next_msg_id(self) -> int:
-        """7.2.2 — 0부터 시작, 0xFFFF 다음은 0으로 순환(F-135 와 같은 원칙을
+        """7.2.2 — 0부터 시작, 0xFFFF 다음은 0으로 순환( 와 같은 원칙을
         이 파일에서 독립적으로 다시 구현)."""
         v = self.msg_id
         self.msg_id = (v + 1) & 0xFFFF
@@ -176,13 +176,13 @@ def _dmi(pool: dict[int, tuple[int, int]], device_id: int, dev_type: int, subtyp
 
 
 def _device_property(d: SimDevice, period_sec: int) -> "wire.WireDP":
-    """SimDevice 1개를 DEVICE_PROPERTY(표 7-15)로 편다(F-198). `Period` 는
+    """SimDevice 1개를 DEVICE_PROPERTY(표 7-15)로 편다. `Period` 는
     실제 NOTI_DEVICE_VALUE 송신 주기와 같은 값을 그대로 쓴다(아키텍처
     설계서 §5.5 결정 표) — 선언한 주기와 실제 전송 주기가 어긋나지 않는다.
     Lower/Upper Value 는 이 데모에 별도의 "목표 운용 범위" 개념이 없으므로
     Lower/Upper Limit(유효범위)과 같은 값을 재사용한다.
 
-    F-241 — 게이트웨이가 REQ_SET_DEVICE_PROPERTY 로 설정한 값이 있으면
+    게이트웨이가 REQ_SET_DEVICE_PROPERTY 로 설정한 값이 있으면
     (`set_*` 필드) 선언에도 그 값을 반영한다 — 노드가 받아들인 설정과
     (재)선언이 어긋나지 않는다. 설정된 적 없으면 subtype 기본값을 쓴다."""
     lo, hi, prec = _PROPERTY_RANGES.get(d.subtype, (0.0, 0.0, 0.0))
@@ -205,7 +205,7 @@ def _device_property(d: SimDevice, period_sec: int) -> "wire.WireDP":
 def _default_nodes(pool: dict[int, tuple[int, int]]) -> list[SimNode]:
     """3종 혼용 데모 — Uno/Pro Mini/ESP32 를 흉내내는 노드 3대.
 
-    Uno 흉내 노드의 ID 는 101이 아니라 **3**이다(F-145). `contracts/vectors/
+    Uno 흉내 노드의 ID 는 101이 아니라 **3**이다. `contracts/vectors/
     golden.jsonl` 의 정상 34종·위반 8종(X01~X08) 은 B06(최대값 경계)·X02
     (미등록 Node ID 를 의도적으로 만드는 반례) 를 뺀 전부가 `Node ID=3` 을
     쓴다 — 골든벡터 명세서가 손으로 고른 "표준 테스트 노드" 관례다.
@@ -344,7 +344,7 @@ class VirtualNodeServer:
             now = time.monotonic()
 
             for n in self._nodes:
-                # F-198 — 디바이스 구성 선언. RES_SET_CONNECTION 성공 뒤에만
+                # 디바이스 구성 선언. RES_SET_CONNECTION 성공 뒤에만
                 # next_declare_at 이 채워진다(_handle() 에서) — 등록 전에
                 # 보내면 게이트웨이가 INVALID_NODE_ID 로 거부한다(경합 방지).
                 # 재전송은 유한하다(PROPERTY_DECLARE_MAX_ATTEMPTS) — 그
@@ -399,7 +399,7 @@ class VirtualNodeServer:
         """가상 노드는 표준 준수 검증기가 아니다 — 헤더가 깨졌거나 길이가
         터무니없으면 그냥 버퍼를 비우고 다음 바이트부터 다시 헤더 후보로
         본다. 진짜 §5.7 재동기 알고리즘은 `siap/codec.py`·`firmware/`의
-        몫이다(F-140·F-141)."""
+        몫이다."""
         while len(buf) >= wire.HEADER_BYTES:
             try:
                 h = wire.decode_header(bytes(buf[:wire.HEADER_BYTES]))
@@ -427,7 +427,7 @@ class VirtualNodeServer:
             if node is not None:
                 node.connected = (rsc == wire.RSC_SUCCESS)
                 if rsc == wire.RSC_SUCCESS and not node.property_declared:
-                    # F-198 — 연결 성공 직후에만 디바이스 구성 선언을 시작한다
+                    # 연결 성공 직후에만 디바이스 구성 선언을 시작한다
                     # (등록 전에 보내면 INVALID_NODE_ID 로 거부되는 경합을 피한다).
                     node.next_declare_at = time.monotonic()
             log.info("노드 %s 연결 응답 RSC=0x%02X", h.node_id, rsc)
@@ -443,7 +443,7 @@ class VirtualNodeServer:
         elif h.msg_type == wire.MT_ACK:
             log.debug("노드 %s ACK msg_id=%s", h.node_id, h.msg_id)
         elif h.msg_type == wire.MT_REQ_SET_DEVICE_PROPERTY:
-            # F-241 — 게이트웨이가 8.1.3.2로 보낸 수집 주기·전송 모드·전송
+            # 게이트웨이가 8.1.3.2로 보낸 수집 주기·전송 모드·전송
             # 임계 설정. 대상 device_id 를 전량 검증한 뒤에만 반영하고
             # (부분 적용 방지, 제어 경로와 같은 원칙) RES 로 회신한다.
             try:
@@ -526,7 +526,7 @@ class VirtualNodeServer:
 
     # ── 로컬 주입 제어 채널 — `sim/inject.py` 가 여기에 접속한다 ──
     # (시연 시나리오 §3.1 S4-b "주입 버튼 클릭"이 실행할 대상. 단계 6 의
-    # `POST /api/v1/sim/inject`(F-084) 는 이 서버 인스턴스를 직접 참조해
+    # `POST /api/v1/sim/inject` 는 이 서버 인스턴스를 직접 참조해
     # 이 로컬 소켓 왕복 없이 호출할 수도 있다 — 어느 쪽이든 최종적으로
     # `sim.inject.inject()` 하나로 수렴한다.)
     def _control_loop(self) -> None:

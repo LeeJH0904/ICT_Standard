@@ -42,14 +42,14 @@ DEFAULT_VECTOR_IDS = [
     "N34",  # NOTI_DEVICE_VALUE — 센서값 통지 (DEVICE_MAIN_INFO x2)
     "N09",  # NOTI_KEEP_ALIVE
     "N33",  # NOTI_ERROR — 정상 오류 알림(위반 아님)
-    "X08",  # NOTI_ERROR — NEC=ERROR_BATTERY_LOW, judgement=alert(위반 아님, F-060)
+    "X08",  # NOTI_ERROR — NEC=ERROR_BATTERY_LOW, judgement=alert(위반 아님)
     "N17",  # RES_SET_DEVICE_CONTROL — 제어 응답
     "N07",  # NOTI_DISCONNECT — 정상 연결 해제
 ]
 
 
 def _default_session(by_id: dict[str, dict], interval: float) -> list[dict]:
-    """기본 벡터를 실제 양방향 세션으로 결속한다(F-218).
+    """기본 벡터를 실제 양방향 세션으로 결속한다.
 
     연결 응답의 본문은 런타임 기본 계약(Software Version=1, GCG/Node ID는
     요청값, NORMAL, N=0)으로 독립 구성하고 헤더는 N01과 상관관계를 맞춘다.

@@ -27,10 +27,10 @@ typedef enum {
     SIAP_NS_INIT,         /* REQ_SET_CONNECTION 송신 준비 */
     SIAP_NS_CONNECTING,   /* RES_SET_CONNECTION 대기 */
     SIAP_NS_RUNNING,      /* 연결 승인 후 정상 운용 */
-    SIAP_NS_FAULT,        /* 디바이스 오류 — 연결 승인 이후에만 존재(F-072) */
+    SIAP_NS_FAULT,        /* 디바이스 오류 — 연결 승인 이후에만 존재 */
     SIAP_NS_REBOOTING,    /* NOTI_REBOOT 알림 후 리셋 대기(그림 8-56) */
     SIAP_NS_DISCONNECTED, /* 백오프 후 재접속 대기 */
-    SIAP_NS_HALTED,       /* 영구 정지. 전원 재인가로만 벗어난다(F-076) */
+    SIAP_NS_HALTED,       /* 영구 정지. 전원 재인가로만 벗어난다 */
 } siap_node_state_t;
 
 /* ═══════════════════════════════════════════════════════════════
@@ -40,11 +40,11 @@ typedef enum {
  * ═══════════════════════════════════════════════════════════════ */
 typedef struct {
     uint8_t  kind;     /* siap_kind_t. 비어 있으면 SIAP_KIND_NONE */
-    uint16_t msg_id;   /* 재전송에도 유지(F-041) */
+    uint16_t msg_id;   /* 재전송에도 유지 */
     uint8_t  retry;    /* 지금까지 재전송한 횟수 */
     uint32_t t_sent;   /* 마지막 송신 시각(ms) */
     uint16_t arg;      /* 재인코딩 인자 — NOTI_ERROR: NEC 코드,
-                           NOTI_DEVICE_VALUE: 보낼 devices[] 인덱스 비트마스크(F-130) */
+                           NOTI_DEVICE_VALUE: 보낼 devices[] 인덱스 비트마스크 */
 } siap_pending_t;
 
 /* ═══════════════════════════════════════════════════════════════
@@ -55,7 +55,7 @@ typedef struct {
 #define SIAP_DUE_ERROR        0x04u   /* bit2 */
 
 /* ═══════════════════════════════════════════════════════════════
- *  2-a. 다중 청크 송신 진행 상태 — §5.8, F-133.
+ *  2-a. 다중 청크 송신 진행 상태 — §5.8.
  *
  *  헤더 하나에 요소(DP/DMI) 여러 개가 붙는 프레임(NOTI_DEVICE_VALUE ·
  *  RES_GET_DEVICE_PROPERTY · RES_GET_NODE_DEVICE_PROPERTY_ALL ·
@@ -63,7 +63,7 @@ typedef struct {
  *  단위로 나눠 보낸다. siap_io_t.write 는 부분 쓰기를 허용하는 논블로킹
  *  계약이라(§2.2·§5.8), 이전 청크가 완전히 flush 되기 전에 다음 청크를
  *  만들며 같은 win 을 siap_tx_reset() 하면 미전송 잔여가 지워진다
- *  (F-133). 이 구조체가 "지금 몇 번째 청크까지 나갔는가"를 들고 있어
+ * . 이 구조체가 "지금 몇 번째 청크까지 나갔는가"를 들고 있어
  *  poll() 이 이어서 마저 보낼 수 있게 한다. */
 typedef enum {
     SIAP_SEQ_NONE = 0,
@@ -71,7 +71,7 @@ typedef enum {
     SIAP_SEQ_RES_GET_DEVICE_PROPERTY,
     SIAP_SEQ_RES_GET_NODE_DEVICE_PROPERTY_ALL,
     SIAP_SEQ_RES_GET_DEVICE_VALUE,
-    SIAP_SEQ_REQ_SET_NODE_DEVICE_PROPERTY_ALL,  /* F-198 — 노드→GCG 디바이스 구성 선언(8.1.3.3).
+    SIAP_SEQ_REQ_SET_NODE_DEVICE_PROPERTY_ALL,  /* 노드→GCG 디바이스 구성 선언(8.1.3.3).
                                                    요청이라 고정부에 RSC 가 없다(NP + DP×N) */
 } siap_tx_seq_kind_t;
 
@@ -95,14 +95,14 @@ typedef struct {
     const siap_io_t     *io;      /* §2.2 */
     const siap_dev_ops_t *dev_ops;/* §2.2 */
     siap_dp_t *devices;           /* 보드가 소유하는 배열 — DEVICE_PROPERTY 언팩 구조체 */
-    uint8_t   device_count;       /* 1~16(F-064) */
+    uint8_t   device_count;       /* 1~16 */
     siap_mcp_t profile;           /* MSG_CONTROL_PROFILE. 0 이면 SIAP_PROFILE_DEFAULT 를 쓴다 */
     siap_mode_t mode;             /* strict(기본) / extended */
 } siap_node_cfg_t;
 
 /* 표 7-18 기본값 — Message Receive Timeout 2s · Num. of Retry 3회(0937
    요구사항 대조표 §"배수 3의 근거") · Notify Error Interval 30s ·
-   Keep Alive Interval 60s. 전부 sec 단위다(F-033). */
+   Keep Alive Interval 60s. 전부 sec 단위다. */
 extern const siap_mcp_t SIAP_PROFILE_DEFAULT;
 
 /* ═══════════════════════════════════════════════════════════════
@@ -116,19 +116,19 @@ typedef struct {
     siap_enc_t enc;      /* 송신 — siap_frame.h 스트리밍 인코더 */
     bool       tx_busy;  /* enc 에 flush 대기 중인 프레임이 있다 */
 
-    uint16_t next_msg_id;      /* 0 부터. 7.2.2 그대로 — 0도 유효한 순번, 0xFFFF 다음 0 (F-135) */
+    uint16_t next_msg_id;      /* 0 부터. 7.2.2 그대로 — 0도 유효한 순번, 0xFFFF 다음 0 */
     siap_pending_t pending;    /* 동시 대기 1건(§6.4). NOTI_DEVICE_VALUE 는 arg 에
-                                   보낼 devices[] 인덱스 비트마스크를 담는다(F-130) */
-    siap_tx_seq_t  tx_seq;     /* 다중 청크 송신 진행 상태(F-133) */
+                                   보낼 devices[] 인덱스 비트마스크를 담는다 */
+    siap_tx_seq_t  tx_seq;     /* 다중 청크 송신 진행 상태 */
 
     /* §6.4-a — 3 소스 공통 회전. t_keep_alive/t_error 는 다음 만료 절대
-       시각(ms). DEVICE_VALUE 는 디바이스별로 갈린다 — 아래 dev_* 참조(F-130) */
+       시각(ms). DEVICE_VALUE 는 디바이스별로 갈린다 — 아래 dev_* 참조 */
     uint32_t t_keep_alive;
     uint32_t t_error;
     uint8_t  due;
     uint8_t  cursor;      /* 0=DEVICE_VALUE 1=KEEP_ALIVE 2=ERROR, 전송마다 +1 mod 3 */
 
-    /* 디바이스별 스캔 스케줄 — F-130, 펌웨어 설계서 §6.3. Period(표 7-15)의
+    /* 디바이스별 스캔 스케줄 —, 펌웨어 설계서 §6.3. Period(표 7-15)의
        표준상 의미는 "데이터 전달주기"다 — 본 구현에 샘플링 주기 전용
        필드가 없어 이를 내부 스캔 간격으로도 재사용할 뿐이며, 표준 필드
        의미의 재정의가 아니다(표준 미규정 결정, CLAUDE.md §3.5). 스캔

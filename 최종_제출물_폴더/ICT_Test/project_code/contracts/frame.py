@@ -166,20 +166,18 @@ RSC_BYTES    = 1
 NEC_BYTES    = 1
 DID_BYTES    = 1
 
-# F-120 — 노드당 디바이스 상한. 표준 미규정(F-065) → 자체 결정(CLAUDE.md §3.5,
-# 펌웨어 설계서 §3.2/§9). N=16 은 501 byte 최대 프레임(RSC+NODE_PROPERTY+
-# DEVICE_PROPERTY×16)과 Timeout≥2×wire_time 산식(아키텍처 §6.2-a)의
-# 전제다. CLAUDE.md §5 절차: ① 근거는 위 각주 ② 2026-08-08 사용자 승인
-# (F-118~F-120 일괄 처리 승인) ③ golden 벡터 재생성 + test_contract.py 재통과
-# ④ 이력을 이 절에 남김. C 대응은 firmware/core/siap_types.h 의
-# SIAP_MAX_DEVICES_PER_NODE.
+# 노드당 디바이스 상한. 표준 미규정 → 자체 결정. N=16 은 501 byte 최대 프레임
+# (RSC+NODE_PROPERTY+DEVICE_PROPERTY×16)과 Timeout≥2×wire_time 산식의
+# 전제다. 결정 절차: ① 근거는 위 각주 ② 2026-08-08 사용자 승인
+# ③ golden 벡터 재생성 + test_contract.py 재통과 ④ 이력 기록.
+# C 대응은 firmware/core/siap_types.h 의 SIAP_MAX_DEVICES_PER_NODE.
 MAX_DEVICES_PER_NODE = 16
 
 @dataclass(frozen=True)
 class Header:
     """전송된 원본 비트값을 그대로 보존한다.
 
-    F-014 — trans_type을 TransType으로 선언하면 표 7-6 미정의값(0x03)을
+    trans_type을 TransType으로 선언하면 표 7-6 미정의값(0x03)을
     담을 수 없어 "예외를 던지지 않는다"는 계약과 충돌한다. msg_type이
     이미 raw int인 것과 같은 원칙으로 trans_type도 raw int로 둔다.
     해석은 resolve_trans_type() 이 담당한다."""
@@ -219,7 +217,7 @@ class DeviceMainInfo:         # 표 7-14
 
 @dataclass(frozen=True)
 class DeviceProperty:         # 표 7-15
-    """F-022 — 표 7-15는 아래 5개 필드의 타입을 "USER DEPENDENT"로만 규정하고
+    """표 7-15는 아래 5개 필드의 타입을 "USER DEPENDENT"로만 규정하고
     선택 규칙을 정하지 않는다. 이들은 main.value 와 같은 물리량의 경계·정밀도
     이므로 **main.value_type 을 따른다**로 결정했다 (구현 결정, 표준 미규정).
     코덱은 반드시 이 규칙으로 인코딩·디코딩한다."""
@@ -254,7 +252,7 @@ class Violation:
 @dataclass(frozen=True)
 class Frame:
     # 12byte 헤더 자체가 불완전한 수신도 경계를 넘어 표시·저장돼야 한다.
-    # 이때 알 수 없는 헤더 값을 0으로 합성하지 않고 None 으로 보존한다(F-215).
+    # 이때 알 수 없는 헤더 값을 0으로 합성하지 않고 None 으로 보존한다.
     header: Header | None
     kind: MsgKind | None = None          # 해석된 논리 종류 (0x0800 해소 결과)
     rsc: RSC | None = None
@@ -334,7 +332,7 @@ def element_count(kind: MsgKind, payload_len: int) -> int | None:
     n = rest // elem
     if n == 0 and fixed == 0:
         return None
-    if n > MAX_DEVICES_PER_NODE:      # F-120 — 노드당 디바이스 상한(위 각주)
+    if n > MAX_DEVICES_PER_NODE:      # 노드당 디바이스 상한(위 각주)
         return None
     return n
 
@@ -354,8 +352,8 @@ def resolve_kind(msg_type: int, payload_len: int, mode: Mode = "strict") -> MsgK
 
 # ═══════════════════════════════════════════════════════════════
 #  7. 방향과 회신 — 0943 6.2.2 / 8장 시퀀스 다이어그램
-#     F-040: 게이트웨이가 "무엇에 무엇으로 답해야 하는가"의 정본.
-#     서비스 계층이 이 표를 다시 만들면 표준 해석이 두 곳에 생긴다(CLAUDE.md §3.4).
+#     게이트웨이가 "무엇에 무엇으로 답해야 하는가"의 정본.
+#     서비스 계층이 이 표를 다시 만들면 표준 해석이 두 곳에 생긴다.
 # ═══════════════════════════════════════════════════════════════
 
 #: 노드가 보낼 수 있는 Request. 게이트웨이는 대응 Response 를 회신해야 한다.
@@ -388,8 +386,7 @@ def reply_kind(kind: MsgKind | None) -> MsgKind | None:
     위반 프레임에도 이 표를 그대로 적용한다 — 0943 7.3.1 은 요청 처리 실패 시
     Response 에 오류 RSC 를 담아 보내도록 규정한다. 다만 ACK 는 헤더뿐이라
     오류를 실을 수단이 없으므로 **위반 Notify 에는 ACK 를 보내지 않는다**
-    (표준 미규정 → 자체 결정, CLAUDE.md §3.5 결정 표와
-    project_docs/contracts/Frame_구조_명세서.md §5.2 참조)."""
+    (표준 미규정 → 자체 결정)."""
     if kind is None:
         return None
     if kind in NODE_ORIGINATED_REQUESTS:
@@ -401,7 +398,7 @@ def reply_kind(kind: MsgKind | None) -> MsgKind | None:
 def expected_reply(kind: MsgKind | None) -> MsgKind | None:
     """게이트웨이가 `kind` 를 보냈을 때 **되돌아와야 하는** 종류. reply_kind() 의 쌍.
 
-    F-046 — 대기 요청의 매칭 기준이다. `Node ID` + `Message Identifier` 만 보면
+    대기 요청의 매칭 기준이다. `Node ID` + `Message Identifier` 만 보면
     다른 요청의 지연·중복 Response 나 우연히 번호가 같은 ACK 가 현재 호출의
     결과로 반환된다. 7.2.2 의 매칭은 '어느 요청의 응답인가'를 가리는 것이므로
     `Message Type` 까지 확인해야 성립한다."""

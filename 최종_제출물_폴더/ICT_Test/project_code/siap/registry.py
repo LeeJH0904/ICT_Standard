@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import threading
 
-try:                    # F-025 — 패키지로 import될 때
+try:                    # 패키지로 import될 때
     from contracts.frame import DeviceMainInfo, DeviceProperty, NodeProperty
 except ImportError:     # 스크립트로 직접 실행되거나 project_code 가 sys.path 밖일 때
     import pathlib
@@ -38,7 +38,7 @@ class NodeRegistry:
 
     def is_known(self, node_id: int) -> bool:
         """codec.decode_frame() 의 node_known 콜백으로 그대로 주입된다
-        (위반 2 판정, F-060 — codec 은 registry 를 직접 import 하지 않고
+        (위반 2 판정, codec 은 registry 를 직접 import 하지 않고
         link.py 가 이 메서드를 콜백으로 넘긴다)."""
         with self._lock:
             return node_id in self._nodes
@@ -61,7 +61,7 @@ class NodeRegistry:
 
     def merge_device_properties(self, node_id: int, devices: tuple[DeviceProperty, ...],
                                  *, replace: bool) -> None:
-        """F-198 — `REQ_SET_NODE_DEVICE_PROPERTY_ALL`(8.1.3.3, 노드→GCG)·
+        """`REQ_SET_NODE_DEVICE_PROPERTY_ALL`(8.1.3.3, 노드→GCG)·
         `REQ_SET_DEVICE_PROPERTY`(8.1.3.2, 노드→GCG) 처리 완료 시 호출한다.
         `register()`는 `REQ_SET_CONNECTION`(8.1.1) 성공 시에만 노드 자체를
         등록할 뿐 — 그 프레임은 페이로드가 없어(`LAYOUT[REQ_SET_CONNECTION]
@@ -98,7 +98,7 @@ class NodeRegistry:
 
     def replace_node_and_device_properties(
             self, node: NodeProperty, devices: tuple[DeviceProperty, ...]) -> None:
-        """F-213 — REQ_SET_NODE_DEVICE_PROPERTY_ALL 성공 효과를 한 잠금에서
+        """REQ_SET_NODE_DEVICE_PROPERTY_ALL 성공 효과를 한 잠금에서
         반영한다. 노드 속성과 전체 디바이스 목록 사이의 부분 관측을 막는다."""
         with self._lock:
             if node.node_id not in self._nodes:

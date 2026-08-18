@@ -21,7 +21,7 @@ from siap.link import SiapNodeLink
 
 
 class _FlakyTransport:
-    """F-139 재현용 — write() 가 지정된 청크 크기만큼만 쓰고, 목록이
+    """ 재현용 — write() 가 지정된 청크 크기만큼만 쓰고, 목록이
     바닥나면 항상 0을 돌려준다(Transport.write 의 부분 쓰기 계약)."""
 
     def __init__(self, chunk_sizes):
@@ -43,7 +43,7 @@ class _FlakyTransport:
 
 
 class _AlwaysErrorReadTransport:
-    """F-138 재현용 — read() 가 항상 OSError, write() 는 정상 성공한다
+    """ 재현용 — read() 가 항상 OSError, write() 는 정상 성공한다
     (송신 자체는 되지만 아무도 응답하지 않는 링크)."""
 
     def open(self) -> None: ...
@@ -111,7 +111,7 @@ def test_write_gives_up_after_bounded_stalls_and_does_not_report_success_f139():
 
 
 def test_send_bounded_even_when_read_always_errors_f138():
-    """F-138 — read() 가 지속적으로 OSError 를 던져도 send() 는 표 7-18
+    """read() 가 지속적으로 OSError 를 던져도 send() 는 표 7-18
     상한 안에 돌아온다. 예전에는 `_io_loop()` 가 그 회차의 큐 처리·pending
     만료를 통째로 건너뛰어, pending 등록 자체가 무한정 미뤄졌다."""
     from contracts.frame import MsgControlProfile
@@ -130,13 +130,13 @@ def test_send_bounded_even_when_read_always_errors_f138():
         result = link.send(frame)                   # 상한 = 1 × (1+1) = 2초
         elapsed = time.monotonic() - t0
         assert result is None
-        # F-143 — 옛 4.0초 여유는 계약 상한(2초)의 두 배라 상한을 거의
+        # 옛 4.0초 여유는 계약 상한(2초)의 두 배라 상한을 거의
         # 통째로 위반하는 구현도 통과시켰다(실측: send() 반환을 1초 지연시켜
         # 3.032초로 만들어도 PASS). 계약값에서 직접 유도한 상한 + 스케줄링
         # 여유(0.5초)로 좁힌다 — 이 여유보다 큰 지연은 반드시 실패해야 한다.
         upper = fast_profile.recv_timeout * (fast_profile.num_retry + 1)
         assert elapsed < upper + 0.5, (
-            f"링크가 죽어 있어도 상한({upper}s) 근처에서 돌아와야 한다 (실제 {elapsed:.2f}s) (F-143)")
+            f"링크가 죽어 있어도 상한({upper}s) 근처에서 돌아와야 한다 (실제 {elapsed:.2f}s)")
     finally:
         link._stop.set()
         link._thread.join(timeout=2.0)
@@ -191,7 +191,7 @@ def test_req_set_connection_auto_registers(node_socket_pair):
 
 
 def test_recv_stamps_real_wall_clock_time_f203(node_socket_pair):
-    """F-203 — `decode_frame()` 은 `Frame.t` 를 채우지 않는다(순수 함수, 골든
+    """`decode_frame()` 은 `Frame.t` 를 채우지 않는다(순수 함수, 골든
     벡터 재생·단독 코덱 테스트의 결정론을 지키기 위해 의도적이다). 실제
     수신 시각(Frame 구조 명세서 §3)은 I/O 스레드가 디코더에서 완결된 프레임을
     받는 "지금"만 안다 — `_io_loop()` 이 `dataclasses.replace(frame, t=...)`
@@ -223,7 +223,7 @@ def test_recv_stamps_real_wall_clock_time_f203(node_socket_pair):
             time.sleep(0.05)
         after = time.time()
         assert seen, "on_frame 이 프레임을 받지 못했다"
-        assert seen[0].t != 0.0, "Frame.t 가 기본값(0.0) 그대로다 — F-203 재발"
+        assert seen[0].t != 0.0, "Frame.t 가 기본값(0.0) 그대로다 — 재발"
         assert before - 1.0 <= seen[0].t <= after + 1.0, \
             f"Frame.t={seen[0].t} 가 실측 수신 구간[{before}, {after}] 밖이다"
     finally:
@@ -232,11 +232,11 @@ def test_recv_stamps_real_wall_clock_time_f203(node_socket_pair):
 
 
 def test_on_frame_success_still_registers_f137(node_socket_pair):
-    """F-137 — `on_frame` 이 주입돼도 `link.registry()` 는 연결을 반영해야
+    """`on_frame` 이 주입돼도 `link.registry()` 는 연결을 반영해야
     한다. 이전에는 `_default_reply()` 경로만 registry 를 갱신해, on_frame 이
     주입되는 순간(backend 를 실제로 연결하는 순간) 등록이 유실됐다.
 
-    F-154 갱신 — `on_frame` 은 이제 회신을 대신 만들지 않으므로(부수효과
+    갱신 — `on_frame` 은 이제 회신을 대신 만들지 않으므로(부수효과
     전용, `_default_reply()` 가 항상 회신을 만든다) 아래 `fake_backend_handle`
     이 스스로 RES_SET_CONNECTION 을 반환하는 것은 더 이상 registry 갱신의
     전제가 아니다 — 무엇을 반환하든 `_default_reply()` 가 등록을 보장한다.
@@ -260,7 +260,7 @@ def test_on_frame_success_still_registers_f137(node_socket_pair):
 
     def fake_backend_handle(frame: Frame) -> Frame | None:
         """backend.ingest.handle() 을 흉내낸다 — registry.py 를 전혀 모른 채
-        RES_SET_CONNECTION 을 스스로 구성해 회신한다(F-137 시나리오)."""
+        RES_SET_CONNECTION 을 스스로 구성해 회신한다( 시나리오)."""
         if frame.kind is MsgKind.REQ_SET_CONNECTION:
             node = NodeProperty(sw_version=1, gcg_id=1, node_id=frame.header.node_id,
                                  status=Status.NORMAL, num_devices=0)
@@ -280,7 +280,7 @@ def test_on_frame_success_still_registers_f137(node_socket_pair):
 
 
 def test_on_frame_is_side_effect_only_f154(node_socket_pair):
-    """F-154 — `on_frame`은 회신을 대신 만들지 않는다. 반환값과 무관하게
+    """`on_frame`은 회신을 대신 만들지 않는다. 반환값과 무관하게
     (여기서는 항상 None을 돌려주는, `backend.ingest.handle`을 흉내낸 콜백)
     노드가 실제로 받는 바이트는 여전히 `_default_reply()`가 만든 정상
     RES_SET_CONNECTION이어야 한다 — 이전에는 `on_frame`이 설정되면
@@ -403,19 +403,19 @@ def test_send_times_out_when_no_response(node_socket_pair):
         result = link.send(frame)                   # 상한 = 1 × (1+1) = 2초
         elapsed = time.monotonic() - t0
         assert result is None
-        # F-143 — 이 5.0초도 위와 같은 결함이다: 노드의 5초 sleep 을
+        # 이 5.0초도 위와 같은 결함이다: 노드의 5초 sleep 을
         # "기다리지 않았다"만 확인하려던 여유가 계약 상한(2초)을 2.5배
         # 초과하는 구현까지 통과시킨다. 계약값 + 스케줄링 여유(0.5초)로 좁힌다.
         upper = fast_profile.recv_timeout * (fast_profile.num_retry + 1)
         assert elapsed < upper + 0.5, (
             f"노드의 5초 sleep 을 기다리면 안 된다 — 상한({upper}s) 근처에서 돌아와야 한다 "
-            f"(실제 {elapsed:.2f}s) (F-143)")
+            f"(실제 {elapsed:.2f}s)")
     finally:
         link.stop()
 
 
 def test_req_set_node_device_property_all_registers_devices_f198(node_socket_pair):
-    """F-198 — 전체 경로 회귀: wire bytes(`sim/_wire.py`, 실제 프로덕션
+    """전체 경로 회귀: wire bytes(`sim/_wire.py`, 실제 프로덕션
     인코더) → `siap/codec.py` 디코드 → `siap/link.py` 디스패치 →
     `siap/registry.py` 갱신. 손으로 만든 Frame이 아니라 실제 바이트로
     검증한다(GPT 지적 — 기존 backend 단독 테스트는 코덱이 만들 수 없는
@@ -486,10 +486,10 @@ def test_req_set_node_device_property_all_registers_devices_f198(node_socket_pai
             time.sleep(0.02)
 
         # REQ_SET_CONNECTION 만으로는(구조적으로 페이로드가 없으므로) 아직
-        # 디바이스가 하나도 등록되지 않아야 한다 — F-198이 고친 바로 그 지점.
+        # 디바이스가 하나도 등록되지 않아야 한다 —이 고친 바로 그 지점.
         assert 3 in link.registry()
         assert link.devices(3) == (), (
-            "REQ_SET_CONNECTION 만으로 디바이스가 등록됐다 — 그 메시지는 페이로드가 없다(F-198)")
+            "REQ_SET_CONNECTION 만으로 디바이스가 등록됐다 — 그 메시지는 페이로드가 없다")
 
         phase2_go.set()   # ②를 진행해도 좋다는 신호
 
@@ -508,7 +508,7 @@ def test_req_set_node_device_property_all_registers_devices_f198(node_socket_pai
         while time.monotonic() < deadline and not link.devices(3):
             time.sleep(0.05)
         devices = link.devices(3)
-        assert len(devices) == 1, "F-198 재발: REQ_SET_NODE_DEVICE_PROPERTY_ALL 뒤에도 registry 가 비어 있다"
+        assert len(devices) == 1, " 재발: REQ_SET_NODE_DEVICE_PROPERTY_ALL 뒤에도 registry 가 비어 있다"
         assert devices[0].device_id == 1
         assert devices[0].subtype == 1
         assert devices[0].value == pytest.approx(25.3, abs=1e-4)

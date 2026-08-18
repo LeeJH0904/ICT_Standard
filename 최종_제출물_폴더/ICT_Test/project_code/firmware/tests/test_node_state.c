@@ -31,7 +31,7 @@ typedef struct {
     uint8_t tx[FIO_BUF]; size_t tx_len;           /* 노드 -> 게이트웨이 (마지막 프레임만 담게 매 검사 전 비운다) */
     uint32_t now;
     bool link_error_once;
-    /* F-133 재현용 — UART 포화 흉내. budget_enabled 일 때만 write() 가
+    /* 재현용 — UART 포화 흉내. budget_enabled 일 때만 write() 가
        budget_left 로 제한되고(그 이하는 0 을 돌려준다), 매 poll 전 테스트가
        budget_left 를 다시 채워 "poll당 최대 N byte" 를 흉내낸다. 기본
        false 라 다른 모든 테스트의 즉시-전량-수신 가정은 그대로다. */
@@ -130,7 +130,7 @@ static void push_res_set_connection(fake_io_t *io, uint32_t gcg, uint32_t nid, u
     }
 }
 
-/* F-198 — 게이트웨이가 노드의 디바이스 구성 선언(REQ_SET_NODE_DEVICE_PROPERTY_ALL)
+/* 게이트웨이가 노드의 디바이스 구성 선언(REQ_SET_NODE_DEVICE_PROPERTY_ALL)
    에 돌려주는 응답. LAYOUT {RSC_BYTES,0} — 고정부에 RSC 만 있다. */
 static void push_res_set_node_device_property_all(fake_io_t *io, uint32_t gcg, uint32_t nid,
                                                    uint16_t msg_id, siap_rsc_t rsc)
@@ -263,7 +263,7 @@ static void fixture_boot(fixture_t *f, uint8_t device_count, uint16_t period)
 }
 
 /* fixture_boot 과 달리 디바이스를 그대로 넘겨받는다 — Transfer Mode ·
-   Period · Lower/Upper Value 를 디바이스별로 다르게 둬야 하는 F-130
+   Period · Lower/Upper Value 를 디바이스별로 다르게 둬야 하는
    회귀 테스트 전용(디바이스별 스캔 스케줄·Event 임계값 검증). */
 static void fixture_boot_devices(fixture_t *f, const siap_dp_t *devs, const uint32_t *values, uint8_t n)
 {
@@ -303,9 +303,9 @@ static void fixture_run_to_running(fixture_t *f)
     siap_node_poll(&f->node);   /* BOOT->INIT->CONNECTING, REQ_SET_CONNECTION 송신 */
     uint16_t mid = f->node.pending.msg_id;
     push_res_set_connection(&f->io, GCG, NID, mid, SIAP_RSC_SUCCESS, f->devices, f->dev.n);
-    siap_node_poll(&f->node);   /* -> RUNNING, 이어서 REQ_SET_NODE_DEVICE_PROPERTY_ALL 선언(F-198) */
+    siap_node_poll(&f->node);   /* -> RUNNING, 이어서 REQ_SET_NODE_DEVICE_PROPERTY_ALL 선언 */
 
-    /* F-198 — 연결 성공 직후 노드가 자기 구성을 선언한다. 게이트웨이 RES 로
+    /* 연결 성공 직후 노드가 자기 구성을 선언한다. 게이트웨이 RES 로
        그 handshake 를 마쳐 pending 을 비운다 — 개별 테스트는 "구성 선언이
        끝난 RUNNING"(pending 빔)에서 이어 붙인다. 선언 자체의 검증은
        test_connection_declares_node_device_property_all_F198 가 담당한다. */
@@ -348,7 +348,7 @@ static void test_init_validation_4_1_a(void)
     check("init_4_1_a: device_count=0 거부", !siap_node_init(&n, &bad));
 
     bad = base; bad.device_count = (uint8_t)(SIAP_MAX_DEVICES_PER_NODE + 1u);
-    check("init_4_1_a: device_count>16 거부(F-064)", !siap_node_init(&n, &bad));
+    check("init_4_1_a: device_count>16 거부", !siap_node_init(&n, &bad));
 
     siap_dp_t devs_badtype[2] = { devs[0], devs[1] };
     devs_badtype[0].main.value_type = SIAP_VALUE_TYPE_RESERVED;
@@ -383,7 +383,7 @@ static void test_boot_to_connecting_sends_req_8_1_1(void)
     check("8_1_1: REQ_SET_CONNECTION 송신", h.msg_type == siap_wire_code(SIAP_REQ_SET_CONNECTION, SIAP_MODE_STRICT));
     check("8_1_1: 페이로드 없음(plen=0)", h.payload_len == 0);
     check("8_1_1: 헤더의 GCG/Node ID 가 설정과 일치", h.gcg_id == GCG && h.node_id == NID);
-    check("F-135: 최초 Message Identifier == 0(7.2.2 원문 그대로, 0도 유효)", f.node.pending.msg_id == 0);
+    check("최초 Message Identifier == 0(7.2.2 원문 그대로, 0도 유효)", f.node.pending.msg_id == 0);
 }
 
 static void test_connecting_success_to_running_8_1_1(void)
@@ -411,7 +411,7 @@ static void test_connecting_retryable_rsc_waits_for_timeout_6_5(void)
     f.io.tx_len = 0;
     f.io.now += 2000u;   /* Message Receive Timeout 기본 2s 경과 */
     siap_node_poll(&f.node);
-    check("6_5: Timeout 후 같은 msg_id 로 재송신(F-041)", f.node.pending.msg_id == mid1);
+    check("6_5: Timeout 후 같은 msg_id 로 재송신", f.node.pending.msg_id == mid1);
     check("6_5: 재전송 횟수 증가", f.node.pending.retry == 1);
     siap_hdr_t h = decode_tx_hdr(&f.io);
     check("6_5: 재송신 프레임도 REQ_SET_CONNECTION", h.msg_type == siap_wire_code(SIAP_REQ_SET_CONNECTION, SIAP_MODE_STRICT));
@@ -432,20 +432,20 @@ static void test_connecting_unretryable_rsc_halts_6_5_F076(void)
     uint16_t mid1 = f.node.pending.msg_id;
     push_res_set_connection(&f.io, GCG, NID, mid1, SIAP_RSC_INVALID_VERSION, NULL, 0);
     siap_node_poll(&f.node);
-    check("6_5/F-076: 재시도 불가 RSC 수신 -> HALTED", f.node.state == SIAP_NS_HALTED);
+    check("6_5/재시도 불가 RSC 수신 -> HALTED", f.node.state == SIAP_NS_HALTED);
 
-    /* HALTED — 수신 프레임을 읽어 버리고 응답하지 않는다(F-076) */
+    /* HALTED — 수신 프레임을 읽어 버리고 응답하지 않는다 */
     f.io.tx_len = 0;
     push_req_set_device_control(&f.io, GCG, NID, 99, 1, SIAP_DEV_SENSOR,
                                  SIAP_SUBTYPE_TEMPERATURE, SIAP_VALUE_TYPE_INT, 1234u);
     siap_node_poll(&f.node);
-    check("F-076: HALTED 는 수신 바이트를 소비만 하고", f.io.rx_pos == f.io.rx_len);
-    check("F-076: 어떤 응답도 보내지 않는다(상태 무관 전이의 유일한 예외)", f.io.tx_len == 0);
-    check("F-076: HALTED 는 나가는 전이가 없다", f.node.state == SIAP_NS_HALTED);
+    check("HALTED 는 수신 바이트를 소비만 하고", f.io.rx_pos == f.io.rx_len);
+    check("어떤 응답도 보내지 않는다(상태 무관 전이의 유일한 예외)", f.io.tx_len == 0);
+    check("HALTED 는 나가는 전이가 없다", f.node.state == SIAP_NS_HALTED);
 }
 
 /* ═══════════════════════════════════════════════════════════════
- *  3. 주기 알림 회전 — §6.4-a (F-077 재현 방지)
+ *  3. 주기 알림 회전 — §6.4-a ( 재현 방지)
  * ═══════════════════════════════════════════════════════════════ */
 static void test_periodic_rotation_no_starvation_6_4_a_100cycles(void)
 {
@@ -459,8 +459,8 @@ static void test_periodic_rotation_no_starvation_6_4_a_100cycles(void)
         siap_node_poll(&f.node);
         drain_pending_with_ack(&f.node, &f.io, GCG, NID, &dv, &ka, NULL);
     }
-    check("6_4_a: 100주기에서 NOTI_DEVICE_VALUE 최소 45회(기아 없음, F-077)", dv >= 45);
-    check("6_4_a: 100주기에서 NOTI_KEEP_ALIVE 최소 45회(기아 없음, F-077)", ka >= 45);
+    check("6_4_a: 100주기에서 NOTI_DEVICE_VALUE 최소 45회(기아 없음)", dv >= 45);
+    check("6_4_a: 100주기에서 NOTI_KEEP_ALIVE 최소 45회(기아 없음)", ka >= 45);
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -522,7 +522,7 @@ static void test_noti_disconnect_ack_then_reconnect_8_2_1_3(void)
     check("8_2_1_3: 백오프 후 CONNECTING 재시도", f.node.state == SIAP_NS_CONNECTING);
 }
 
-/* F-210 — §6.2-a(1)의 상태 게이트 선행 규칙을 NOTI_REBOOT에도 적용한다.
+/* §6.2-a(1)의 상태 게이트 선행 규칙을 NOTI_REBOOT에도 적용한다.
    BOOT/INIT는 한 poll 안에서 CONNECTING으로 진행하므로, 수신 가능한 안정 상태
    5종을 전부 검사하고 HALTED가 유일한 예외임을 별도로 고정한다. */
 static void check_noti_reboot_ack_in_state(siap_node_state_t state, uint16_t msg_id,
@@ -547,24 +547,24 @@ static void test_noti_reboot_ack_state_matrix_F210(void)
 {
     check_noti_reboot_ack_in_state(
         SIAP_NS_CONNECTING, 510,
-        "F-210: CONNECTING에서 NOTI_REBOOT -> ACK",
-        "F-210: CONNECTING 상태 유지");
+        "CONNECTING에서 NOTI_REBOOT -> ACK",
+        "CONNECTING 상태 유지");
     check_noti_reboot_ack_in_state(
         SIAP_NS_RUNNING, 511,
-        "F-210: RUNNING에서 NOTI_REBOOT -> ACK",
-        "F-210: RUNNING 상태 유지");
+        "RUNNING에서 NOTI_REBOOT -> ACK",
+        "RUNNING 상태 유지");
     check_noti_reboot_ack_in_state(
         SIAP_NS_FAULT, 512,
-        "F-210: FAULT에서 NOTI_REBOOT -> ACK",
-        "F-210: FAULT 상태 유지");
+        "FAULT에서 NOTI_REBOOT -> ACK",
+        "FAULT 상태 유지");
     check_noti_reboot_ack_in_state(
         SIAP_NS_REBOOTING, 513,
-        "F-210: REBOOTING에서 NOTI_REBOOT -> ACK",
-        "F-210: REBOOTING 상태 유지");
+        "REBOOTING에서 NOTI_REBOOT -> ACK",
+        "REBOOTING 상태 유지");
     check_noti_reboot_ack_in_state(
         SIAP_NS_DISCONNECTED, 514,
-        "F-210: DISCONNECTED에서 NOTI_REBOOT -> ACK",
-        "F-210: DISCONNECTED 상태 유지");
+        "DISCONNECTED에서 NOTI_REBOOT -> ACK",
+        "DISCONNECTED 상태 유지");
 
     fixture_t f; fixture_boot(&f, 1, 60);
     fixture_run_to_running(&f);
@@ -572,8 +572,8 @@ static void test_noti_reboot_ack_state_matrix_F210(void)
     f.io.tx_len = 0;
     push_empty(&f.io, SIAP_NOTI_REBOOT, GCG, NID, 515);
     siap_node_poll(&f.node);
-    check("F-210: HALTED에서 NOTI_REBOOT는 ACK하지 않음", f.io.tx_len == 0);
-    check("F-210: HALTED 상태 유지", f.node.state == SIAP_NS_HALTED);
+    check("HALTED에서 NOTI_REBOOT는 ACK하지 않음", f.io.tx_len == 0);
+    check("HALTED 상태 유지", f.node.state == SIAP_NS_HALTED);
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -667,7 +667,7 @@ static void test_link_error_disconnects(void)
 }
 
 /* ═══════════════════════════════════════════════════════════════
- *  9. F-130 — 디바이스별 스캔 스케줄 · Event 임계값 · Event-only 오류감지
+ *  9. 디바이스별 스캔 스케줄 · Event 임계값 · Event-only 오류감지
  * ═══════════════════════════════════════════════════════════════ */
 static void test_device_specific_period_scheduling_F130(void)
 {
@@ -682,13 +682,13 @@ static void test_device_specific_period_scheduling_F130(void)
     f.io.tx_len = 0;
     f.io.now += 10000u;   /* device_id=1 의 Period(10s) 만 경과 — id=2 는 60s */
     siap_node_poll(&f.node);
-    check("F-130: 10s 경과 -> pending = NOTI_DEVICE_VALUE", f.node.pending.kind == (uint8_t)SIAP_NOTI_DEVICE_VALUE);
+    check("10s 경과 -> pending = NOTI_DEVICE_VALUE", f.node.pending.kind == (uint8_t)SIAP_NOTI_DEVICE_VALUE);
     siap_hdr_t h = decode_tx_hdr(&f.io);
-    check("F-130: Period=10s 디바이스 하나만 포함(공통 최소주기로 뭉치지 않는다)",
+    check("Period=10s 디바이스 하나만 포함(공통 최소주기로 뭉치지 않는다)",
           h.payload_len == SIAP_DMI_BYTES);
     siap_dmi_t dmi; size_t bp = 0;
     siap_decode_dmi(f.io.tx + 12, &bp, &dmi);
-    check("F-130: 그 하나는 device_id=1", dmi.device_id == 1);
+    check("그 하나는 device_id=1", dmi.device_id == 1);
 
     int dv = 0;
     drain_pending_with_ack(&f.node, &f.io, GCG, NID, &dv, NULL, NULL);
@@ -706,9 +706,9 @@ static void test_device_specific_period_scheduling_F130(void)
         f.io.tx_len = 0;
         siap_node_poll(&f.node);
     }
-    check("F-130: 60s 시점엔 두 디바이스가 함께 due", f.node.pending.kind == (uint8_t)SIAP_NOTI_DEVICE_VALUE);
+    check("60s 시점엔 두 디바이스가 함께 due", f.node.pending.kind == (uint8_t)SIAP_NOTI_DEVICE_VALUE);
     h = decode_tx_hdr(&f.io);
-    check("F-130: 이번엔 Period=60s 디바이스도 포함(요소 2개분)",
+    check("이번엔 Period=60s 디바이스도 포함(요소 2개분)",
           h.payload_len == (uint16_t)(SIAP_DMI_BYTES * 2u));
 }
 
@@ -724,16 +724,16 @@ static void test_event_mode_sends_only_out_of_range_F130(void)
     f.io.tx_len = 0;
     f.io.now += 5000u;   /* Period(스캔 주기) 경과 — 값은 여전히 범위 안 */
     siap_node_poll(&f.node);
-    check("F-130: Event 값이 범위 안이면 스캔해도 전송하지 않는다(표 7-15)",
+    check("Event 값이 범위 안이면 스캔해도 전송하지 않는다(표 7-15)",
           f.node.pending.kind == (uint8_t)SIAP_KIND_NONE && f.io.tx_len == 0);
 
     f.dev.values[0] = siap_raw_from_int(100);   /* Upper Value(10) 이탈 */
     f.io.now += 5000u;
     siap_node_poll(&f.node);
-    check("F-130: Upper Value 를 벗어나면 다음 스캔에서 전송한다",
+    check("Upper Value 를 벗어나면 다음 스캔에서 전송한다",
           f.node.pending.kind == (uint8_t)SIAP_NOTI_DEVICE_VALUE);
     siap_hdr_t h = decode_tx_hdr(&f.io);
-    check("F-130: 요소 1개(Event 대상 device_id=5)", h.payload_len == SIAP_DMI_BYTES);
+    check("요소 1개(Event 대상 device_id=5)", h.payload_len == SIAP_DMI_BYTES);
 }
 
 static void test_event_only_fault_detection_F130(void)
@@ -748,13 +748,13 @@ static void test_event_only_fault_detection_F130(void)
     f.dev.fail[0] = true;
     f.io.now += 15000u;   /* Event-only 디바이스도 자기 Period 로 스캔된다 */
     siap_node_poll(&f.node);
-    check("F-130: Event-only 디바이스도 자기 Period 로 오류를 감지한다(8.2.1.1, Periodic 유무에 기대지 않는다)",
+    check("Event-only 디바이스도 자기 Period 로 오류를 감지한다(8.2.1.1, Periodic 유무에 기대지 않는다)",
           f.node.state == SIAP_NS_FAULT);
-    check("F-130: pending = NOTI_ERROR", f.node.pending.kind == (uint8_t)SIAP_NOTI_ERROR);
+    check("pending = NOTI_ERROR", f.node.pending.kind == (uint8_t)SIAP_NOTI_ERROR);
 }
 
 /* ═══════════════════════════════════════════════════════════════
- *  10. F-131 — RES_SET_CONNECTION 오류 RSC 9종 전량(§6.5 표 전체)
+ *  10. RES_SET_CONNECTION 오류 RSC 9종 전량(§6.5 표 전체)
  * ═══════════════════════════════════════════════════════════════ */
 static void _check_rsc_outcome(const char *tag, siap_rsc_t rsc, bool retryable)
 {
@@ -771,42 +771,42 @@ static void _check_rsc_outcome(const char *tag, siap_rsc_t rsc, bool retryable)
 
 static void test_res_set_connection_rsc_matrix_6_5_F131(void)
 {
-    _check_rsc_outcome("6_5/F-131: INVALID_VERSION(0x01) -> HALTED", SIAP_RSC_INVALID_VERSION, false);
-    _check_rsc_outcome("6_5/F-131: INVALID_GCG_ID(0x02) -> CONNECTING 유지(재시도 가능)", SIAP_RSC_INVALID_GCG_ID, true);
-    _check_rsc_outcome("6_5/F-131: INVALID_NODE_ID(0x03) -> CONNECTING 유지(재시도 가능)", SIAP_RSC_INVALID_NODE_ID, true);
-    _check_rsc_outcome("6_5/F-131: INVALID_DEVICE_ID(0x04) -> HALTED", SIAP_RSC_INVALID_DEVICE_ID, false);
-    _check_rsc_outcome("6_5/F-131: INVALID_DEVICE_TYPE(0x05) -> HALTED", SIAP_RSC_INVALID_DEVICE_TYPE, false);
-    _check_rsc_outcome("6_5/F-131: INVALID_DATA_TYPE(0x06) -> HALTED", SIAP_RSC_INVALID_DATA_TYPE, false);
-    _check_rsc_outcome("6_5/F-131: INVALID_DATA_SUBTYPE(0x07) -> HALTED", SIAP_RSC_INVALID_DATA_SUBTYPE, false);
-    _check_rsc_outcome("6_5/F-131: INVALID_TRANSMISSION_TYPE(0x08) -> HALTED", SIAP_RSC_INVALID_TRANSMISSION_TYPE, false);
-    _check_rsc_outcome("6_5/F-131: INVALID_FORMAT(0x09) -> HALTED", SIAP_RSC_INVALID_FORMAT, false);
+    _check_rsc_outcome("6_5/INVALID_VERSION(0x01) -> HALTED", SIAP_RSC_INVALID_VERSION, false);
+    _check_rsc_outcome("6_5/INVALID_GCG_ID(0x02) -> CONNECTING 유지(재시도 가능)", SIAP_RSC_INVALID_GCG_ID, true);
+    _check_rsc_outcome("6_5/INVALID_NODE_ID(0x03) -> CONNECTING 유지(재시도 가능)", SIAP_RSC_INVALID_NODE_ID, true);
+    _check_rsc_outcome("6_5/INVALID_DEVICE_ID(0x04) -> HALTED", SIAP_RSC_INVALID_DEVICE_ID, false);
+    _check_rsc_outcome("6_5/INVALID_DEVICE_TYPE(0x05) -> HALTED", SIAP_RSC_INVALID_DEVICE_TYPE, false);
+    _check_rsc_outcome("6_5/INVALID_DATA_TYPE(0x06) -> HALTED", SIAP_RSC_INVALID_DATA_TYPE, false);
+    _check_rsc_outcome("6_5/INVALID_DATA_SUBTYPE(0x07) -> HALTED", SIAP_RSC_INVALID_DATA_SUBTYPE, false);
+    _check_rsc_outcome("6_5/INVALID_TRANSMISSION_TYPE(0x08) -> HALTED", SIAP_RSC_INVALID_TRANSMISSION_TYPE, false);
+    _check_rsc_outcome("6_5/INVALID_FORMAT(0x09) -> HALTED", SIAP_RSC_INVALID_FORMAT, false);
 }
 
 /* ═══════════════════════════════════════════════════════════════
- *  11. F-132 — ACK 는 응답 종류가 일치할 때만 pending 을 해제한다
+ *  11. ACK 는 응답 종류가 일치할 때만 pending 을 해제한다
  * ═══════════════════════════════════════════════════════════════ */
 static void test_ack_does_not_clear_connection_request_pending_F132(void)
 {
     fixture_t f; fixture_boot(&f, 1, 60);
     siap_node_poll(&f.node);   /* BOOT->INIT->CONNECTING, REQ_SET_CONNECTION 송신 */
     uint16_t mid = f.node.pending.msg_id;
-    check("F-132: pending = REQ_SET_CONNECTION", f.node.pending.kind == (uint8_t)SIAP_REQ_SET_CONNECTION);
+    check("pending = REQ_SET_CONNECTION", f.node.pending.kind == (uint8_t)SIAP_REQ_SET_CONNECTION);
 
     push_ack_for(&f.io, GCG, NID, mid);   /* 같은 msg_id 지만 잘못된 응답 종류(ACK) */
     siap_node_poll(&f.node);
-    check("F-132: ACK 는 REQ_SET_CONNECTION pending 을 해제하지 않는다(F-046 3조건: Node ID+msg_id+Message Type)",
+    check("ACK 는 REQ_SET_CONNECTION pending 을 해제하지 않는다( 3조건: Node ID+msg_id+Message Type)",
           f.node.pending.kind == (uint8_t)SIAP_REQ_SET_CONNECTION && f.node.pending.msg_id == mid);
-    check("F-132: 상태는 CONNECTING 유지", f.node.state == SIAP_NS_CONNECTING);
+    check("상태는 CONNECTING 유지", f.node.state == SIAP_NS_CONNECTING);
 
     f.io.tx_len = 0;
     f.io.now += 2000u;   /* Timeout 경과 — 정상 재전송 경로가 살아있는지 확인 */
     siap_node_poll(&f.node);
-    check("F-132: 이후 Timeout 재전송도 정상 동작(같은 msg_id)",
+    check("이후 Timeout 재전송도 정상 동작(같은 msg_id)",
           f.node.pending.retry == 1 && f.node.pending.msg_id == mid);
 }
 
 /* ═══════════════════════════════════════════════════════════════
- *  12. F-133 — 다중 청크 송신은 부분 쓰기(UART 포화)에서도 유실되지 않는다
+ *  12. 다중 청크 송신은 부분 쓰기(UART 포화)에서도 유실되지 않는다
  * ═══════════════════════════════════════════════════════════════ */
 static void test_multi_chunk_send_survives_partial_write_F133(void)
 {
@@ -818,26 +818,26 @@ static void test_multi_chunk_send_survives_partial_write_F133(void)
     f.io.budget_enabled = true;
     f.io.budget_left = 4;   /* poll 당 최대 4 byte 만 받아쓴다 */
     siap_node_poll(&f.node);   /* 헤더(12B) + DMI(7B) = 19B 프레임을 트리거 */
-    check("F-133: 첫 poll — 부분 쓰기라 아직 프레임 미완성", f.io.tx_len < 19u);
+    check("첫 poll — 부분 쓰기라 아직 프레임 미완성", f.io.tx_len < 19u);
 
     int guard;
     for (guard = 0; guard < 10 && f.node.tx_seq.kind != (uint8_t)SIAP_SEQ_NONE; guard++) {
         f.io.budget_left = 4;
         siap_node_poll(&f.node);
     }
-    check("F-133: 유한 번의 poll 안에 시퀀스가 끝난다(무한 대기 아님)", guard < 10);
+    check("유한 번의 poll 안에 시퀀스가 끝난다(무한 대기 아님)", guard < 10);
 
     f.io.budget_enabled = false;
-    check("F-133: 헤더(12)+요소 1개(7) = 19 byte 전량 보존(미전송 잔여가 덮어써지지 않는다)",
+    check("헤더(12)+요소 1개(7) = 19 byte 전량 보존(미전송 잔여가 덮어써지지 않는다)",
           f.io.tx_len == 19u);
     siap_hdr_t h = decode_tx_hdr(&f.io);
-    check("F-133: 헤더도 손상 없이 디코드된다(payload_len=DMI 1개분)", h.payload_len == SIAP_DMI_BYTES);
+    check("헤더도 손상 없이 디코드된다(payload_len=DMI 1개분)", h.payload_len == SIAP_DMI_BYTES);
     siap_dmi_t dmi; size_t bp = 0;
     siap_decode_dmi(f.io.tx + 12, &bp, &dmi);
-    check("F-133: 요소도 손상 없이 디코드된다(device_id=1)", dmi.device_id == 1);
+    check("요소도 손상 없이 디코드된다(device_id=1)", dmi.device_id == 1);
 }
 
-/* F-135 — Message Identifier 는 0943 7.2.2 원문 그대로 0을 건너뛰지 않고
+/* Message Identifier 는 0943 7.2.2 원문 그대로 0을 건너뛰지 않고
    0xFFFF 다음 0으로 순환해야 한다(이전엔 "0은 미할당 표시로 예약"이라며
    1로 돌아갔다 — 표준 문구와 직접 어긋났다). */
 static void test_msg_id_wraps_to_zero_not_one_F135(void)
@@ -845,11 +845,11 @@ static void test_msg_id_wraps_to_zero_not_one_F135(void)
     fixture_t f; fixture_boot(&f, 1, 60);
     f.node.next_msg_id = 0xFFFF;              /* 다음 발번이 0xFFFF 이도록 강제 */
     siap_node_poll(&f.node);                  /* REQ_SET_CONNECTION 발번 */
-    check("F-135: 0xFFFF 발번 확인", f.node.pending.msg_id == 0xFFFF);
-    check("F-135: 다음 next_msg_id 는 0으로 감긴다(1이 아니다)", f.node.next_msg_id == 0);
+    check("0xFFFF 발번 확인", f.node.pending.msg_id == 0xFFFF);
+    check("다음 next_msg_id 는 0으로 감긴다(1이 아니다)", f.node.next_msg_id == 0);
 }
 
-/* F-198 — 연결 성공 직후 노드가 REQ_SET_NODE_DEVICE_PROPERTY_ALL(8.1.3.3)로
+/* 연결 성공 직후 노드가 REQ_SET_NODE_DEVICE_PROPERTY_ALL(8.1.3.3)로
    자기 디바이스 구성을 선언한다. REQ_SET_CONNECTION(8.1.1)은 페이로드가 없어
    (LAYOUT (0,0)) 이 역할을 못 한다. pending 에 실려 RES 수신까지 §6.4 재전송
    타이머가 재시도하고, RES_SET_NODE_DEVICE_PROPERTY_ALL(SUCCESS) 로 멈춘다.
@@ -868,51 +868,51 @@ static void test_connection_declares_node_device_property_all_F198(void)
     f.io.tx_len = 0;
     siap_node_poll(&f.node);                              /* -> RUNNING + 선언 송신 */
 
-    check("F-198: RUNNING 진입", f.node.state == SIAP_NS_RUNNING);
-    check("F-198: 연결 성공 직후 pending = REQ_SET_NODE_DEVICE_PROPERTY_ALL",
+    check("RUNNING 진입", f.node.state == SIAP_NS_RUNNING);
+    check("연결 성공 직후 pending = REQ_SET_NODE_DEVICE_PROPERTY_ALL",
           f.node.pending.kind == (uint8_t)SIAP_REQ_SET_NODE_DEVICE_PROPERTY_ALL);
 
     /* 송신 프레임 구조 검사: 헤더 msg_type · payload_len = NP + DP×N. */
     siap_hdr_t h = decode_tx_hdr(&f.io);
-    check("F-198: 송신 msg_type = REQ_SET_NODE_DEVICE_PROPERTY_ALL",
+    check("송신 msg_type = REQ_SET_NODE_DEVICE_PROPERTY_ALL",
           h.msg_type == siap_wire_code(SIAP_REQ_SET_NODE_DEVICE_PROPERTY_ALL, SIAP_MODE_STRICT));
-    check("F-198: payload_len = NODE_PROPERTY + DEVICE_PROPERTY×2 (RSC 없음)",
+    check("payload_len = NODE_PROPERTY + DEVICE_PROPERTY×2 (RSC 없음)",
           h.payload_len == (uint16_t)(SIAP_NP_BYTES + SIAP_DP_BYTES * 2u));
 
     /* 고정부 NODE_PROPERTY 의 num_devices 가 device_count 와 같다. */
     siap_np_t np; size_t bp = 0;
     siap_decode_np(f.io.tx + 12, &bp, &np);
-    check("F-198: NODE_PROPERTY.num_devices = 2", np.num_devices == 2);
-    check("F-198: NODE_PROPERTY.node_id = 노드 자신", np.node_id == NID);
+    check("NODE_PROPERTY.num_devices = 2", np.num_devices == 2);
+    check("NODE_PROPERTY.node_id = 노드 자신", np.node_id == NID);
 
     /* 첫 DEVICE_PROPERTY 요소가 devices[0] 로 라운드트립된다(요소 경로 실행 증거). */
     siap_dp_t dp0; bp = 0;
     siap_decode_dp(f.io.tx + 12 + SIAP_NP_BYTES, &bp, &dp0);
-    check("F-198: 첫 DEVICE_PROPERTY.device_id = devices[0]",
+    check("첫 DEVICE_PROPERTY.device_id = devices[0]",
           dp0.main.device_id == f.devices[0].main.device_id);
 
-    /* 재전송 — Timeout 경과 후 같은 msg_id 로 재인코딩(F-041). */
+    /* 재전송 — Timeout 경과 후 같은 msg_id 로 재인코딩. */
     uint16_t dmid = f.node.pending.msg_id;
     f.io.tx_len = 0;
     f.io.now += (uint32_t)f.node.cfg.profile.recv_timeout * 1000u;
     siap_node_poll(&f.node);
-    check("F-198: 재전송해도 pending 유지 · msg_id 동일(F-041)",
+    check("재전송해도 pending 유지 · msg_id 동일",
           f.node.pending.kind == (uint8_t)SIAP_REQ_SET_NODE_DEVICE_PROPERTY_ALL
           && f.node.pending.msg_id == dmid && f.node.pending.retry == 1);
     siap_hdr_t h2 = decode_tx_hdr(&f.io);
-    check("F-198: 재전송 프레임도 REQ_SET_NODE_DEVICE_PROPERTY_ALL",
+    check("재전송 프레임도 REQ_SET_NODE_DEVICE_PROPERTY_ALL",
           h2.msg_type == siap_wire_code(SIAP_REQ_SET_NODE_DEVICE_PROPERTY_ALL, SIAP_MODE_STRICT));
 
     /* 실패 RSC 는 pending 을 해제하지 않는다 — 계속 재시도한다. */
     push_res_set_node_device_property_all(&f.io, GCG, NID, dmid, SIAP_RSC_INVALID_DEVICE_ID);
     siap_node_poll(&f.node);
-    check("F-198: 실패 RSC 수신 시 pending 유지(재시도 계속)",
+    check("실패 RSC 수신 시 pending 유지(재시도 계속)",
           f.node.pending.kind == (uint8_t)SIAP_REQ_SET_NODE_DEVICE_PROPERTY_ALL);
 
     /* SUCCESS RSC 로 handshake 완료 — pending 해제. */
     push_res_set_node_device_property_all(&f.io, GCG, NID, dmid, SIAP_RSC_SUCCESS);
     siap_node_poll(&f.node);
-    check("F-198: SUCCESS 수신 시 pending 해제(선언 완료)",
+    check("SUCCESS 수신 시 pending 해제(선언 완료)",
           f.node.pending.kind == (uint8_t)SIAP_KIND_NONE);
 }
 

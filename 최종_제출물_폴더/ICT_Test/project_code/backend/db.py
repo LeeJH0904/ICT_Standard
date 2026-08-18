@@ -25,10 +25,10 @@ def connect(db_path: str | Path) -> sqlite3.Connection:
     아닌 새 파일)에 붙는다. PRAGMA 4종은 매 연결마다 새로 건다 — 아키텍처
     설계서 §4.4 표:
       - journal_mode=WAL   읽기가 쓰기를 막지 않음
-      - foreign_keys=ON    SQLite 기본값이 OFF (F-016류 재발 방지의 핵심)
+      - foreign_keys=ON    SQLite 기본값이 OFF (류 재발 방지의 핵심)
       - busy_timeout=5000  쓰기 겹침 시 즉시 실패 대신 대기
     row_factory=sqlite3.Row — models.py가 컬럼명으로 접근한다(위치 인덱스 금지,
-    컬럼 추가 시 조용히 깨지는 F-024/F-049류 실수를 구조로 막는다)."""
+    컬럼 추가 시 조용히 깨지는류 실수를 구조로 막는다)."""
     con = sqlite3.connect(str(db_path))
     con.row_factory = sqlite3.Row
     con.execute("PRAGMA foreign_keys = ON")
@@ -63,7 +63,7 @@ def init_db(db_path: str | Path, *, seed: bool = True,
 def table_names(con: sqlite3.Connection) -> list[str]:
     """`sqlite_master`에서 사용자 테이블 이름만 뽑는다(내부 sqlite_* 테이블 제외).
     `tools/db_live_verify.py`와 테스트가 공유하는 조회 — 스키마 카운트를
-    두 곳에서 따로 세면 F-080류(자기 자신과만 대조)가 재발한다."""
+    두 곳에서 따로 세면류(자기 자신과만 대조)가 재발한다."""
     rows = con.execute(
         "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' "
         "ORDER BY name"

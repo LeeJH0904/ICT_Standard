@@ -1,6 +1,6 @@
 """sim/virtual_node.py 검증 — 값 풀 로딩(§5.5 결정), 노드 상태, msg_id 순환.
 
-F-217 — 센서·미등록 디바이스 제어 거부와 제어 목록 원자성을 검증한다.
+센서·미등록 디바이스 제어 거부와 제어 목록 원자성을 검증한다.
 """
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ def test_default_nodes_reuse_pool_values_not_synthetic():
     pool = _load_value_pool()
     nodes = _default_nodes(pool)
     assert len(nodes) == 3
-    # Uno 흉내 노드는 101 이 아니라 3 이다(F-145) — golden.jsonl 의 정상·위반
+    # Uno 흉내 노드는 101 이 아니라 3 이다 — golden.jsonl 의 정상·위반
     # 벡터가 (X02 반례를 빼면) 전부 Node ID=3 을 쓰므로, live 주입이 실제로
     # 등록된 노드를 맞혀야 목표 판정이 INVALID_NODE_ID 에 가려지지 않는다.
     assert {n.node_id for n in nodes} == {3, 102, 103}
@@ -49,7 +49,7 @@ def test_late_node_has_distinct_id_and_reuses_pool():
 
 
 def test_injection_targets_are_registered_nodes_f145():
-    """F-145 — `sim/inject.py` 가 골든 X01~X08 의 hex 를 그대로 링크에
+    """`sim/inject.py` 가 골든 X01~X08 의 hex 를 그대로 링크에
     흘려보내므로, 그 프레임들이 담은 Node ID 가 이 서버의 등록 노드에
     없으면 목표 판정(INVALID_DATA_TYPE 등) 전에 INVALID_NODE_ID 로
     가려진다. X02 는 "미등록 Node ID" 자체가 반례이므로 예외로 뺀다."""
@@ -70,14 +70,14 @@ def test_injection_targets_are_registered_nodes_f145():
             node_id = v["header"]["Node ID"]
             assert node_id in registered, (
                 f"{v['id']}(Node ID={node_id})가 등록 노드 {sorted(registered)}에 없다 "
-                "— INVALID_NODE_ID 에 목표 판정이 가려진다(F-145)"
+                "— INVALID_NODE_ID 에 목표 판정이 가려진다"
             )
             checked += 1
     assert checked >= 7   # X01,X03~X08 (X02 제외)
 
 
 def test_msg_id_starts_at_zero_and_wraps():
-    """7.2.2 원문 그대로 — F-135 와 같은 원칙을 이 파일에서 독립적으로
+    """7.2.2 원문 그대로 — 와 같은 원칙을 이 파일에서 독립적으로
     재구현한다(코드 재사용 아님, 같은 조항의 재해석)."""
     n = SimNode(1, "test", [])
     assert n.next_msg_id() == 0
@@ -153,10 +153,10 @@ def test_control_list_is_atomic_when_later_device_is_invalid_f217():
     assert actuator.value == before
 
 
-# ── F-241 — REQ_SET_DEVICE_PROPERTY(8.1.3.2) 수신 처리 ─────────────────────
+# ── REQ_SET_DEVICE_PROPERTY(8.1.3.2) 수신 처리 ─────────────────────
 # 이 경로는 FakeLink 가 아니라 실제 virtual_node 를 대상으로 검증한다 —
 # settings 화면이 유일한 실행 모드(simulate)에서 동작하려면 게이트웨이가
-# 보낸 속성 설정에 노드가 실제로 RES 로 회신해야 하기 때문이다(F-241).
+# 보낸 속성 설정에 노드가 실제로 RES 로 회신해야 하기 때문이다.
 def _dp_for(dev: "SimDevice", *, transfer_mode: int = wire.TM_EVENT,
             period: int = 7, lower: int = 5, upper: int = 40) -> "wire.WireDP":
     """게이트웨이(ems._build_device_property)가 보내는 REQ 형태를 흉내낸다 —

@@ -7,7 +7,7 @@ backend/tests/test_schema_conformance.py — DB 스키마 설계서 §6.2 (표�
 교차 검증이다, CLAUDE.md §6.2와 같은 원칙). `project_code/`는 `project_docs/`
 를 import하지 않으므로(CLAUDE.md §2.2) 케이스를 공유 모듈로 빼지 않고
 독립적으로 다시 적는다. 대상 스키마는 `project_code/backend/schema.sql`
-(`project_docs/db/schema.sql`과 동기, F-153).
+(`project_docs/db/schema.sql`과 동기).
 
 CLAUDE.md §3.2 — 테스트 함수명에 조항 번호를 넣는다. 98건을 손으로 각각
 def 하는 대신, 아래 케이스 표에서 **실제 개별 pytest 함수를 생성**한다 —
@@ -146,7 +146,7 @@ _case("환경측정 FK UPDATE 차단", "7.2.4.3", _upd_rel)
 
 # ── 참조 무결성 ────────────────────────────────────────────
 _case("존재하지 않는 장치정보 참조 차단", "7.2.2.5",
-      # F-158 이후: 컬럼 추가로 조용히 깨지지 않도록 위치 지정 대신 컬럼명을 명시한다 (F-024 원칙)
+      # 이후: 컬럼 추가로 조용히 깨지지 않도록 위치 지정 대신 컬럼명을 명시한다 ( 원칙)
       lambda c, i: c.execute("INSERT INTO device_install_info(id,created_at,updated_at,device_name,installed_at,"
                              "install_location,install_loc_unit,device_info_id,siap_node_id,siap_device_id,siap_subtype,"
                              "unit,lower_limit,upper_limit,precision_val)"
@@ -178,12 +178,12 @@ _case("(node_id, device_id) 중복 차단", "0943 3.4",
 _case("장치설치 설치일자 NOT NULL 차단", "6.2.5",
       lambda c, i: c.execute("INSERT INTO device_install_info(id,created_at,updated_at,device_name,device_info_id)"
                              " VALUES(?,?,?,'X',?)", (_u(), NOW, NOW, i['dev'])))
-# F-162: NOT NULL 만으로는 빈 문자열이 통과한다 — CHECK(installed_at <> '') 를
-# 실제로 넣어봐서 확인한다("컬럼이 있다"와 "값이 온다"는 다르다, F-158 재발 방지).
+# NOT NULL 만으로는 빈 문자열이 통과한다 — CHECK(installed_at <> '') 를
+# 실제로 넣어봐서 확인한다("컬럼이 있다"와 "값이 온다"는 다르다 재발 방지).
 _case("장치설치 설치일자 빈 문자열 차단", "6.2.5",
       lambda c, i: c.execute(_DII_COLS + " VALUES(?,?,?,'X','',NULL,NULL,?,NULL,NULL,NULL,NULL,NULL,NULL,NULL)",
                              (_u(), NOW, NOW, i['dev'])))
-# F-166: 빈 문자열이 아니어도 임의 문자열('not-a-date')은 CHECK(installed_at <> '')
+# 빈 문자열이 아니어도 임의 문자열('not-a-date')은 CHECK(installed_at <> '')
 # 만으로는 통과한다 — GLOB 최소 형식 검사를 실제로 넣어봐서 확인한다.
 _case("장치설치 설치일자 형식(ISO 8601) 위반 차단", "6.1",
       lambda c, i: c.execute(_DII_COLS + " VALUES(?,?,?,'X','not-a-date',NULL,NULL,?,NULL,NULL,NULL,NULL,NULL,NULL,NULL)",
@@ -192,7 +192,7 @@ _case("장치설치 설치일자 ISO 8601 오프셋 표기 허용", "6.1",
       lambda c, i: c.execute(_DII_COLS + " VALUES(?,?,?,'X','2026-08-01T09:00:00+09:00',NULL,NULL,?,NULL,NULL,NULL,NULL,NULL,NULL,NULL)",
                              (_u(), NOW, NOW, i['dev'])), False)
 
-# F-184: F-166은 이 형식 검사를 installed_at 하나에만 걸었다 — 나머지
+#은 이 형식 검사를 installed_at 하나에만 걸었다 — 나머지
 # 시간 컬럼(created_at·updated_at 등)은 검사가 없어 아래 INSERT가 그대로
 # 통과했다(재현 그대로 고정).
 _case("사용자정보 생성시간 형식(ISO 8601) 위반 차단", "6.1",
@@ -227,7 +227,7 @@ _case("AI 초안 저장 허용 (미승인, 명령 없음)", "0937 6.3",
 _case("미승인 규칙의 대상 확정 차단", "0937 부속서A 3.3",
       lambda c, i: c.execute(_RULE_COLS + " VALUES(?,?,'AI_DRAFT','AI','초안','t>33',NULL,?,NULL,NULL)", (_u(), NOW, i['inst'])))
 
-# ── F-015 회귀: 1:N 카디널리티 (1369-P1 7.1) ───────────────
+# ── 회귀: 1:N 카디널리티 (1369-P1 7.1) ───────────────
 _I2 = "INSERT INTO device_install_info(id,created_at,updated_at,device_name,installed_at,device_info_id) VALUES('i2','2026-08-01T09:00:00+09:00','2026-08-01T09:00:00+09:00','I2','2026-08-01T09:00:00+09:00',?)"
 _S2 = "INSERT INTO device_state_data(id,reported_at,subtype) VALUES('s2','2026-08-01T09:00:00+09:00','FAN')"
 _G2 = "INSERT INTO greenhouse_info(id,created_at,updated_at,name) VALUES('g2','2026-08-01T09:00:00+09:00','2026-08-01T09:00:00+09:00','G2')"
@@ -266,7 +266,7 @@ _card("환경상태 1건이 온실 2곳에 귀속 차단", "7.1(5)", [
 _card("환경상태 1건이 장치상태 2건에 귀속 차단", "7.1(10)", [
     _S2, "INSERT INTO operating_env VALUES('<DSD>','<ESD>')", "INSERT INTO operating_env VALUES('s2','<ESD>')"])
 
-# ── F-016 회귀: 불변성 제약 보강분 ─────────────────────────
+# ── 회귀: 불변성 제약 보강분 ─────────────────────────
 _case("device_info.created_at UPDATE 차단", "7.2.2.4",
       lambda c, i: c.execute("UPDATE device_info SET created_at='t2' WHERE id=?", (i['dev'],)))
 _case("device_install_info.created_at UPDATE 차단", "7.2.2.5",
@@ -303,7 +303,7 @@ for _nm, _cl, _tbl, _a, _b in [("장치상태", "7.2.4.2", "device_state", "inst
         return fn
     _case(f"{_nm} 관계 식별자 UPDATE 차단", _cl, _mk2())
 
-# ── F-017 회귀: 제어 실행의 권한 출처 ──────────────────────
+# ── 회귀: 제어 실행의 권한 출처 ──────────────────────
 def _unapproved(c, i):
     c.execute("INSERT INTO control_rule(id,created_at,origin,generation,draft_text) VALUES('r','2026-08-01T09:00:00+09:00','AI_DRAFT','AI','초안')")
     c.execute("INSERT INTO control_execution(id,origin,rule_id,install_id,issued_at,command_json)"
@@ -337,7 +337,7 @@ def _revoke(c, i):
     c.execute("UPDATE control_rule SET approved_at=NULL WHERE id='r'")
 _case("승인 철회 차단", "0937 6.3", _revoke)
 
-# ── F-030 회귀: 승인 명령과 실행 명령의 결속 ───────────────
+# ── 회귀: 승인 명령과 실행 명령의 결속 ───────────────
 def _approved_rule(c, i, action='{"value":0}', cond='t>33', target=None):
     c.execute("INSERT INTO control_rule(id,created_at,origin,generation,draft_text,condition_expr,action_json,target_install_id,approved_at,approved_by)"
               " VALUES('r','2026-08-01T09:00:00+09:00','AI_DRAFT','AI','초안',?,?,?,?,?)",
@@ -363,7 +363,7 @@ def _tamper(c, i):
     c.execute('UPDATE control_rule SET action_json=\'{"value":9}\' WHERE id=\'r\'')
 _case("승인 후 명령 변조 차단", "0937 6.3", _tamper)
 
-# ── F-039 회귀: 승인 스냅샷의 NULL·조건 변조 우회 ──────────
+# ── 회귀: 승인 스냅샷의 NULL·조건 변조 우회 ──────────
 def _approved_null_action(c, i):
     c.execute("INSERT INTO control_rule(id,created_at,origin,generation,draft_text,condition_expr,action_json,target_install_id,approved_at,approved_by)"
               " VALUES('r','2026-08-01T09:00:00+09:00','AI_DRAFT','AI','초안','t>40',NULL,?,?,?)", (i['inst'], NOW, i['user']))
@@ -404,7 +404,7 @@ def _null_action_arbitrary_command(c, i):
               ' VALUES(\'x\',\'RULE\',\'r\',?,\'2026-08-01T09:00:00+09:00\',\'{"value":1}\')', (i['inst'],))
 _case("NULL 승인 경유 임의 명령 실행 차단", "0937 A.3.2", _null_action_arbitrary_command)
 
-# ── F-048 회귀: 승인 출처(누가·언제)의 불변성 ───────────────
+# ── 회귀: 승인 출처(누가·언제)의 불변성 ───────────────
 def _approver_tamper(c, i):
     _approved_rule(c, i)
     other = _u()
@@ -418,7 +418,7 @@ def _approved_at_tamper(c, i):
     c.execute("UPDATE control_rule SET approved_at='1999-01-01T00:00:00' WHERE id='r'")
 _case("승인시각 사후 변조 차단", "0937 A.3.2", _approved_at_tamper)
 
-# ── F-049 회귀: 승인 대상 장치의 결속 ──────────────────────
+# ── 회귀: 승인 대상 장치의 결속 ──────────────────────
 def _second_install(c, i):
     other = _u()
     c.execute("INSERT INTO device_install_info(id,created_at,updated_at,device_name,installed_at,"
@@ -471,11 +471,11 @@ def _manual_target_free(c, i):
               ' VALUES(\'x\',\'MANUAL\',?,?,\'2026-08-01T09:00:00+09:00\',\'{"value":1}\')', (i['user'], other))
 _case("MANUAL 실행은 대상 제약 없음", "0937 A.1·A.2", _manual_target_free, False)
 
-# ── F-032 회귀: 표준 커버리지 ──────────────────────────────
+# ── 회귀: 표준 커버리지 ──────────────────────────────
 def _crop(c, i):
     c.execute("UPDATE greenhouse_info SET crop='토마토' WHERE id=?", (i['gh'],))
 _case("온실 생육작물 컬럼 존재", "6.2.3", _crop, False)
-# F-185: 6.2.4 "장치정보에는... 장치특성 등이 포함되어야 한다" — 저장할
+# 6.2.4 "장치정보에는... 장치특성 등이 포함되어야 한다" — 저장할
 # 컬럼이 없었다. manufacturer 와 같은 자격(nullable)으로 추가했다.
 def _device_characteristics(c, i):
     c.execute("UPDATE device_info SET device_characteristics='IP65 방수' WHERE id=?", (i['dev'],))
@@ -494,7 +494,7 @@ def _rain_range(c, i):
               " VALUES('e3','RAIN_DETECTION',1,'ON/OFF',0.1,0,1)")
 _case("감우 오차·유효범위 차단", "그림 7-3", _rain_range)
 
-# ── F-083 회귀: 규칙 거부도 영속 상태다 (0937 부속서 A 3.2 절차 3) ──
+# ── 회귀: 규칙 거부도 영속 상태다 (0937 부속서 A 3.2 절차 3) ──
 _REJ = ("INSERT INTO control_rule(id,created_at,origin,generation,draft_text,"
         "rejected_at,rejected_by,reject_reason)")
 
@@ -559,7 +559,7 @@ def _app_then_rej(c, i):
               (NOW, i['user'], '대상 장치가 다름', rid))
 _case("승인 뒤 거부 차단", "0937 부속서A 3.2", _app_then_rej)
 
-# ── F-091 / F-092 — 생성경로 위조 · 거부 증거 · 알림 결속 ──────────────────
+# ── / 생성경로 위조 · 거부 증거 · 알림 결속 ──────────────────
 _case("사람 규칙을 AI 산출물로 위조 차단", "0937 6.3",
       lambda c, i: c.execute("INSERT INTO control_rule(id,created_at,origin,generation,draft_text)"
                              " VALUES(?,?,'WIZARD','AI','초안')", (_u(), NOW)))
@@ -625,7 +625,7 @@ def _make_test(name: str, clause: str, fn, expect_fail: bool):
             ok, reason = (not expect_fail), "허용됨"
         except sqlite3.IntegrityError:
             ok, reason = expect_fail, "IntegrityError"
-        except Exception as e:                                   # noqa: BLE001 — 테스트 자체의 결함까지 잡는다 (F-024)
+        except Exception as e:                                   # noqa: BLE001 — 테스트 자체의 결함까지 잡는다
             ok, reason = False, f"{type(e).__name__}: {e}"
         finally:
             con.close()
@@ -648,12 +648,12 @@ for _name, _clause, _fn, _expect_fail in _CASES:
 
 
 def test_case_count_matches_design_doc_109():
-    """DB 스키마 설계서 §6.2 — "109종 109/109 통과"(당시 98종 — F-158·F-159
-    로 설치일자 NOT NULL·model_name UNIQUE 검사 2건 추가, 이어서 F-162로
-    설치일자 빈 문자열 차단 검사 1건, F-166으로 설치일자 형식(ISO 8601)
-    검사 2건 추가, 당시 103종 — F-184로 시간 형식(ISO 8601) 검사를
+    """DB 스키마 설계서 §6.2 — "109종 109/109 통과"(당시 98종 —
+    로 설치일자 NOT NULL·model_name UNIQUE 검사 2건 추가, 이어서로
+    설치일자 빈 문자열 차단 검사 1건으로 설치일자 형식(ISO 8601)
+    검사 2건 추가, 당시 103종 —로 시간 형식(ISO 8601) 검사를
     installed_at 하나에서 created_at·updated_at·issued_at 등 나머지
-    시간 컬럼으로 넓히며 5건 추가, 당시 108종 — F-185로 장치정보
+    시간 컬럼으로 넓히며 5건 추가, 당시 108종 —로 장치정보
     장치특성 컬럼 존재 검사 1건 추가). 이 파일의 케이스 수가 어긋나면
-    설계서 수치가 낡았거나 이식이 누락된 것이다(F-094류 재발 방지)."""
+    설계서 수치가 낡았거나 이식이 누락된 것이다(류 재발 방지)."""
     assert len(_CASES) == 109

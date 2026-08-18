@@ -120,7 +120,7 @@ function nodeCardHtml(node, devices) {
     } else {
       cells = `<span class="dev-value dev-value-span">—</span>`;
     }
-    // 서버가 준 것만 쓴다 — subtype 은 레지스트리 이름, siap_subtype 은 표 7-14 원시 코드(§4.2)
+    // 서버가 준 것만 쓴다 — subtype 은 레지스트리 이름, siap_subtype 은 표 7-14 원시 코드
     return `<div class="device-row">`
       + `<span class="dev-name">${dev.subtype ?? dev.device_name} <span class="hint">(${hex(dev.siap_subtype)})</span></span>`
       + cells

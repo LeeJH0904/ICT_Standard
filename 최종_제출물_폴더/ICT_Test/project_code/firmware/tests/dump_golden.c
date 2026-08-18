@@ -6,7 +6,7 @@
  * 확인한다). 이 파일이 새로 하는 일은 그 결과를 stdout 으로 내보내는
  * 것뿐이다 — Python(siap/codec.py) 출력과 대조하기 위해서다.
  *
- * F-136/F-212 — judgement=normal/alert 는 재인코딩한 hex와 디코드 구조체의
+ */judgement=normal/alert 는 재인코딩한 hex와 디코드 구조체의
  * 의미값 서명을, judgement=violation 은 C 디코더의 거부 판정(RSC+clause)을
  * 낸다. 예전에는 violation 9건을
  * 아예 건너뛰고 "44+9=53"이라는 항등식에만 포함시켜, xcodec_verify.py 가
@@ -75,7 +75,7 @@ static bool extract_int(const char *line, const char *key, long *out)
     return true;
 }
 
-/* violations[0] 의 code 만 본다 — 위반 벡터는 전부 위반 1건짜리다. F-136 —
+/* violations[0] 의 code 만 본다 — 위반 벡터는 전부 위반 1건짜리다.
    X02(unregistered_node)를 올바르게 재현하려면 이 code 로 self_node_id
    시뮬레이션을 결정해야 한다(test_golden.c::run_vector 와 동일 원칙). */
 static bool extract_first_violation_code(const char *line, long *code)
@@ -114,15 +114,15 @@ typedef struct {
     siap_dp_t  dps[SIAP_MAX_DEVICES_PER_NODE];     uint16_t dp_count;
     int end_calls;
     siap_rsc_t end_rsc;
-    siap_clause_t end_clause;   /* F-136 — 위반 벡터 교차비교에 쓴다 */
-    uint32_t self_node_id;      /* F-136 — X02(INVALID_NODE_ID) 재현용 */
+    siap_clause_t end_clause;   /* 위반 벡터 교차비교에 쓴다 */
+    uint32_t self_node_id;      /* X02(INVALID_NODE_ID) 재현용 */
 } gcollect_t;
 
 static int8_t g_on_header(void *ctx, const siap_hdr_t *h, siap_kind_t k, uint16_t n)
 {
     gcollect_t *g = (gcollect_t *)ctx;
     g->hdr = *h; g->kind = k; g->n = n;
-    /* F-136 — 위반 2(미등록 Node ID)는 test_golden.c::g_on_header 와 동일한
+    /* 위반 2(미등록 Node ID)는 test_golden.c::g_on_header 와 동일한
        원칙으로 재현한다: dump_vector() 가 벡터별로 self_node_id 를 정해
        주입한다. 나머지 벡터는 프레임 자신의 Node ID 를 그대로 "내 주소"로
        인정해 이 판정에 걸리지 않는다. */
@@ -178,12 +178,12 @@ static void g_on_end(void *ctx, siap_rsc_t rsc, siap_clause_t clause)
 }
 
 /* parse_clause()(test_golden.c)의 역함수 — clause 를 golden.jsonl 의
-   "clause" 필드와 같은 문자열로 되돌린다. F-136. */
+   "clause" 필드와 같은 문자열로 되돌린다.. */
 static const char *clause_to_str(siap_clause_t c)
 {
     switch (c) {
     case SIAP_CLAUSE_7_3_1:      return "7.3.1";
-    case SIAP_CLAUSE_TABLE_7_2:  return "\xed\x91\x9c 7-2";   /* "표 7-2" (UTF-8) */
+    case SIAP_CLAUSE_TABLE_7_2:  return "\xed\x91\x9c 7-2";   /* "표 7-2" (UT) */
     case SIAP_CLAUSE_TABLE_7_6:  return "\xed\x91\x9c 7-6";   /* "표 7-6" */
     case SIAP_CLAUSE_TABLE_7_14: return "\xed\x91\x9c 7-14";  /* "표 7-14" */
     case SIAP_CLAUSE_7_3_2:      return "7.3.2";
@@ -191,7 +191,7 @@ static const char *clause_to_str(siap_clause_t c)
     }
 }
 
-/* F-212 — 디코드한 C 구조체의 의미값을 wire 필드 순서의 `bits:value`
+/* 디코드한 C 구조체의 의미값을 wire 필드 순서의 `bits:value`
    서명으로 내보낸다. 원본 hex를 다시 인코드하는 것만으로는 C의 encode와
    decode가 같은 방식으로 틀린 경우를 잡지 못한다. 이 서명은 Python이
    golden.jsonl의 독립 fields 의미값으로 만든 서명과 대조한다. */
@@ -322,7 +322,7 @@ static void dump_vector(const char *line)
     uint8_t bytes[600];
     size_t nbytes = hex_to_bytes(hex, bytes, sizeof(bytes));
 
-    /* F-136 — Node ID 시뮬레이션. 위반 2(INVALID_NODE_ID, X02)만 "내 주소"를
+    /* Node ID 시뮬레이션. 위반 2(INVALID_NODE_ID, X02)만 "내 주소"를
        프레임의 Node ID 와 다르게 세팅해 의도적으로 불일치시킨다. 그 외
        전부는 프레임 자신의 Node ID 를 그대로 "내 주소"로 인정한다
        (test_golden.c::run_vector 와 동일 원칙). */
@@ -338,7 +338,7 @@ static void dump_vector(const char *line)
     siap_dec_init(&d, make_sink(&g), SIAP_MODE_STRICT);
     for (size_t i = 0; i < nbytes; i++) siap_dec_feed(&d, bytes[i]);
 
-    /* F-136 — violation 벡터는 재인코딩 대상이 아니지만(고의로 망가뜨린
+    /* violation 벡터는 재인코딩 대상이 아니지만(고의로 망가뜨린
        바이트열), C 디코더의 거부 판정(RSC+clause)만은 Python 과 대조할 수
        있고 대조해야 한다. "44+9=53"이라는 항등식에만 기대지 않는다. */
     if (strcmp(judgement, "violation") == 0) {

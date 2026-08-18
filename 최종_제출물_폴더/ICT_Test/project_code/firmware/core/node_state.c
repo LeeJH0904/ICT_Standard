@@ -17,7 +17,7 @@
    = 1.04 ms 이므로 20 byte 분이다. */
 #define SIAP_T_GAP_MS 20u
 
-/* 표 7-18 기본값. 시간 3필드는 전부 sec(F-033). Num. of Retry 기본 3회
+/* 표 7-18 기본값. 시간 3필드는 전부 sec. Num. of Retry 기본 3회
    (0937 요구사항 대조표 "배수 3의 근거" — 재전송이 전부 실패해야 미수집으로 본다). */
 const siap_mcp_t SIAP_PROFILE_DEFAULT = {
     .recv_timeout        = 2,
@@ -48,7 +48,7 @@ static bool _addressed_to_me(const siap_node_t *node, const siap_hdr_t *h)
 
 /* 7.2.2 원문 — "Message Identifier는 … '0'에서 '65535'까지 사용할 수
    있다. 일련번호는 데이터 전송 시마다 +1을 하며 만료되면 0부터 다시
-   시작한다." 0 을 건너뛰는 것은 표준 위반이다(F-135) — 이전 버전은
+   시작한다." 0 을 건너뛰는 것은 표준 위반이다 — 이전 버전은
    "0 은 미할당 표시로 예약"이라고 §6.4/펌웨어 설계서 §9 에 적었지만,
    pending 슬롯의 "비어 있음"은 pending.kind==SIAP_KIND_NONE 으로만
    판정된다(siap_node_init 참조) — msg_id==0 을 센티널로 쓰는 코드는
@@ -62,7 +62,7 @@ static uint16_t _next_msg_id(siap_node_t *node)
 }
 
 /* §6.5 — 재시도 가능 2종(INVALID_GCG_ID·INVALID_NODE_ID) / 불가 7종.
-   CLAUDE.md §3.5 · 펌웨어 설계서 §6.5 표와 동일하다(F-076). */
+   CLAUDE.md §3.5 · 펌웨어 설계서 §6.5 표와 동일하다. */
 static bool _rsc_retryable(siap_rsc_t rsc)
 {
     return rsc == SIAP_RSC_INVALID_GCG_ID || rsc == SIAP_RSC_INVALID_NODE_ID;
@@ -131,7 +131,7 @@ static void _send_ack_now(siap_node_t *node, const siap_hdr_t *req)
 }
 
 /* ═══════════════════════════════════════════════════════════════
- *  1. 다중 청크 송신 시퀀서 — §5.8, F-133.
+ *  1. 다중 청크 송신 시퀀서 — §5.8.
  *
  *  이전 청크가 win 에서 완전히 빠져나가기(tx_busy==false) 전에는 절대
  *  siap_tx_reset() 을 부르지 않는다 — _tx_seq_pump() 의 while 조건이
@@ -171,7 +171,7 @@ static bool _tx_seq_build_header(siap_node_t *node)
         return siap_tx_put_rsc(&node->enc, (siap_rsc_t)s->rsc);
     }
     case SIAP_SEQ_REQ_SET_NODE_DEVICE_PROPERTY_ALL: {
-        /* F-198 — 노드→GCG 디바이스 구성 선언. 요청이라 RSC 가 없다.
+        /* 노드→GCG 디바이스 구성 선언. 요청이라 RSC 가 없다.
            payload = NODE_PROPERTY(8B) + DEVICE_PROPERTY(30B)×N (LAYOUT). 요소(DP×N)는
            _tx_seq_build_element 의 default 경로(siap_tx_put_dp)가 만든다. */
         uint16_t plen = (uint16_t)(SIAP_NP_BYTES + SIAP_DP_BYTES * s->n);
@@ -210,7 +210,7 @@ static bool _tx_seq_build_element(siap_node_t *node, uint8_t dev_idx)
 
 /* 진행 중인 시퀀스를 가능한 만큼 밀어낸다. 청크 하나가 완전히 flush될
    때만(tx_busy==false) 다음 청크를 만든다 — 부분 쓰기(UART 포화)면
-   while 조건에서 멈추고 다음 poll() 이 이어받는다(F-133). */
+   while 조건에서 멈추고 다음 poll() 이 이어받는다. */
 static void _tx_seq_pump(siap_node_t *node)
 {
     siap_tx_seq_t *s = &node->tx_seq;
@@ -241,7 +241,7 @@ static bool _pending_encode(siap_node_t *node)
 
     if (kind == SIAP_NOTI_DEVICE_VALUE) {
         siap_tx_seq_t *s = &node->tx_seq;
-        uint16_t mask = node->pending.arg;   /* F-130 — 보낼 devices[] 인덱스 비트마스크 */
+        uint16_t mask = node->pending.arg;   /* 보낼 devices[] 인덱스 비트마스크 */
         uint8_t n = 0;
         for (uint8_t i = 0; i < node->cfg.device_count && n < SIAP_MAX_DEVICES_PER_NODE; i++)
             if (mask & (uint16_t)(1u << i)) s->idx[n++] = i;
@@ -256,7 +256,7 @@ static bool _pending_encode(siap_node_t *node)
     }
 
     if (kind == SIAP_REQ_SET_NODE_DEVICE_PROPERTY_ALL) {
-        /* F-198 — 다중 청크 요청. "ALL"이므로 전체 디바이스를 선언한다.
+        /* 다중 청크 요청. "ALL"이므로 전체 디바이스를 선언한다.
            재전송도 같은 msg_id 로 현재 devices[] 구성을 그대로 다시 편다
            (§6.2-a(4) "재전송은 재인코딩이다"). */
         siap_tx_seq_t *s = &node->tx_seq;
@@ -295,7 +295,7 @@ static void _pending_begin(siap_node_t *node, siap_kind_t kind, uint16_t arg, ui
     node->pending.retry   = 0;
     node->pending.t_sent  = now;
     node->pending.arg     = arg;
-    (void)_pending_encode(node);   /* flush 는 _pending_encode/_tx_seq_pump 가 담당(F-133) */
+    (void)_pending_encode(node);   /* flush 는 _pending_encode/_tx_seq_pump 가 담당 */
 }
 
 static void _pending_clear(siap_node_t *node)
@@ -313,7 +313,7 @@ static void _pending_tick(siap_node_t *node, uint32_t now)
     if (node->pending.retry < node->cfg.profile.num_retry) {
         node->pending.retry++;
         node->pending.t_sent = now;
-        (void)_pending_encode(node);   /* flush 는 _pending_encode/_tx_seq_pump 가 담당(F-133) */
+        (void)_pending_encode(node);   /* flush 는 _pending_encode/_tx_seq_pump 가 담당 */
         return;
     }
 
@@ -353,7 +353,7 @@ static uint32_t _advance_deadline(uint32_t deadline, uint32_t interval, uint32_t
     return deadline;
 }
 
-/* Value(표준 미규정 F-022 — main.value_type 을 따른다)가 [Lower Value,
+/* Value(표준 미규정 main.value_type 을 따른다)가 [Lower Value,
    Upper Value] 밖인가 — 표 7-15 Event/Both 전송 조건. 타입별 원시 비트열
    해석은 siap_frame.h 의 siap_value_as_*() 로 통일한다. */
 static bool _dp_out_of_range(const siap_dp_t *d)
@@ -378,7 +378,7 @@ static bool _dp_out_of_range(const siap_dp_t *d)
     }
 }
 
-/* 디바이스별 스캔 스케줄(F-130, 펌웨어 설계서 §6.3). Period(표 7-15)의
+/* 디바이스별 스캔 스케줄(, 펌웨어 설계서 §6.3). Period(표 7-15)의
    표준상 의미는 "데이터 전달주기"다 — 이 재사용은 그 의미를 재정의하는
    것이 아니다. 본 구현에 샘플링 주기 전용 필드가 없어 Period 를 내부
    스캔 간격으로도 재사용할 뿐이다(표준 미규정 결정, CLAUDE.md §3.5).
@@ -559,7 +559,7 @@ static void _reply_get_device_property(siap_node_t *node)
     s->next = 0;
     s->hdr_done = false;
     for (uint8_t j = 0; j < n; j++) s->idx[j] = idx[j];
-    _tx_seq_pump(node);   /* TX_WINDOW(51B)는 요소 하나분 — 청크마다 완전히 flush 후 진행(§5.8, F-133) */
+    _tx_seq_pump(node);   /* TX_WINDOW(51B)는 요소 하나분 — 청크마다 완전히 flush 후 진행(§5.8) */
 }
 
 static void _reply_get_node_device_property_all(siap_node_t *node)
@@ -572,7 +572,7 @@ static void _reply_get_node_device_property_all(siap_node_t *node)
     s->next = 0;
     s->hdr_done = false;
     for (uint8_t i = 0; i < node->cfg.device_count; i++) s->idx[i] = i;
-    _tx_seq_pump(node);   /* TX_WINDOW(51B)는 요소 하나분 — 청크마다 완전히 flush 후 진행(§5.8, F-133) */
+    _tx_seq_pump(node);   /* TX_WINDOW(51B)는 요소 하나분 — 청크마다 완전히 flush 후 진행(§5.8) */
 }
 
 static void _reply_get_device_value(siap_node_t *node)
@@ -600,7 +600,7 @@ static void _reply_get_device_value(siap_node_t *node)
     s->next = 0;
     s->hdr_done = false;
     for (uint8_t j = 0; j < n; j++) s->idx[j] = idx[j];
-    _tx_seq_pump(node);   /* TX_WINDOW(51B)는 요소 하나분 — 청크마다 완전히 flush 후 진행(§5.8, F-133) */
+    _tx_seq_pump(node);   /* TX_WINDOW(51B)는 요소 하나분 — 청크마다 완전히 flush 후 진행(§5.8) */
 }
 
 static void _reply_get_mcp(siap_node_t *node)
@@ -649,9 +649,9 @@ static int8_t _on_fixed(void *ctx, const uint8_t *buf, uint8_t len)
         return 0;
     }
     if (node->rx_kind == SIAP_RES_SET_NODE_DEVICE_PROPERTY_ALL) {
-        /* F-198 — 노드가 보낸 디바이스 구성 선언의 응답. 고정부 RSC 를 꺼내
+        /* 노드가 보낸 디바이스 구성 선언의 응답. 고정부 RSC 를 꺼내
            on_end 로 전파한다(RES_SET_CONNECTION 과 같은 관례 — 성공이면 0,
-           실패면 -(rsc)). F-046 매칭: pending 종류·msg_id 가 맞아야 한다. */
+           실패면 -(rsc)). 매칭: pending 종류·msg_id 가 맞아야 한다. */
         if (node->pending.kind != (uint8_t)SIAP_REQ_SET_NODE_DEVICE_PROPERTY_ALL
             || node->rx_hdr.msg_id != node->pending.msg_id)
             return 0;
@@ -761,11 +761,11 @@ static void _on_end(void *ctx, siap_rsc_t rsc, siap_clause_t clause)
             node->backoff_shift = 0;
             node->due = 0;
             node->dev_due = 0;
-            for (uint8_t i = 0; i < node->cfg.device_count; i++)   /* F-130 — 디바이스별 스캔 스케줄 */
+            for (uint8_t i = 0; i < node->cfg.device_count; i++)   /* 디바이스별 스캔 스케줄 */
                 node->dev_next_due[i] = now + (uint32_t)node->cfg.devices[i].period * 1000u;
             node->t_keep_alive   = now + (uint32_t)node->cfg.profile.keep_alive_interval * 1000u;
             node->t_error        = now + (uint32_t)node->cfg.profile.noti_error_interval * 1000u;
-            /* F-198 — REQ_SET_CONNECTION(8.1.1)은 페이로드가 없어(LAYOUT (0,0))
+            /* REQ_SET_CONNECTION(8.1.1)은 페이로드가 없어(LAYOUT (0,0))
                디바이스 구성을 실을 수 없다. 연결 성공 직후 이 세션의 전체
                구성을 REQ_SET_NODE_DEVICE_PROPERTY_ALL 1회로 선언한다. pending
                에 실어 RES_SET_NODE_DEVICE_PROPERTY_ALL 수신까지 §6.4 재전송
@@ -778,12 +778,12 @@ static void _on_end(void *ctx, siap_rsc_t rsc, siap_clause_t clause)
                타이머(§6.4)가 Timeout 뒤에 같은 msg_id 로 재시도하게 한다. */
         } else {
             _pending_clear(node);
-            node->state = SIAP_NS_HALTED;   /* 재시도 불가 7종 → HALTED(F-076) */
+            node->state = SIAP_NS_HALTED;   /* 재시도 불가 7종 → HALTED */
         }
         return;
 
     case SIAP_ACK: {
-        /* F-132/F-046 — 응답 매칭은 Node ID + Message Identifier + Message
+        /*/응답 매칭은 Node ID + Message Identifier + Message
            Type 셋 다 맞아야 한다. msg_id 만 같다고 아무 pending 이나
            해제하면 안 된다: pending 이 REQ_SET_CONNECTION(응답은 ACK 가
            아니라 RES_SET_CONNECTION)일 때 msg_id 가 우연히 같은 ACK 가
@@ -815,7 +815,7 @@ static void _on_end(void *ctx, siap_rsc_t rsc, siap_clause_t clause)
         if (rsc != SIAP_RSC_SUCCESS) return;
         /* 0943 §6.1.2/§8.2.1.4 — 게이트웨이발 리부팅 알림도 정상
            수신하면 상태 게이트보다 먼저 ACK한다. 수신 알림은 노드 자신의
-           리부팅 명령이 아니므로 현재 상태와 송신 pending은 유지한다(F-210). */
+           리부팅 명령이 아니므로 현재 상태와 송신 pending은 유지한다. */
         _send_ack_now(node, &node->rx_hdr);
         return;
 
@@ -861,8 +861,8 @@ static void _on_end(void *ctx, siap_rsc_t rsc, siap_clause_t clause)
         _reply_rsc_only(node, SIAP_RES_SET_NODE_DEVICE_PROPERTY_ALL, rsc);
         return;
     case SIAP_RES_SET_NODE_DEVICE_PROPERTY_ALL:
-        /* F-198 — 노드가 보낸 디바이스 구성 선언(REQ_SET_NODE_DEVICE_PROPERTY_ALL)
-           의 응답. F-046 매칭(Node ID·Message Identifier·Message Type) 이 맞고
+        /* 노드가 보낸 디바이스 구성 선언(REQ_SET_NODE_DEVICE_PROPERTY_ALL)
+           의 응답. 매칭(Node ID·Message Identifier·Message Type) 이 맞고
            SUCCESS 면 pending 을 해제해 재전송을 멈춘다. 실패면(rsc 는 on_fixed
            가 전파) pending 을 두어 §6.4 타이머가 재시도하게 한다. */
         if (node->pending.kind != (uint8_t)SIAP_REQ_SET_NODE_DEVICE_PROPERTY_ALL
@@ -959,7 +959,7 @@ bool siap_node_init(siap_node_t *node, const siap_node_cfg_t *cfg)
     node->tx_busy = false;
     node->tx_seq.kind = (uint8_t)SIAP_SEQ_NONE;
 
-    node->next_msg_id = 0;   /* 7.2.2 — 0 도 유효한 순번이다(F-135) */
+    node->next_msg_id = 0;   /* 7.2.2 — 0 도 유효한 순번이다 */
     node->pending.kind = (uint8_t)SIAP_KIND_NONE;
     node->pending.msg_id = 0;
     node->pending.retry = 0;
@@ -1000,7 +1000,7 @@ void siap_node_poll(siap_node_t *node)
 
     if (node->state == SIAP_NS_HALTED) {
         /* §6.1/§6.2 — 수신 프레임을 읽어 버리고 응답하지 않는다. 전원
-           재인가로만 벗어난다(F-076, 상태 무관 전이의 유일한 예외). */
+           재인가로만 벗어난다(, 상태 무관 전이의 유일한 예외). */
         uint8_t b;
         while (node->cfg.io->read_byte(node->cfg.io->ctx, &b) == 1) { /* discard */ }
         return;
@@ -1050,7 +1050,7 @@ void siap_node_poll(siap_node_t *node)
     /* 이전에 못 다 내보낸 프레임 이어서 flush(§5.8) */
     if (node->tx_busy) _tx_flush(node);
     /* 청크 하나가 방금 완전히 나갔으면 다중 청크 시퀀스의 다음 청크로
-       이어간다(F-133) — tx_busy 인 동안은 절대 부르지 않는다. */
+       이어간다 — tx_busy 인 동안은 절대 부르지 않는다. */
     if (!node->tx_busy) _tx_seq_pump(node);
 
     _pending_tick(node, now);

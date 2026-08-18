@@ -30,7 +30,7 @@ def test_vector_bytes_match_golden_exactly(vector_id):
 
 
 def test_rejects_vector_outside_x01_x08():
-    """F-084 와 같은 근거 — 자유 바이트열/임의 ID 를 받으면 "결과가 골든과
+    """ 와 같은 근거 — 자유 바이트열/임의 ID 를 받으면 "결과가 골든과
     같다"는 판정 근거가 사라진다."""
     with pytest.raises(ValueError):
         inject.load_vector("N01")

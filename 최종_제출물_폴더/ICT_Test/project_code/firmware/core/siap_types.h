@@ -98,7 +98,7 @@ typedef enum { SIAP_MODE_STRICT = 0, SIAP_MODE_EXTENDED = 1 } siap_mode_t;
 
 /* 표 7-6. 미정의값(0x03)은 열거형 밖이므로 raw uint8_t 로 다루고
    siap_trans_type_valid() 로만 판정한다 (Header.trans_type 과 동일 원칙,
-   Frame 구조 명세서 §3.2 F-014). */
+   Frame 구조 명세서 §3.2). */
 #define SIAP_TRANS_UNICAST   0x00u
 #define SIAP_TRANS_MULTICAST 0x01u
 #define SIAP_TRANS_BROADCAST 0x02u
@@ -117,7 +117,7 @@ typedef enum {                    /* 표 7-10. 원문 표기는 'SUCESS'(오타)
     SIAP_RSC_INVALID_FORMAT            = 0x09,
 } siap_rsc_t;
 
-/* F-127 — 0x0A~0xFF 는 Reserved(표 7-10). 열거형 밖 raw 값이 들어올 수 있으므로
+/* 0x0A~0xFF 는 Reserved(표 7-10). 열거형 밖 raw 값이 들어올 수 있으므로
    trans_type 과 같은 원칙으로 별도 판정 함수를 둔다. */
 static inline bool siap_rsc_valid(uint8_t v) { return v <= (uint8_t)SIAP_RSC_INVALID_FORMAT; }
 
@@ -134,7 +134,7 @@ typedef enum {                    /* 표 7-12 */
     SIAP_NEC_ERROR_UNKNOWN          = 0x09,
 } siap_nec_t;
 
-/* F-127 — 0x0A~0xFF 는 Reserved(표 7-12). */
+/* 0x0A~0xFF 는 Reserved(표 7-12). */
 static inline bool siap_nec_valid(uint8_t v) { return v <= (uint8_t)SIAP_NEC_ERROR_UNKNOWN; }
 
 typedef enum { SIAP_DEV_SENSOR = 0x00, SIAP_DEV_ACTUATOR = 0x01 } siap_dev_type_t;   /* 표 7-14 */
@@ -150,7 +150,7 @@ typedef enum { SIAP_DEV_SENSOR = 0x00, SIAP_DEV_ACTUATOR = 0x01 } siap_dev_type_
 typedef enum { SIAP_TM_PERIODIC = 0x00, SIAP_TM_EVENT = 0x01, SIAP_TM_BOTH = 0x02 } siap_transfer_mode_t; /* 표 7-15 */
 typedef enum { SIAP_STATUS_NORMAL = 0x00, SIAP_STATUS_ABNORMAL = 0x01, SIAP_STATUS_UNKNOWN = 0x02 } siap_status_t; /* 표 7-13/7-15 */
 
-/* F-127 — Transfer Mode 0x03, Status 0x03~0xFF 는 Reserved(표 7-15, NODE_PROPERTY
+/* Transfer Mode 0x03, Status 0x03~0xFF 는 Reserved(표 7-15, NODE_PROPERTY
    에서는 표 7-13). 2bit/8bit 필드라 raw 로 담고 이 함수로만 판정한다. */
 static inline bool siap_transfer_mode_valid(uint8_t v) { return v <= (uint8_t)SIAP_TM_BOTH; }
 static inline bool siap_status_valid(uint8_t v)        { return v <= (uint8_t)SIAP_STATUS_UNKNOWN; }
@@ -167,7 +167,7 @@ static inline bool siap_status_valid(uint8_t v)        { return v <= (uint8_t)SI
 #define SIAP_NEC_BYTES     1u
 #define SIAP_DID_BYTES     1u
 
-/* 노드당 디바이스 상한 — 표준 미규정, 자체 결정 (CLAUDE.md §3.5, F-064).
+/* 노드당 디바이스 상한 — 표준 미규정, 자체 결정 (CLAUDE.md §3.5).
    RX/TX 스트리밍 윈도우 크기의 근거이기도 하다 (펌웨어 설계서 §3.4/§5.1). */
 #define SIAP_MAX_DEVICES_PER_NODE 16u
 
@@ -206,7 +206,7 @@ typedef struct {              /* 표 7-14 — 56 bit.
 } siap_dmi_t;
 
 typedef struct {              /* 표 7-15 — 240 bit.
-                                  F-022: Lower/Upper Value·Limit·Precision(USER DEPENDENT)은
+                                  Lower/Upper Value·Limit·Precision(USER DEPENDENT)은
                                   main.value_type 을 따른다 (표준 미규정 → 구현 결정). */
     siap_dmi_t main;
     uint8_t  transfer_mode;  /* siap_transfer_mode_t */
@@ -219,7 +219,7 @@ typedef struct {              /* 표 7-15 — 240 bit.
     uint8_t  status;         /* siap_status_t */
 } siap_dp_t;
 
-typedef struct {              /* 표 7-18 — 56 bit. 시간 3필드 전부 sec (F-033) */
+typedef struct {              /* 표 7-18 — 56 bit. 시간 3필드 전부 sec */
     uint16_t recv_timeout;
     uint8_t  num_retry;
     uint16_t noti_error_interval;

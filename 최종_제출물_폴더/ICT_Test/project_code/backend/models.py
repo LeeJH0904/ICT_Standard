@@ -7,7 +7,7 @@ backend/models.py — 읽기 전용 dataclass. ORM을 쓰지 않는다(CLAUDE.md
 
 각 클래스는 `from_row(row: sqlite3.Row) -> Self`를 갖는다. `sqlite3.Row`는
 컬럼명으로 접근한다(db.py의 `row_factory=sqlite3.Row`) — 위치 인덱스로
-읽으면 컬럼 추가 시 조용히 깨진다(F-024/F-049류).
+읽으면 컬럼 추가 시 조용히 깨진다(류).
 
 테이블 31개 = A5 + B4 + C10 + D3 + E1 + F6 + G2. DB 스키마 설계서 §2 순서를
 그대로 따른다.
@@ -65,7 +65,7 @@ class GreenhouseInfo:                              # A-2 — 6.2.3 / 7.2.2.3
     medium_type: str | None
     irrigation_type: str | None
     heating_type: str | None
-    crop: str | None                                # 생육작물 (6.2.3 본문, F-032 회귀)
+    crop: str | None                                # 생육작물 (6.2.3 본문 회귀)
     crop_season: str | None
     usage_state: str | None
 
@@ -89,7 +89,7 @@ class DeviceInfo:                                  # A-3 — 6.2.4 / 7.2.2.4
     device_kind: str
     model_name: str                                 # 불변, 전역 식별
     manufacturer: str | None
-    device_characteristics: str | None              # 장치특성 (F-185)
+    device_characteristics: str | None              # 장치특성
 
     @classmethod
     def from_row(cls, row: sqlite3.Row) -> "DeviceInfo":
@@ -104,7 +104,7 @@ class DeviceInstallInfo:                           # A-4 — 6.2.5 / 7.2.2.5 (+0
     created_at: str
     updated_at: str
     device_name: str
-    installed_at: str                                 # 설치일자 (6.2.5, F-158)
+    installed_at: str                                 # 설치일자 (6.2.5)
     install_location: str | None
     install_loc_unit: str | None
     device_info_id: str
@@ -377,7 +377,7 @@ class ConfigChangeLog:                             # E-1
 # ═══════════════════════════════════════════════════════════════
 
 @dataclass(frozen=True)
-class PublicDataSource:                            # F-1 — 0937 6.2 DMS
+class PublicDataSource:                            # 0937 6.2 DMS
     id: str
     name: str
     provider: str
@@ -394,7 +394,7 @@ class PublicDataSource:                            # F-1 — 0937 6.2 DMS
 
 
 @dataclass(frozen=True)
-class PublicDataRecord:                            # F-2 — 0937 부속서 A 2.3
+class PublicDataRecord:                            # 0937 부속서 A 2.3
     id: str
     source_id: str
     fetched_at: str
@@ -411,7 +411,7 @@ class PublicDataRecord:                            # F-2 — 0937 부속서 A 2.
 
 
 @dataclass(frozen=True)
-class ControlModel:                                # F-3 — 0937 6.3 MMS
+class ControlModel:                                # 0937 6.3 MMS
     id: str
     created_at: str
     name: str
@@ -431,19 +431,19 @@ class ControlModel:                                # F-3 — 0937 6.3 MMS
 
 
 @dataclass(frozen=True)
-class ControlRule:                                 # F-4 — 0937 6.3 / 부속서 A 3.3
+class ControlRule:                                 # 0937 6.3 / 부속서 A 3.3
     id: str
     model_id: str | None
     created_at: str
     origin: str                                      # AI_DRAFT / WIZARD / SCRIPT
-    generation: str | None                           # AI / THRESHOLD_FALLBACK / WIZARD / SCRIPT (F-083)
+    generation: str | None                           # AI / THRESHOLD_FALLBACK / WIZARD / SCRIPT
     draft_text: str
     condition_expr: str | None
     action_json: str | None
-    target_install_id: str | None                    # F-049
+    target_install_id: str | None
     approved_at: str | None
     approved_by: str | None
-    rejected_at: str | None                          # F-083
+    rejected_at: str | None
     rejected_by: str | None
     reject_reason: str | None
 
@@ -464,7 +464,7 @@ class ControlRule:                                 # F-4 — 0937 6.3 / 부속�
 
 
 @dataclass(frozen=True)
-class ControlExecution:                            # F-5 — 0937 6.5 FCS / 부속서 A 3.3
+class ControlExecution:                            # 0937 6.5 FCS / 부속서 A 3.3
     id: str
     origin: str                                      # RULE / MANUAL
     rule_id: str | None
@@ -484,7 +484,7 @@ class ControlExecution:                            # F-5 — 0937 6.5 FCS / 부�
 
 
 @dataclass(frozen=True)
-class Alert:                                       # F-6 — 0937 6.4 FMS / 6.5 FCS
+class Alert:                                       # 0937 6.4 FMS / 6.5 FCS
     id: str
     raised_at: str
     kind: str                                        # NO_DATA/NODE_ERROR/DISCONNECT/THRESHOLD/CONTROL_TIMEOUT
@@ -493,7 +493,7 @@ class Alert:                                       # F-6 — 0937 6.4 FMS / 6.5 
     siap_nec: int | None
     message: str
     ack_at: str | None
-    frame_id: str | None                              # F-085 — NEC 알림 결속
+    frame_id: str | None                              # NEC 알림 결속
 
     @classmethod
     def from_row(cls, row: sqlite3.Row) -> "Alert":
@@ -519,7 +519,7 @@ class FrameLog:                                    # G-1
     gcg_id: int | None
     node_id: int | None
     is_valid: bool
-    elements_json: str | None = None   # F-187 — device_main_infos/device_properties 그대로
+    elements_json: str | None = None   # device_main_infos/device_properties 그대로
 
     @classmethod
     def from_row(cls, row: sqlite3.Row) -> "FrameLog":

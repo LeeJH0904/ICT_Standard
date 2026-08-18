@@ -9,7 +9,7 @@ backend/services/ems.py — TTAK.KO-10.0937 6.1 EMS(장치관리서비스).
 진입점: list_nodes · get_node · list_node_devices · set_device_property
 
 노드발 프레임(`REQ_SET_CONNECTION` 등)의 실제 반영은 `backend/ingest.py`가
-한다(단계 5부터, F-079) — 이 모듈은 그 로직을 재구현하지 않는다. 여기서는
+한다(단계 5부터) — 이 모듈은 그 로직을 재구현하지 않는다. 여기서는
 API가 필요로 하는 조회와, 게이트웨이발 `REQ_SET_DEVICE_PROPERTY` 송신
 (`PATCH /device-property`)만 새로 둔다.
 """
@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import sqlite3
 
-try:                    # F-025 와 같은 원칙
+try:                    # 와 같은 원칙
     from backend import repository
 except ImportError:
     import pathlib
@@ -83,7 +83,7 @@ def set_device_property(conn: sqlite3.Connection, link: SiapLink, builder: Frame
     """`PATCH /api/v1/device-property` — 0937 6.4-2 · 부속서 A 1.3
     (0943 8.1.3.2 REQ_SET_DEVICE_PROPERTY 로 나간다).
 
-    F-088·F-093 — 대상이 여럿이면(구역 일괄) **전량 사전 검증 후에만**
+    대상이 여럿이면(구역 일괄) **전량 사전 검증 후에만**
     송신한다. 검증에서 하나라도 걸리면 아무 프레임도 나가지 않는다 —
     부분 적용은 화면이 어느 장치까지 적용됐는지 되물을 수단이 없다."""
     installs = _resolve_selector(conn, selector)
@@ -137,7 +137,7 @@ def set_device_property(conn: sqlite3.Connection, link: SiapLink, builder: Frame
 
 
 def _resolve_selector(conn: sqlite3.Connection, selector: dict) -> list:
-    """F-093 — `install_id`(개별)과 `greenhouse_id`(구역, 온실 전체가
+    """`install_id`(개별)과 `greenhouse_id`(구역, 온실 전체가
     기본 의미이며 `install_location`·`subtype`은 좁히는 선택 항목)는 배타다
     — `api.py`가 스키마 단계(`DevicePropertySelector` oneOf)에서 이미
     걸러 보낸다. 여기서는 어느 쪽이 왔는지만 본다."""
@@ -161,7 +161,7 @@ def _lookup_current(link: SiapLink, node_id: int, device_id: int) -> DeviceMainI
 def _validate_value_type(install_id: str, value_type: ValueType, patch: dict) -> None:
     """CLAUDE.md §3.5 — 표 7-15 USER DEPENDENT 5필드는 `DEVICE_MAIN_INFO.
     Value Type`을 따른다. `lower_value`/`upper_value`가 그 타입의 32bit
-    범위(0943 표 7-14, F-044)를 벗어나면 422(INVALID_DATA_TYPE)."""
+    범위(0943 표 7-14)를 벗어나면 422(INVALID_DATA_TYPE)."""
     for key in ("lower_value", "upper_value"):
         if key not in patch:
             continue
@@ -189,7 +189,7 @@ def _build_device_property(install, dmi: DeviceMainInfo, patch: dict) -> DeviceP
     """DEVICE_PROPERTY(표 7-15)는 필드 8개를 한 번에 싣는다 — PATCH가 그중
     일부만 바꿔도 나머지는 현재값을 그대로 채워 보낸다(부분 필드 전송
     수단이 0943에 없다). `lower_value`/`upper_value`는 패치 값 우선,
-    없으면 `device_install_info`에 저장된 값(F-170), 그것도 없으면 0."""
+    없으면 `device_install_info`에 저장된 값, 그것도 없으면 0."""
     tm = patch.get("transfer_mode", install.transfer_mode)
     transfer_mode = TransferMode[tm] if tm else TransferMode.PERIODIC
     zero = 0 if dmi.value_type in (ValueType.INT, ValueType.UINT) else 0.0

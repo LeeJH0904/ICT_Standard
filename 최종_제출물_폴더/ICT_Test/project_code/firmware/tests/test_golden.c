@@ -1,5 +1,5 @@
 /*
- * 골든 벡터 53건 전량 왕복 — 개발_착수_지시서 §3.3 출구 ③ (F-120: B11 추가로 52 -> 53).
+ * 골든 벡터 53건 전량 왕복 — 개발_착수_지시서 §3.3 출구 ③ (B11 추가로 52 -> 53).
  * project_code/contracts/vectors/golden.jsonl (project_docs/contracts/vectors/
  * golden_layout.py 가 정본, CLAUDE.md §6.2)을 직접 읽어, C 스트리밍 디코더가
  * 손으로 만든 기대값(kind/n/judgement/violations)과 같은 판정을 내리는지,
@@ -99,9 +99,9 @@ static siap_clause_t parse_clause(const char *s)
     return SIAP_CLAUSE_NONE;
 }
 
-/* F-119 — golden.jsonl 의 "kind" 문자열(contracts/frame.py MsgKind 이름과
+/* golden.jsonl 의 "kind" 문자열(contracts/frame.py MsgKind 이름과
    동일)을 siap_kind_t 로 되돌린다. 34종 전부를 손으로 나열한다 — 동일
-   레이아웃 메시지끼리 우연히 이름이 비슷해 오매핑되는 결함(F-119 재현
+   레이아웃 메시지끼리 우연히 이름이 비슷해 오매핑되는 결함( 재현
    시나리오)을 여기서부터 막는다. */
 static siap_kind_t kind_from_str(const char *s)
 {
@@ -334,12 +334,12 @@ static void run_vector(const char *line)
 
     char label[128];
 
-    /* F-119 — 스트리밍 콜백이 넘겨준 kind/n(g.kind/g.n) 만 보고 끝내지 않는다.
+    /* 스트리밍 콜백이 넘겨준 kind/n(g.kind/g.n) 만 보고 끝내지 않는다.
        그건 "디코더 전체가 무언가는 반환했다"만 증명할 뿐, 그 값이 골든이
        기대하는 kind/n과 같은지는 별도로 대조해야 한다. siap_resolve_kind()·
        siap_element_count() 를 헤더 바이트에서 직접, FSM과 독립적으로 다시
        불러 JSON의 기대값과 비교한다 — 동일 레이아웃 메시지끼리 잘못
-       매핑해도(F-119 재현: msg_type=0x0007 을 REQ_GET_NODE_DEVICE_PROPERTY_ALL
+       매핑해도( 재현: msg_type=0x0007 을 REQ_GET_NODE_DEVICE_PROPERTY_ALL
        로 잘못 반환) 이 대조가 없으면 상위 계층 테스트 전부가 녹색이었다. */
     if (nbytes >= SIAP_HEADER_BYTES) {
         char expect_kind_str[40] = "";
@@ -352,7 +352,7 @@ static void run_vector(const char *line)
         siap_clause_t rk_clause;
         siap_kind_t actual_kind = siap_resolve_kind(h.msg_type, h.payload_len, SIAP_MODE_STRICT, &rk_clause);
 
-        snprintf(label, sizeof(label), "%s: siap_resolve_kind() 가 골든의 기대 kind와 일치 (F-119)", id);
+        snprintf(label, sizeof(label), "%s: siap_resolve_kind() 가 골든의 기대 kind와 일치", id);
         if (has_kind)
             check(label, actual_kind == kind_from_str(expect_kind_str));
         else
@@ -360,7 +360,7 @@ static void run_vector(const char *line)
 
         if (has_kind && has_n && actual_kind != SIAP_KIND_NONE) {
             int32_t actual_n = siap_element_count(actual_kind, h.payload_len);
-            snprintf(label, sizeof(label), "%s: siap_element_count() 가 골든의 기대 N과 일치 (F-119)", id);
+            snprintf(label, sizeof(label), "%s: siap_element_count() 가 골든의 기대 N과 일치", id);
             check(label, actual_n == (int32_t)expect_n);
         }
     }

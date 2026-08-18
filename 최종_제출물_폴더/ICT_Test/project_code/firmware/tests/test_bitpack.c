@@ -49,7 +49,7 @@ static void case_20bit_boundary_crossing(void)
     uint32_t got = bp_read(buf, &rp, 20);
     check("case2: 20bit 경계 교차 왕복 일치", got == val);
 
-    /* F-115 — 같은 구현의 bp_write 로 쓰고 같은 구현의 bp_read 로 되읽는
+    /* 같은 구현의 bp_write 로 쓰고 같은 구현의 bp_read 로 되읽는
        왕복만으로는, writer 와 reader 가 함께 대칭으로 틀려도(예: 둘 다
        LSB-first 로 바꿔도) 서로 역연산이라 걸리지 않는다. 손으로 만든
        독립 상수(비트 위치를 직접 계산한 결과)와 실제 wire 바이트를
@@ -59,7 +59,7 @@ static void case_20bit_boundary_crossing(void)
           memcmp(buf, expect_msb_first, sizeof(expect_msb_first)) == 0);
 }
 
-/* 케이스 2b — 바이트 경계를 넘는 9bit 쓰기/읽기 (F-112: 개발_착수_지시서
+/* 케이스 2b — 바이트 경계를 넘는 9bit 쓰기/읽기 (개발_착수_지시서
    §3.2 ③이 "20bit·14bit·9bit" 세 폭을 각각 요구한다. 이전에는 9bit이
    전 폭 스윕(케이스 10)에만 있었는데, 거기서는 매 폭마다 bitpos=0에서
    시작해 9bit이 항상 바이트 정렬 위치에서만 쓰였다 — "bitpos%8!=0일
@@ -86,7 +86,7 @@ static void case_9bit_boundary_crossing(void)
     check("case2b: 쓰기가 실제로 buf를 바꿈(전부 0인 채로 남지 않음)",
           memcmp(buf, zero4, sizeof(buf)) != 0);
 
-    /* F-115 — 왕복(같은 구현의 write→read)과 "0이 아니다"만으로는
+    /* 왕복(같은 구현의 write→read)과 "0이 아니다"만으로는
        writer·reader 가 함께 대칭으로 틀린 결함(예: 둘 다 LSB-first)을
        잡지 못한다. 실제로 val=0x1A5, bitpos=5 를 LSB-first 로 쓰고
        읽으면 05 2C 00 00 이 나오는데, 그 wire 바이트도 자기 자신과는
@@ -210,7 +210,7 @@ static void case_20bit_exact_overflow(void)
     bool ok_max = bp_write(buf, &p, 0x000FFFFFu, 20); /* 2^20-1 은 허용 */
     check("case8: 20bit 최댓값(2^20-1)은 허용", ok_max);
 
-    /* F-112 반례 2 — "20bit 초과값이면 buf[0]을 변경하고 false 반환"하는
+    /* 반례 2 — "20bit 초과값이면 buf[0]을 변경하고 false 반환"하는
        결함은 !ok_over 와 bitpos 불변만으로는 안 잡힌다. 버퍼 전체를
        미리 임의값(0xAA)으로 채우고 스냅샷을 떠서, 거부 후 단 1비트도
        바뀌지 않았는지 케이스 7 과 같은 방식으로 확인한다. */
@@ -251,7 +251,7 @@ static void case_full_width_sweep(void)
         if (got != max_val) { all_ok = 0; continue; }
 
         if (nbits < 32) {
-            /* F-112 반례 2 와 같은 종류 — 폭마다 거부 시 buf·bitpos 전체
+            /* 반례 2 와 같은 종류 — 폭마다 거부 시 buf·bitpos 전체
                불변까지 확인한다. 케이스 8 은 20bit 하나만 봤다; 여기서는
                1~31bit 전 폭에서 같은 불변식을 확인한다. */
             uint8_t buf2[8] = {0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA};

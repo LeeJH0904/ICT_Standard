@@ -1,4 +1,4 @@
-"""siap/codec.py 검증 — 골든 벡터 53건 왕복 + Value 범위(F-044/047/055/058).
+"""siap/codec.py 검증 — 골든 벡터 53건 왕복 + Value 범위(/047/055/058).
 
 개발_착수_지시서 §3.5 출구 ① `pytest siap/tests/`. C 호스트 테스트
 (`firmware/tests/test_golden.c`)와 같은 골든 파일을 읽어, 같은 판정을
@@ -104,7 +104,7 @@ def test_encode_rejects_headerless_frame_f215():
         codec.encode_frame(frame)
 
 
-# ── pack_value / unpack_value 경계값 (F-044/047/055/058) ───────────────
+# ── pack_value / unpack_value 경계값 (/047/055/058) ───────────────
 
 def test_pack_int_boundaries():
     assert codec.pack_int(-(2 ** 31)) == 0x80000000
@@ -142,7 +142,7 @@ def test_pack_float_boundaries():
 
 
 def test_pack_value_conversion_failures_normalize_to_value_range_error():
-    """F-058 — OverflowError/ValueError/TypeError 가 전부 ValueRangeError 로
+    """OverflowError/ValueError/TypeError 가 전부 ValueRangeError 로
     정규화돼야 decode_frame() 이 예외 종류를 하나만 잡으면 된다."""
     for bad in ("abc", None):
         with pytest.raises(codec.ValueRangeError):
@@ -160,7 +160,7 @@ def test_unpack_type_separation():
 
 
 def test_bitwriter_rejects_out_of_range_without_partial_write():
-    """F-044 — 범위 초과 시 아무것도 기록하지 않는다(마스킹 래핑 금지).
+    """범위 초과 시 아무것도 기록하지 않는다(마스킹 래핑 금지).
     bitpack.c 의 "실패 시 buf 도 *bitpos 도 바뀌지 않는다" 계약의 Python 대응."""
     w = codec.BitWriter(4)
     assert w.write(0xFF, 4) is False               # 4bit 에 0xFF 는 못 들어간다
@@ -174,10 +174,10 @@ def test_bitwriter_capacity_guard():
     assert w.write(1, 8) is False                   # 용량 초과 — 두 번째 바이트가 없다
 
 
-# ── Decoder 재동기 (F-140) ────────────────────────────────────────
+# ── Decoder 재동기 ────────────────────────────────────────
 
 def test_decoder_resync_preserves_trailing_valid_frame_after_header_violation_f140():
-    """F-140 — Version 위반처럼 payload_len 자체가 검증되지 않은 위반은
+    """Version 위반처럼 payload_len 자체가 검증되지 않은 위반은
     그 값을 신뢰해 버퍼를 지우면 안 된다. Version=0x99·payload_len=0xFFFF
     인 위반 헤더 뒤에 정상 프레임이 바로 이어 붙어 있어도, 정상 프레임은
     살아남아야 한다(예전에는 위반 프레임의 payload_len 만큼 지워 24byte
@@ -204,7 +204,7 @@ def _golden_bytes(vector_id: str) -> bytes:
 
 
 def test_decoder_classifies_sequential_injected_violations_f146():
-    """F-146 — 시연 시나리오 §3.1 S4-b 순서(X01→X03→X05)를 한 스트림에
+    """시연 시나리오 §3.1 S4-b 순서(X01→X03→X05)를 한 스트림에
     이어 붙여 먹여도 셋 다 개별적으로 분류돼야 한다. 이전에는 X01 위반
     직후 재동기 모드에 들어간 뒤, X03·X05 자신의 헤더가 (각자의 위반
     때문에) 4조건 재동기 게이트를 통과하지 못해 노이즈로 오인되어
@@ -216,7 +216,7 @@ def test_decoder_classifies_sequential_injected_violations_f146():
 
     msg_ids = [f.header.msg_id for f in frames]
     assert 50 in msg_ids and 52 in msg_ids and 54 in msg_ids, (
-        f"연속 주입 프레임이 소실됐다(F-146 재발): msg_id={msg_ids}"
+        f"연속 주입 프레임이 소실됐다( 재발): msg_id={msg_ids}"
     )
     by_id = {f.header.msg_id: f for f in frames}
     assert [v.code_name for v in by_id[50].violations] == ["INVALID_VERSION"]
@@ -225,8 +225,8 @@ def test_decoder_classifies_sequential_injected_violations_f146():
 
 
 def test_decoder_resync_does_not_mistake_stray_version_byte_for_new_header_f151():
-    """F-151 — F-146 이 재동기 게이트를 Version 단독으로 완화한 뒤 생긴
-    회귀. 위반 헤더(F-141 에 따라 payload_len 을 신뢰하지 않고 헤더
+    """ 이 재동기 게이트를 Version 단독으로 완화한 뒤 생긴
+    회귀. 위반 헤더( 에 따라 payload_len 을 신뢰하지 않고 헤더
     12byte 만 지운다)가 남긴 잔여 payload 바이트가 우연히 `0x12`
     (Version)이면, Version 단독 게이트가 그 지점을 새 헤더로 오인해
     뒤따르는 진짜 정상 프레임을 삼켰다(실측: msg_id 91 유실, 대신
@@ -244,14 +244,14 @@ def test_decoder_resync_does_not_mistake_stray_version_byte_for_new_header_f151(
     frames = list(dec.feed(bad + good))
 
     msg_ids = [f.header.msg_id for f in frames]
-    assert 91 in msg_ids, f"정상 프레임이 유실됐다(F-151 재발): msg_id={msg_ids}"
+    assert 91 in msg_ids, f"정상 프레임이 유실됐다( 재발): msg_id={msg_ids}"
     by_id = {f.header.msg_id: f for f in frames}
     assert by_id[90].violations[0].code_name == "INVALID_VERSION"
     assert not by_id[91].violations
 
 
 def test_decoder_resync_still_classifies_unregistered_node_after_violation_f151():
-    """F-151 수정이 X02(Node ID 만 미등록, 나머지 구조는 전부 정상)를
+    """ 수정이 X02(Node ID 만 미등록, 나머지 구조는 전부 정상)를
     다시 삼키지 않는지 확인한다 — Node ID 조건을 무조건 거부로 쓰면
     시연 시나리오 §3.1 몽타주(X02 가 다른 위반 직후 연쇄 주입될 때)에서
     INVALID_NODE_ID 자체가 재동기 노이즈로 오인돼 사라진다. Node ID 만

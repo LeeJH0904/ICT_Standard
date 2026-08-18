@@ -1,4 +1,4 @@
-"""sim/replayer.py 검증 — F-042 `dir` 필터, 타이밍 정규화, 안전한 종료."""
+"""sim/replayer.py 검증 — `dir` 필터, 타이밍 정규화, 안전한 종료."""
 from __future__ import annotations
 
 import json
@@ -23,7 +23,7 @@ def test_replayer_injects_only_rx_records(tmp_path):
     log = tmp_path / "session.jsonl"
     _write_log(log, [
         {"t": 0.0, "dir": "rx", "hex": RX_FRAME_1.hex()},
-        {"t": 0.01, "dir": "tx", "hex": TX_FRAME.hex()},     # F-042 — 절대 소켓에 나가면 안 된다
+        {"t": 0.01, "dir": "tx", "hex": TX_FRAME.hex()},     # 절대 소켓에 나가면 안 된다
         {"t": 0.02, "dir": "rx", "hex": RX_FRAME_2.hex()},
     ])
 

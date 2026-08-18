@@ -32,7 +32,7 @@ def test_get_or_create_device_info_reuses_by_model_name(conn):
 
 
 def test_get_or_create_device_info_stores_device_characteristics(conn):
-    """F-185 재현 — 1369-P1 6.2.4 "장치정보에는... 장치특성 등이 포함되어야
+    """ 재현 — 1369-P1 6.2.4 "장치정보에는... 장치특성 등이 포함되어야
     한다"인데 저장할 컬럼 자체가 없었다. manufacturer 와 같은 자격의
     nullable 컬럼으로 열어 둔다."""
     id_ = repository.get_or_create_device_info(
@@ -48,7 +48,7 @@ def test_get_or_create_device_info_stores_device_characteristics(conn):
 
 
 def test_get_or_create_device_info_device_characteristics_defaults_none(conn):
-    """0943 DEVICE_PROPERTY(표 7-15, F-198)는 장치특성을 나르지 않는다 —
+    """0943 DEVICE_PROPERTY(표 7-15)는 장치특성을 나르지 않는다 —
     동적 등록 경로(ingest.py)가 이 인자를 넘기지 않으면 manufacturer 와
     같이 None."""
     id_ = repository.get_or_create_device_info(
@@ -76,7 +76,7 @@ def test_upsert_device_install_info_inserts_then_updates(conn):
 
 
 def test_upsert_device_install_info_reconnect_moves_device_info_id(conn):
-    """F-169 재현 — 재연결로 장치 종류(subtype)가 바뀌면 device_info_id 도
+    """ 재현 — 재연결로 장치 종류(subtype)가 바뀌면 device_info_id 도
     새 device_info 를 가리켜야 한다. 이전에는 UPDATE 절에서 이 컬럼이
     빠져 예전 모델(TEMPERATURE)을 계속 참조했다."""
     temp_id = repository.get_or_create_device_info(
@@ -95,13 +95,13 @@ def test_upsert_device_install_info_reconnect_moves_device_info_id(conn):
     assert install_id_1 == install_id_2, "같은 (node,device) 주소는 같은 설치 행이어야 한다"
     row = repository.find_device_install_by_siap(conn, 3, 1)
     assert row["device_info_id"] == humid_id, (
-        "F-169 재발: 재연결 후에도 device_info_id 가 예전 모델을 계속 참조한다"
+        " 재발: 재연결 후에도 device_info_id 가 예전 모델을 계속 참조한다"
     )
     assert row["siap_subtype"] == 2
 
 
 def test_upsert_device_install_info_reconnect_preserves_unset_location_and_unit(conn):
-    """F-170 재현 — 재연결 호출자가 설치 위치·단위를 넘기지 않으면(None)
+    """ 재현 — 재연결 호출자가 설치 위치·단위를 넘기지 않으면(None)
     기존에 관리되던 값을 지우지 않고 보존해야 한다."""
     dev_id = repository.get_or_create_device_info(
         conn, device_kind="SENSOR", model_name="SIAP-0x01", device_name="TEMPERATURE")
@@ -115,21 +115,21 @@ def test_upsert_device_install_info_reconnect_preserves_unset_location_and_unit(
         siap_node_id=3, siap_device_id=1, siap_subtype=1)
     row = repository.find_device_install_by_siap(conn, 3, 1)
     assert row["device_name"] == "node3-1-renamed"
-    assert row["install_location"] == "GH-A-1", "F-170 재발: 재연결이 설치 위치를 지웠다"
-    assert row["install_loc_unit"] == "m", "F-170 재발: 재연결이 위치 단위를 지웠다"
-    assert row["unit"] == "C", "F-170 재발: 재연결이 측정 단위를 지웠다"
+    assert row["install_location"] == "GH-A-1", " 재발: 재연결이 설치 위치를 지웠다"
+    assert row["install_loc_unit"] == "m", " 재발: 재연결이 위치 단위를 지웠다"
+    assert row["unit"] == "C", " 재발: 재연결이 측정 단위를 지웠다"
 
 
 def test_get_or_create_device_info_records_config_change_only_on_create(conn):
-    """F-182 재현 — 새 device_info 를 만들 때만 config_change_log 에 CREATE
+    """ 재현 — 새 device_info 를 만들 때만 config_change_log 에 CREATE
     가 남는다. model_name 재사용(재요청)은 아무것도 바뀌지 않으므로 이력이
     아니다."""
     before = conn.execute("SELECT COUNT(*) FROM config_change_log").fetchone()[0]
     id1 = repository.get_or_create_device_info(
         conn, device_kind="SENSOR", model_name="SIAP-0x01", device_name="TEMPERATURE")
     after_create = conn.execute("SELECT COUNT(*) FROM config_change_log").fetchone()[0]
-    assert after_create - before == 1, "F-182 재발: device_info CREATE 이력이 남지 않았다"
-    # F-184: changed_at 은 초 단위라 같은 초 안의 여러 INSERT 는 값이 같을 수
+    assert after_create - before == 1, " 재발: device_info CREATE 이력이 남지 않았다"
+    # changed_at 은 초 단위라 같은 초 안의 여러 INSERT 는 값이 같을 수
     # 있다 — 삽입 순서를 보려면 (숨은) rowid 로 정렬해야 한다.
     row = conn.execute(
         "SELECT table_name, row_id, operation FROM config_change_log ORDER BY rowid DESC LIMIT 1"
@@ -143,7 +143,7 @@ def test_get_or_create_device_info_records_config_change_only_on_create(conn):
 
 
 def test_upsert_device_install_info_records_config_change_create_and_update(conn):
-    """F-182 — 최초 등록은 CREATE, 재연결(UPDATE 경로)은 UPDATE 로 남는다."""
+    """최초 등록은 CREATE, 재연결(UPDATE 경로)은 UPDATE 로 남는다."""
     before = conn.execute("SELECT COUNT(*) FROM config_change_log").fetchone()[0]
     dev_id = repository.get_or_create_device_info(
         conn, device_kind="SENSOR", model_name="SIAP-0x01", device_name="TEMPERATURE")
@@ -151,7 +151,7 @@ def test_upsert_device_install_info_records_config_change_create_and_update(conn
         conn, device_info_id=dev_id, device_name="node3-1",
         siap_node_id=3, siap_device_id=1, siap_subtype=1)
     after_create = conn.execute("SELECT COUNT(*) FROM config_change_log").fetchone()[0]
-    # F-184: changed_at 은 초 단위라 같은 초 안의 여러 INSERT 는 값이 같을 수
+    # changed_at 은 초 단위라 같은 초 안의 여러 INSERT 는 값이 같을 수
     # 있다 — 삽입 순서를 보려면 (숨은) rowid 로 정렬해야 한다.
     row = conn.execute(
         "SELECT table_name, row_id, operation FROM config_change_log ORDER BY rowid DESC LIMIT 1"
@@ -162,7 +162,7 @@ def test_upsert_device_install_info_records_config_change_create_and_update(conn
         conn, device_info_id=dev_id, device_name="node3-1-renamed",
         siap_node_id=3, siap_device_id=1, siap_subtype=1)
     after_update = conn.execute("SELECT COUNT(*) FROM config_change_log").fetchone()[0]
-    assert after_update - after_create == 1, "F-182 재발: 재연결 UPDATE 이력이 남지 않았다"
+    assert after_update - after_create == 1, " 재발: 재연결 UPDATE 이력이 남지 않았다"
     row2 = conn.execute(
         "SELECT table_name, row_id, operation FROM config_change_log ORDER BY rowid DESC LIMIT 1"
     ).fetchone()
@@ -186,7 +186,7 @@ def test_record_config_change_stores_json_changes_and_defaults_version_1(conn):
 
 
 def test_get_greenhouse_location_returns_seeded_location(conn, greenhouse_id):
-    """F-183 — 시드 온실(`fixtures/seed.sql`)의 위치를 그대로 돌려준다."""
+    """시드 온실(`fixtures/seed.sql`)의 위치를 그대로 돌려준다."""
     location, unit = repository.get_greenhouse_location(conn, greenhouse_id)
     row = conn.execute(
         "SELECT location, location_unit FROM greenhouse_info WHERE id=?", (greenhouse_id,)
@@ -204,7 +204,7 @@ def test_get_greenhouse_location_none_when_missing(tmp_path):
 
 
 def test_get_greenhouse_manager_user_id_returns_seeded_manager(conn, greenhouse_id):
-    """F-176 — `greenhouse_manage`(1369-P1 §7.1(3))는 시드로 이미 채워져
+    """`greenhouse_manage`(1369-P1 §7.1(3))는 시드로 이미 채워져
     있다. 그 관리자를 그대로 조회할 수 있어야 한다."""
     user_id = repository.get_greenhouse_manager_user_id(conn, greenhouse_id)
     assert user_id is not None
@@ -223,7 +223,7 @@ def test_get_greenhouse_manager_user_id_none_when_unmanaged(tmp_path):
 
 
 def test_link_device_manage_is_idempotent(conn, greenhouse_id):
-    """F-176 — 재연결로 다시 불려도 `device_manage`는 1행만 유지한다
+    """재연결로 다시 불려도 `device_manage`는 1행만 유지한다
     (`UNIQUE(install_id)`, `link_device_install()`과 같은 멱등 패턴)."""
     dev_id = repository.get_or_create_device_info(
         conn, device_kind="SENSOR", model_name="SIAP-0x01", device_name="TEMPERATURE")
@@ -328,7 +328,7 @@ def test_record_device_state_rejects_unknown_subtype(conn, actuator_install_id):
 
 
 def test_record_device_state_cooling_heater_only_fills_power(conn, actuator_install_id):
-    """F-157 — 냉난방기는 power 만 채우고 temperature·wind_level 은 NULL로
+    """냉난방기는 power 만 채우고 temperature·wind_level 은 NULL로
     둔다(FAN 과 같은 패턴). 이전에는 value 가 power 와 temperature 양쪽에
     중복 기입됐다."""
     dsd_id = repository.record_device_state(
@@ -342,7 +342,7 @@ def test_record_device_state_cooling_heater_only_fills_power(conn, actuator_inst
         "SELECT power FROM dsd_cooling_heater WHERE id=?", (dsd_id2,)).fetchone()[0] == 0
 
 
-# ── operating_env — 작동 환경 (F-156) ─────────────────────────────
+# ── operating_env — 작동 환경 ─────────────────────────────
 
 def test_record_operating_env_links_device_state_and_env_state(conn, greenhouse_id, actuator_install_id):
     dsd_id = repository.record_device_state(
@@ -373,7 +373,7 @@ def test_record_operating_env_env_state_id_unique(conn, greenhouse_id, actuator_
 # ── alert (FCS) ───────────────────────────────────────────────────
 
 def test_record_alert_requires_frame_id_when_nec_present(conn):
-    """F-092 — siap_nec 가 있으면 frame_id 가 필수. repository 가 SQL을 치기
+    """siap_nec 가 있으면 frame_id 가 필수. repository 가 SQL을 치기
     전에 막아 IntegrityError 대신 명확한 ValueError 를 낸다."""
     with pytest.raises(ValueError):
         repository.record_alert(conn, kind="NODE_ERROR", severity="WARN", message="x", siap_nec=7)
