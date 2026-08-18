@@ -286,3 +286,57 @@ def test_decoder_resync_recovers_frame_split_across_multiple_feeds_after_violati
 
     assert len(frames) == 2
     assert frames[1].header.msg_id == 2
+
+
+def test_decode_rejects_wrong_gcg_id_f242():
+    """expected_gcg_id 를 주입하면 헤더 GCG ID 가 다를 때 INVALID_GCG_ID(7.3.1,
+    표 7-10)로 거부하고, 구조적으로 유효한 프레임이므로 kind 를 보존해
+    error_response 가 대응 RES_* 로 회신할 수 있어야 한다. Node ID 검사와 달리
+    REQ_SET_CONNECTION 도 대상이다 — 다른 제어기를 향한 연결 요청을 이
+    게이트웨이가 승인해선 안 된다(F-242)."""
+    # REQ_SET_CONNECTION(msg_type=0x0000), gcg=2, node=3 — 로컬 GCG=1 과 불일치
+    raw = codec.encode_header(Header(0x12, 0x0000, 0, 1, 0, 2, 3))
+    f = codec.decode_frame(raw, node_known=lambda _: True, expected_gcg_id=1)
+    assert [v.code_name for v in f.violations] == ["INVALID_GCG_ID"]
+    assert f.violations[0].clause == "7.3.1"
+    assert f.kind is MsgKind.REQ_SET_CONNECTION            # 회신 가능하도록 kind 보존
+    # 일치(gcg=1) → 위반 없음
+    ok = codec.encode_header(Header(0x12, 0x0000, 0, 1, 0, 1, 3))
+    assert codec.decode_frame(ok, node_known=lambda _: True, expected_gcg_id=1).violations == ()
+    # expected_gcg_id 미지정(단독 코덱 테스트·골든 재생) → 검사 생략(결정론 보존)
+    assert codec.decode_frame(raw, node_known=lambda _: True).violations == ()
+
+
+def test_decode_rejects_type_subtype_mismatch_f247():
+    """DEVICE_MAIN_INFO 의 Type 이 그 Subtype 고유 종류(Subtype.dev_type)와
+    어긋나면 INVALID_DEVICE_TYPE(0x05, 표 7-14)로 거부한다. 예전에는 이 검사가
+    없어 (ACTUATOR, HUMIDITY[SENSOR]) 불일치가 위반 없이 SUCCESS 승인된 뒤
+    backend 에서 조용히 폐기됐다(F-247)."""
+    from contracts.frame import DeviceMainInfo, DevType, ValueType, Subtype
+
+    # ACTUATOR + HUMIDITY(SENSOR 고유) → encode 거부
+    bad = DeviceMainInfo(device_id=1, dev_type=DevType.ACTUATOR,
+                         subtype=int(Subtype.HUMIDITY), value_type=ValueType.FLOAT, value=1.0)
+    enc, v = codec.encode_dmi(bad)
+    assert enc is None and v.code_name == "INVALID_DEVICE_TYPE"
+
+    # 정상: SENSOR + HUMIDITY 왕복
+    ok = DeviceMainInfo(device_id=1, dev_type=DevType.SENSOR,
+                        subtype=int(Subtype.HUMIDITY), value_type=ValueType.FLOAT, value=1.0)
+    enc2, v2 = codec.encode_dmi(ok)
+    assert enc2 is not None and v2 is None
+    dmi, v3 = codec.decode_dmi(enc2)
+    assert v3 is None and dmi.dev_type is DevType.SENSOR
+
+    # decode 쪽 대칭 거부: 정상 인코딩 바이트의 dev_type 비트(byte1 MSB)만
+    # ACTUATOR 로 뒤집으면 subtype 은 그대로 HUMIDITY → 불일치 위반이어야 한다
+    b = bytearray(enc2)
+    b[1] |= 0x80
+    dmi2, v4 = codec.decode_dmi(bytes(b))
+    assert dmi2 is None and v4.code_name == "INVALID_DEVICE_TYPE"
+
+    # 정상: ACTUATOR + FAN(ACTUATOR 고유) 은 통과
+    act = DeviceMainInfo(device_id=2, dev_type=DevType.ACTUATOR,
+                         subtype=int(Subtype.FAN), value_type=ValueType.UINT, value=1)
+    enc3, v5 = codec.encode_dmi(act)
+    assert enc3 is not None and v5 is None

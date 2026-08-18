@@ -6,7 +6,7 @@
 | 분류 | 코드버그 |
 | 대상 | 제출본 `project_code/siap/codec.py:537` · `project_code/siap/link.py:114,319` |
 | 발견일 | 2026-08-18 |
-| 상태 | 신규 |
+| 상태 | 수정완료 |
 
 ## 근거
 
@@ -54,4 +54,7 @@ print(f.violations, r.rsc, r.header.gcg_id, r.node_property.gcg_id)
 
 | 일시 | 상태 | 내용 |
 |---|---|---|
-|  |  |  |
+| 2026-08-18 | 확인 | 재현 스크립트로 재현. `expected_gcg_id` 미주입 시 위반 없음·SUCCESS·헤더/NP GCG 충돌 확인 |
+| 2026-08-18 | 수정완료 | `siap/codec.py` `decode_frame`/`_decode_frame`/`Decoder`에 `expected_gcg_id` 파라미터 추가. Transmission 검사 뒤·Node ID 검사 앞에 GCG 불일치 시 `INVALID_GCG_ID(0x02, 7.3.1)` 위반 추가 — `node_known`과 같은 주입 원칙(codec은 자기 주소를 모름, 호출자가 `_gcg_id` 주입). Node ID 검사와 달리 `REQ_SET_CONNECTION`도 대상(연결 요청 자체가 오식별 표적). 이 위반은 구조적으로 유효한 프레임의 오식별이므로 `kind`를 보존해 `error_response()`가 대응 RES_*에 위반 RSC를 실어 회신(CLAUDE.md §3.5 "위반 Request 회신", `reply_kind()`). `siap/link.py` `start()`가 `expected_gcg_id=self._gcg_id`를 주입. 결과: 오식별 요청→INVALID_GCG_ID 회신(헤더·NP GCG 일관), registry 미갱신, 정상 경로(gcg 일치)는 SUCCESS 유지. `siap/tests` 114건·`backend/tests` 포함 365건 통과, 골든 53건 판정 신규 어긋남 0 |
+| 2026-08-18 | 수정완료 | **회귀 테스트**: 제출본 `siap/tests/test_codec.py::test_decode_rejects_wrong_gcg_id_f242` 추가(불일치→INVALID_GCG_ID+kind 보존, 일치→무위반, 미주입→검사 생략). 통과 확인 |
+| 2026-08-18 | 수정완료 | **적용 범위**: 제출본(`최종_제출물_폴더/ICT_Test/project_code/siap/codec.py`·`link.py`·`siap/tests/test_codec.py`)에 적용. 이후 사용자 지시로 **개발 트리(저장소 루트 `project_code/`)에도 동일 패치 이식**(codec.py·link.py·tests) — 전체 미러가 아니라 이 수정만 옮겨 dev 고유 주석은 보존. dev 367 통과·골든 신규 어긋남 0. `meta_verify.py` 회귀 검사(dev 스캔)에서 F-242 발견돼 목록에서 빠짐 |

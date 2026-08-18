@@ -271,7 +271,11 @@ def _handle_device_property(conn: sqlite3.Connection, frame: Frame) -> None:
             continue
         if dmi.dev_type is not Subtype(dmi.subtype).dev_type:
             # Type이 이 subtype의 정의(Subtype.dev_type)와 어긋나면
-            # 등록 자체를 거부한다(와 같은 불변식).
+            # 등록 자체를 거부한다(와 같은 불변식). 방어선으로 남긴다 —
+            # F-247 이후 codec(decode_dmi)이 이 불일치를 위반으로 잡아
+            # INVALID_DEVICE_TYPE 로 회신하고 frame_violation 에 기록하므로,
+            # 유효 프레임만 여기 도달하는 정상 경로에서는 이 가드가 실행되지
+            # 않는다. 다른 경로로 구성된 프레임에 대비한 이중 방어다.
             continue
         model_name = f"SIAP-0x{dmi.subtype:02X}"
         device_info_id = repository.get_or_create_device_info(

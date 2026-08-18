@@ -6,7 +6,7 @@
  * 확인한다). 이 파일이 새로 하는 일은 그 결과를 stdout 으로 내보내는
  * 것뿐이다 — Python(siap/codec.py) 출력과 대조하기 위해서다.
  *
- */judgement=normal/alert 는 재인코딩한 hex와 디코드 구조체의
+ * judgement=normal/alert 는 재인코딩한 hex와 디코드 구조체의
  * 의미값 서명을, judgement=violation 은 C 디코더의 거부 판정(RSC+clause)을
  * 낸다. 예전에는 violation 9건을
  * 아예 건너뛰고 "44+9=53"이라는 항등식에만 포함시켜, xcodec_verify.py 가

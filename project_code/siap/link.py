@@ -111,7 +111,8 @@ class SiapNodeLink:
         self._build = FrameBuilderImpl(self._gcg_id, mode=proto_mode, registry=self._registry)
         self._on_frame = opts.pop("on_frame", None)
         self._capture = opts.pop("capture", None)
-        self._decoder = codec.Decoder(proto_mode, node_known=self._registry.is_known)
+        self._decoder = codec.Decoder(proto_mode, node_known=self._registry.is_known,
+                                      expected_gcg_id=self._gcg_id)
         self._transport = transport.open_transport(run_mode, **opts)
         self._transport.open()
         self._start_time = time.monotonic()

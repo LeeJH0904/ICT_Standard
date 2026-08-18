@@ -314,6 +314,11 @@ def encode_dmi(dmi: DeviceMainInfo) -> tuple[bytes | None, Violation | None]:
     if int(dmi.subtype) not in SUBTYPE_CODES:
         return None, Violation(int(RSC.INVALID_DATA_SUBTYPE), "INVALID_DATA_SUBTYPE", "표 7-14",
                                 f"Subtype=0x{int(dmi.subtype):02X} 는 등록되지 않았다")
+    if dmi.dev_type is not Subtype(int(dmi.subtype)).dev_type:   # Type↔Subtype 불변식 (F-247)
+        return None, Violation(int(RSC.INVALID_DEVICE_TYPE), "INVALID_DEVICE_TYPE", "표 7-14",
+                                f"Type=0x{int(dmi.dev_type):02X}({dmi.dev_type.name}) 는 "
+                                f"Subtype=0x{int(dmi.subtype):02X}(고유 Type="
+                                f"{Subtype(int(dmi.subtype)).dev_type.name})와 불일치")
     try:
         raw = pack_value(dmi.value, dmi.value_type)
     except ValueRangeError as e:
@@ -346,6 +351,19 @@ def decode_dmi(data: bytes) -> tuple[DeviceMainInfo | None, Violation | None]:
     if subtype not in SUBTYPE_CODES:
         return None, Violation(int(RSC.INVALID_DATA_SUBTYPE), "INVALID_DATA_SUBTYPE", "표 7-14",
                                 f"Subtype=0x{subtype:02X} 는 등록되지 않았다")
+    # Type↔Subtype 불변식: Subtype 은 자체 할당 시 상위 비트(0x80)로
+    # SENSOR/ACTUATOR 를 정한다(contracts/frame.py::Subtype.dev_type). 선언된
+    # Type 이 그 subtype 의 고유 Type 과 어긋나면 거부한다 — subtype 자체는
+    # 등록돼 있으나 Type 필드가 그 subtype 에 맞지 않는 것이므로
+    # INVALID_DEVICE_TYPE(0x05)다. 예전에는 이 검사가 없어 (ACTUATOR,
+    # HUMIDITY[SENSOR]) 같은 불일치가 위반 없이 SUCCESS 승인된 뒤 backend 에서
+    # 조용히 폐기됐다(F-247). backend 폐기 가드는 방어선으로 남지만, 이제
+    # 이 프레임은 위반으로 회신되고 frame_violation 에 기록된다.
+    if DevType(dev_type_raw) is not Subtype(subtype).dev_type:
+        return None, Violation(int(RSC.INVALID_DEVICE_TYPE), "INVALID_DEVICE_TYPE", "표 7-14",
+                                f"Type=0x{dev_type_raw:02X}({DevType(dev_type_raw).name}) 는 "
+                                f"Subtype=0x{subtype:02X}(고유 Type="
+                                f"{Subtype(subtype).dev_type.name})와 불일치")
     value_type = ValueType(value_type_raw)
     value = unpack_value(raw_value, value_type)
     dmi = DeviceMainInfo(device_id=device_id, dev_type=DevType(dev_type_raw),
@@ -535,19 +553,31 @@ def encode_frame(frame: Frame, mode: Mode = "strict") -> bytes:
 
 
 def decode_frame(data: bytes, mode: Mode = "strict",
-                  node_known: Callable[[int], bool] | None = None) -> Frame:
+                  node_known: Callable[[int], bool] | None = None,
+                  expected_gcg_id: int | None = None) -> Frame:
     """프레임 1건의 바이트열을 Frame 으로 해석한다. 불완전 입력을 포함해
     예외를 던지지 않는다(계약).
 
     node_known: Node ID 가 등록돼 있는지 확인하는 콜백(위반 2 판정,
     "core/ 는 내 주소를 모른다"와 같은 원칙으로 registry.py 를 여기 import
     하지 않는다. 호출자(link.py)가 registry.py 를 보고 주입한다). None 이면
-    이 검사를 생략한다(단독 코덱 테스트·골든 벡터 재생 등)."""
-    return _decode_frame(data, mode, node_known, incomplete_as_violation=True)
+    이 검사를 생략한다(단독 코덱 테스트·골든 벡터 재생 등).
+
+    expected_gcg_id: 이 게이트웨이(온실통합제어기)의 GCG ID. 지정하면
+    수신 헤더의 GCG ID 가 이 값과 다를 때 INVALID_GCG_ID(0x02, 표 7-10)로
+    거부한다 — node_known 과 같은 원칙으로 codec 은 자기 주소를 모르며
+    호출자(link.py)가 자신의 _gcg_id 를 주입한다. None 이면 생략한다
+    (단독 코덱 테스트·골든 벡터 재생 등). Node ID 등록 검사(위반 2)와 달리
+    REQ_SET_CONNECTION 도 검사 대상이다 — 연결 요청 자체가 다른 제어기를
+    향할 수 있고, 그 오식별이 바로 INVALID_GCG_ID 가 잡아야 할 상황이다
+    (F-242)."""
+    return _decode_frame(data, mode, node_known, expected_gcg_id,
+                         incomplete_as_violation=True)
 
 
 def _decode_frame(data: bytes, mode: Mode,
                   node_known: Callable[[int], bool] | None,
+                  expected_gcg_id: int | None = None,
                   *, incomplete_as_violation: bool) -> Frame:
     """공개 단발 디코드와 스트리밍 디코드의 공통 구현.
 
@@ -589,6 +619,21 @@ def _decode_frame(data: bytes, mode: Mode,
     if h.trans is None:                                                     # 위반 5 — 표 7-6
         return _violation(RSC.INVALID_TRANSMISSION_TYPE, "INVALID_TRANSMISSION_TYPE", "표 7-6",
                            f"Transmission Type=0x{h.trans_type:02X} 는 정의되지 않았다")
+
+    if (expected_gcg_id is not None                                        # 위반 — INVALID_GCG_ID 표 7-10·7.3.1
+            and h.gcg_id != expected_gcg_id):
+        # Node ID 검사와 달리 REQ_SET_CONNECTION 도 대상이다 — 다른 제어기를
+        # 향한 연결 요청을 이 게이트웨이가 승인해선 안 된다(F-242).
+        # 이 프레임은 구조적으로는 완전히 유효하다(version·kind·trans·N 모두
+        # 정상) — 단지 다른 제어기를 향했을 뿐이다("이 자리가 헤더가 아니다"가
+        # 아니라 "내 주소가 아니다"). 그래서 kind 를 보존해 error_response()
+        # 가 대응 RES_* 에 INVALID_GCG_ID 를 실어 회신하게 한다(CLAUDE.md
+        # §3.5 "위반 Request 회신", reply_kind()). INVALID_GCG_ID 는 재시도
+        # 가능 RSC 라 노드가 주소를 바로잡아 재연결할 수 있다.
+        return Frame(header=h, kind=kind, raw=data[:min(len(data), total_len)],
+                     violations=(Violation(int(RSC.INVALID_GCG_ID), "INVALID_GCG_ID",
+                                           "7.3.1",
+                                           f"GCG ID=0x{h.gcg_id:05X}, 기대 0x{expected_gcg_id:05X}"),))
 
     if (node_known is not None and kind is not MsgKind.REQ_SET_CONNECTION   # 위반 2 — 7.3.1
             and not node_known(h.node_id)):
@@ -696,9 +741,11 @@ class Decoder:
     AVR 의 51byte 창 제약이 없다."""
 
     def __init__(self, mode: Mode = "strict",
-                 node_known: Callable[[int], bool] | None = None):
+                 node_known: Callable[[int], bool] | None = None,
+                 expected_gcg_id: int | None = None):
         self.mode = mode
         self.node_known = node_known
+        self.expected_gcg_id = expected_gcg_id
         self._buf = bytearray()
         self._resync = False
 
@@ -795,6 +842,7 @@ class Decoder:
                 self._resync = False
             try:
                 frame = _decode_frame(bytes(self._buf), self.mode, self.node_known,
+                                      self.expected_gcg_id,
                                       incomplete_as_violation=False)
             except IncompleteFrameError:
                 return None

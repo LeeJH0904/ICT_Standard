@@ -285,8 +285,8 @@ CREATE TABLE env_state_data (
     CHECK (measured_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]*')  -- F-184
 );
 
--- C-2-a. 환경 측정치 — 그림 7-3의 9개 서브타입 통합
---        8종은 (측정값·단위·오차범위·유효범위) 구조 동일, 감우만 측정값 단독
+-- C-2-a. 환경 측정치 — 6.3.3의 10개 서브타입 통합
+--        9종은 (측정값·단위·오차범위·유효범위) 구조 동일, 감우만 측정값(+단위) 단독
 CREATE TABLE env_measurement (
     id          TEXT PRIMARY KEY,
     subtype     TEXT NOT NULL,
