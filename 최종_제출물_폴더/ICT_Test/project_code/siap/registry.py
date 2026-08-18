@@ -7,7 +7,7 @@ siap/registry.py — 노드 세션 (in-memory). TTAK.KO-10.0943 8.1.1 절차의 
 
 `backend/`의 `device_install*` 테이블(1369-P1 대응, 영구 저장)과는 별개다 —
 이건 "지금 이 프로세스가 이번 실행에서 본 노드"만 아는 프로토콜 계층 전용
-런타임 세션이다. `siap/`는 `backend/`를 import하지 않는다(CLAUDE.md §2.2) —
+런타임 세션이다. `siap/`는 `backend/`를 import하지 않는다 —
 이 파일은 그 규칙 안에서 성립하는 가장 얇은 조회 테이블이다.
 """
 from __future__ import annotations
@@ -26,7 +26,7 @@ except ImportError:     # 스크립트로 직접 실행되거나 project_code �
 class NodeRegistry:
     """스레드 안전한 in-memory 노드 세션 테이블.
 
-    쓰기 주체는 SIAP I/O 스레드(link.py) 하나뿐이다 — 아키텍처 설계서 §4.4의
+    쓰기 주체는 SIAP I/O 스레드(link.py) 하나뿐이다.
     "쓰기 소유권은 테이블 단위" 원칙을 이 좁은 테이블에도 그대로 적용한다.
     다른 스레드(API)는 registry()/devices() 로 조회만 한다."""
 
@@ -73,7 +73,7 @@ class NodeRegistry:
         기존 목록에 병합한다(표에 없는 기존 디바이스는 유지). 미등록 노드는
         조용히 무시한다 — `register()`와 같은 원칙, 그 판정은
         `codec.decode_frame()`의 `INVALID_NODE_ID` 위반이 이미 내렸어야
-        한다(CLAUDE.md §3.4)."""
+        한다."""
         with self._lock:
             if node_id not in self._nodes:
                 return
@@ -91,7 +91,7 @@ class NodeRegistry:
         """REQ_SET_NODE_PROPERTY(8.1.3.1 역방향) 등으로 등록된 노드의 속성만
         갱신한다. 미등록 노드는 조용히 무시한다 — 그 판정(INVALID_NODE_ID)은
         codec.decode_frame() 이 이미 내렸어야 한다(표준 해석은 프로토콜
-        계층에만, CLAUDE.md §3.4)."""
+        계층에만)."""
         with self._lock:
             if node.node_id in self._nodes:
                 self._nodes[node.node_id] = node

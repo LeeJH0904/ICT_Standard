@@ -1,9 +1,9 @@
 /*
- * siap_frame.c/.h 호스트 유닛테스트. 펌웨어 설계서 §5.
+ * siap_frame.c/.h 호스트 유닛테스트..
  * element_count/resolve_kind, 구조체 인코드/디코드 왕복, 수신 스트리밍
- * 상태 머신(§5.1), 재동기(§5.7), 송신 윈도우(§5.8)를 검증한다.
+ * 상태 머신, 재동기, 송신 윈도우를 검증한다.
  * 골든 52건 전량 왕복은 test_golden.c 의 몫이다 — 여기서는 코덱 내부
- * 분기(§5.3~§5.8)를 독립적으로, 손으로 만든 값으로 확인한다.
+ * 분기를 독립적으로, 손으로 만든 값으로 확인한다.
  *
  * 실행: cd project_code/firmware/tests && make test_siap_frame && ./test_siap_frame
  * 종료 코드: 0 = 전부 통과, 1 = 실패 있음
@@ -55,7 +55,7 @@ static void case_element_count(void)
     check("EC4: NOTI_DEVICE_VALUE plen=24 -> 거부(7의 배수 아님)",
           siap_element_count(SIAP_NOTI_DEVICE_VALUE, 24) == -1);
 
-    /* 노드당 디바이스 상한 N=16 (CLAUDE.md §3.5). 16은 허용,
+    /* 노드당 디바이스 상한 N=16. 16은 허용,
        17은 거부 — 골든 B03(N=16 허용)·B11(N=17 거부)과 짝을 이룬다.
        결함 재현( 보고서)이 정확히 이 두 조합이었다: REQ_SET_DEVICE_CONTROL
        plen=119(N=17), RES_SET_CONNECTION plen=519(N=17). */
@@ -107,7 +107,7 @@ static void case_resolve_kind(void)
     check("RK5: 0x000E -> 해석 불가", k == SIAP_KIND_NONE);
     check("RK5: clause=표 7-2 (미정의 Message Type)", cl == SIAP_CLAUSE_TABLE_7_2);
 
-    /* strict/extended 분기 — 0x0801 의 의미가 모드에 따라 다르다 (Frame 구조 명세서 §2) */
+    /* strict/extended 분기 — 0x0801 의 의미가 모드에 따라 다르다  */
     k = siap_resolve_kind(0x0801, 0, SIAP_MODE_STRICT, &cl);
     check("RK6: strict 0x0801/plen0 -> NOTI_DISCONNECT", k == SIAP_NOTI_DISCONNECT);
 
@@ -156,7 +156,7 @@ static void case_struct_roundtrip(void)
           np2.sw_version == np.sw_version && np2.gcg_id == np.gcg_id && np2.node_id == np.node_id
           && np2.status == np.status && np2.num_devices == np.num_devices);
 
-    /* DEVICE_MAIN_INFO — FLOAT 25.3 (SIAP 메시지 명세서 §8.1, 0x41CA6666) */
+    /* DEVICE_MAIN_INFO — FLOAT 25.3 (0x41CA6666) */
     siap_dmi_t dmi = { 0x01, SIAP_DEV_SENSOR, SIAP_SUBTYPE_TEMPERATURE, SIAP_VALUE_TYPE_FLOAT,
                        siap_raw_from_float(25.3f) };
     bp = 0; siap_result_t r = siap_encode_dmi(buf, &bp, &dmi);
@@ -239,7 +239,7 @@ static void case_struct_roundtrip(void)
 }
 
 /* ═══════════════════════════════════════════════════════════════
- *  케이스 4 — 수신 스트리밍 상태 머신 (§5.1)
+ *  케이스 4 — 수신 스트리밍 상태 머신
  * ═══════════════════════════════════════════════════════════════ */
 typedef struct {
     int header_calls, fixed_calls, elem_calls, end_calls;
@@ -365,7 +365,7 @@ static void case_stream_fixed_and_element(void)
     check("SM2: on_end SUCCESS", c.end_calls == 1 && c.end_rsc == SIAP_RSC_SUCCESS);
 }
 
-/* 위반 8종 — CLAUDE.md §6.3 / SIAP 메시지 명세서 §9.1. 손으로 만든 바이트로
+/* 위반 8종 — /. 손으로 만든 바이트로
    각 지점을 독립적으로 확인한다(골든 52건과의 교차 확인은 test_golden.c). */
 static void case_stream_violations(void)
 {
@@ -464,7 +464,7 @@ static void case_stream_violations(void)
           c.end_calls == 1 && c.end_rsc == SIAP_RSC_SUCCESS);
     check("V8: on_fixed 로 NEC 값 전달", c.fixed_calls == 1 && c.fixed_buf[0] == SIAP_NEC_ERROR_BATTERY_LOW);
 
-    /* #9 (, CLAUDE.md 6.3의 8종에는 없지만 골든 B02와 같은 경계
+    /* #9 (프로젝트 원칙의 8종에는 없지만 골든 B02와 같은 경계
        사례) — REQ_SET_DEVICE_CONTROL(0x000C, 단일 후보) plen=0. resolve_kind()
        는 그 자리에서 kind 를 확정하지만(위 RK1b), FSM 은 그 직후 별도
        element_count() 로 이를 거부해야 한다 — resync_check() 와 다른 코드
@@ -481,7 +481,7 @@ static void case_stream_violations(void)
     check("V9: on_header 는 호출되지 않는다(resolve_kind 이후 element_count 단계에서 이미 거부)",
           c.header_calls == 0);
 
-    /* #10 (, CLAUDE.md 6.3의 8종에는 없지만 표 7-13/7-16 불변식 반례) —
+    /* #10 (프로젝트 원칙의 8종에는 없지만 표 7-13/7-16 불변식 반례) —
        RES_SET_CONNECTION 에 NODE_PROPERTY.Num. of Devices=2 를 넣고 실제
        DEVICE_PROPERTY 는 1개(Payload Length=39 -> 역산 N=1)만 보낸다.
        보고된 반례 그대로: 같은 프레임이 디바이스 수를 2 와 1 로 동시에
@@ -514,7 +514,7 @@ static void case_stream_violations(void)
               c.fixed_calls == 0 && c.elem_calls == 0);
     }
 
-    /* #11~#14 (, CLAUDE.md 6.3의 8종에는 없지만 표 7-10/7-12/7-13/7-15
+    /* #11~#14 (프로젝트 원칙의 8종에는 없지만 표 7-10/7-12/7-13/7-15
        예약값 반례) — 인코더가 이제 예약값을 거부하므로(ST9~ST13), 여기서는
        bp_write 로 직접 원시 바이트를 구성해 "공격자가 이미 만든 프레임"을
        흉내낸다. */
@@ -601,7 +601,7 @@ static void case_stream_violations(void)
     }
 }
 
-/* 재동기 — 위반으로 어긋난 뒤 다음 유효한 헤더를 슬라이딩으로 되찾는다 (§5.7) */
+/* 재동기 — 위반으로 어긋난 뒤 다음 유효한 헤더를 슬라이딩으로 되찾는다  */
 static void case_resync(void)
 {
     test_ctx_t c = {0}; c.expect_node_id = 3;
@@ -679,7 +679,7 @@ static void case_on_gap(void)
     enc_hdr_ok("GAP1: 유효 ACK 헤더 인코드 성공", good, &bp, &hgood);
 
     /* 이 유효한 헤더의 앞 5byte 만 도착한 채 침묵(T_gap)이 걸린 상황을
-       흉내낸다. §5.7 은 "1byte 씩 전진하며 다음 12byte 를 헤더로 시험한다"고만
+       흉내낸다. 이 원칙은 "1byte 씩 전진하며 다음 12byte 를 헤더로 시험한다"고만
        적는다 — 이미 모으던 5byte 를 버리라는 규정은 없다. 헤더 대기 중의
        gap 은 resync 모드만 켜고 지금까지 모은 바이트는 재동기 후보의
        앞부분으로 그대로 남긴다(버리는 쪽은 FIXED/ELEM 도중의 gap 뿐이다 —
@@ -698,7 +698,7 @@ static void case_on_gap(void)
 }
 
 /* ═══════════════════════════════════════════════════════════════
- *  케이스 5 — 송신 윈도우 (§5.8) : flush 부분 쓰기 / ACK 빌더
+ *  케이스 5 — 송신 윈도우: flush 부분 쓰기 / ACK 빌더
  * ═══════════════════════════════════════════════════════════════ */
 /* budget = "지금 이 순간 받아줄 수 있는 byte 수". 0 이면 진짜 논블로킹 I/O 처럼
    0을 돌려준다(siap_tx_flush 가 PENDING 을 내는 유일한 조건) — len 을 그냥
@@ -734,7 +734,7 @@ static void case_tx_ack_and_flush(void)
     check("TX1: payload_len == 0 (ACK 는 페이로드 없음, 7.2/표 7-1)", got.payload_len == 0);
 
     /* 부분 쓰기 — 매 라운드 1byte 만 받아주는 논블로킹 IO 를 흉내낸다
-       (§5.8 "블로킹하지 않는다"). budget 을 매 flush 호출 전에 1로 다시
+       ("블로킹하지 않는다"). budget 을 매 flush 호출 전에 1로 다시
        채운다 — "이번 틱엔 1byte 여유가 생겼다"는 뜻이다. */
     siap_enc_t e2;
     check("TX2: ACK 재빌드 성공", siap_encode_ack(&req, SIAP_MODE_STRICT, &e2));

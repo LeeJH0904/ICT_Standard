@@ -1,9 +1,9 @@
 """backend/tests/test_run_entrypoint.py — 실제 진입점(`run.py`)의 DB 결속.
 
 이 파일은 예외적으로 `run.py`(→ `siap.link`)를 import한다 — `backend/`가
-`siap/` 내부 심볼을 import하지 않는다는 CLAUDE.md §2.2 계약은 애플리케이션
+`siap/` 내부 심볼을 import하지 않는다는 계약은 애플리케이션
 코드에 대한 것이고, `run.py` 자신이 "SiapLink 호출만" 하는 유일한 교차
-지점(CLAUDE.md §2)이다. 이 파일은 그 교차 지점이 실제로 결선돼 있는가만
+지점이다. 이 파일은 그 교차 지점이 실제로 결선돼 있는가만
 검증한다 — `backend/`나 `siap/` 어디에도 새 계층 위반을 추가하지 않는다.
 
 GPT 검증이 실제 `run.py`의 세 실행 경로(`--mode simulate/replay/
@@ -11,7 +11,7 @@ hardware`) 모두 `link.start(...)`에 `on_frame`을 넘기지 않아이
 문서로만 성립하고 실행 경로에서는 DB 저장이 일어나지 않음을 지적했다.
 회귀 가드는 두 갈래다:
   1. `_prepare_db_path()`가 실제로 스키마+시드를 적용한 DB 파일을 만드는가
-     (아키텍처 설계서 §9.2 "2. DB 준비").
+     ("2. DB 준비").
   2. `_make_on_frame()`이 만든 콜백을 **SIAP I/O 스레드가 아닌 임의의
      스레드**에서 호출해도(즉 실제 운용과 같은 조건) 프레임이 DB에 반영되는가.
      최초 구현은 메인 스레드에서 연 연결을 그대로 넘겨 `sqlite3.
@@ -65,7 +65,7 @@ def test_prepare_db_path_creates_schema_and_seed_f160(tmp_path):
         tables = {r[0] for r in con.execute(
             "SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
         assert "frame_log" in tables
-        # fixtures/seed.sql 의 고정 데이터 (아키텍처 설계서 §9.2 "시드는 고정값")
+        # fixtures/seed.sql 의 고정 데이터 ("시드는 고정값")
         assert con.execute("SELECT COUNT(*) FROM greenhouse_info").fetchone()[0] >= 1
     finally:
         con.close()
@@ -118,7 +118,7 @@ def test_on_frame_callback_survives_cross_thread_invocation_f160(tmp_path):
 def test_on_frame_callback_reuses_connection_within_same_thread_f160(tmp_path):
     """같은(가짜 I/O) 스레드에서 두 번 호출하면 두 번째 호출에서 새 연결을
     또 열지 않고 캐시된 연결을 재사용한다 — 매 프레임마다 연결을 새로
-    여는 것은 아키텍처 설계서 §4.4 "트랜잭션은 짧게"와는 별개로 불필요한
+    여는 것은 "트랜잭션은 짧게"와는 별개로 불필요한
     오버헤드이자, `bind()`가 이미 세운 "연결 하나, 여러 프레임" 관례에서
     벗어난다."""
     db_path = tmp_path / "reuse.db"

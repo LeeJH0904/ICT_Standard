@@ -1,7 +1,7 @@
 #ifndef SIAP_SUBTYPE_REGISTRY_H
 #define SIAP_SUBTYPE_REGISTRY_H
 /*
- * Subtype 코드 레지스트리 — SIAP 메시지 명세서 §5 / contracts/frame.py Subtype.
+ * Subtype 코드 레지스트리 — / contracts/frame.py Subtype.
  *
  * 0943 표 7-14 의 Subtype(8bit)은 각주에서 [RUCFS-0009] 온실 관제 데이터 규격을
  * 참조하도록 되어 있으나 해당 규격을 확보하지 못했다. 항목 집합은
@@ -14,7 +14,7 @@
 #include <stdint.h>
 
 /* C++/Arduino 스케치에서 C 링키지로 부를 수 있게 한다(bitpack.h 주석 참조) —
-   C 컴파일 시엔 비활성, 언어 매크로라 core 순수성(§1-5)과 무관하다. */
+   C 컴파일 시엔 비활성, 언어 매크로라 core 순수성과 무관하다. */
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -61,7 +61,7 @@ static inline bool siap_subtype_valid(uint8_t code) {
 }
 
 /* 최상위 비트로 센서/액추에이터 구분 — DEVICE_MAIN_INFO.Type 과 중복되지만
-   검증(교차 대조)에 쓸 수 있다 (SIAP 메시지 명세서 §5). */
+   검증(교차 대조)에 쓸 수 있다. */
 static inline bool siap_subtype_is_actuator(uint8_t code) { return (code & 0x80u) != 0u; }
 
 #ifdef __cplusplus

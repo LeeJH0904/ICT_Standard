@@ -2,32 +2,32 @@
 #define SIAP_TYPES_H
 /*
  * SIAP 프레임 계약의 C 대응 — TTAK.KO-10.0943 7장.
- * contracts/frame.py 의 열거형·구조체·LAYOUT 을 그대로 옮긴다 (Frame 구조 명세서 §7
+ * contracts/frame.py 의 열거형·구조체·LAYOUT 을 그대로 옮긴다 (
  * "firmware/core/siap_types.h — 본 계약의 C 대응").
  *
- * core/ 는 하드웨어 의존성 0이다 (CLAUDE.md §1-5) — Arduino.h, avr/esp 계열 플랫폼
+ * core/ 는 하드웨어 의존성 0이다  — Arduino.h, avr/esp 계열 플랫폼
  * 헤더를 include하지 않는다. <stdint.h>/<stdbool.h> 는 C99 표준 헤더다.
  *
- * 엔디안 : big-endian (network byte order)   — 표준 미규정, 자체 결정 (CLAUDE.md §3.5)
- * FLOAT  : IEEE-754 single precision, 4byte  — 표준 미규정, 자체 결정 (CLAUDE.md §3.5)
+ * 엔디안: big-endian (network byte order)   — 표준 미규정, 자체 결정
+ * FLOAT: IEEE-754 single precision, 4byte  — 표준 미규정, 자체 결정
  *
- * 설계서와의 알려진 차이 한 가지 — 펌웨어 설계서 §5.3 pseudocode 는
+ * pseudocode와의 알려진 차이 한 가지 — pseudocode는
  * `pgm_read_byte(&LAYOUT[k].fixed)` 로 LAYOUT 을 AVR PROGMEM 에서 읽는 모습을
  * 보인다. 그러나 pgm_read_byte 는 <avr/pgmspace.h> 없이 쓸 수 없고, 그 헤더를
- * core/ 가 include하면 CLAUDE.md §1-5(하드웨어 의존성 0)와 정면 충돌하며 ESP32
+ * core/ 가 include하면 (하드웨어 의존성 0)와 정면 충돌하며 ESP32
  * 빌드가 깨진다. 그래서 아래 SIAP_WIRE_CODE / SIAP_WIRE_CODE_EXT / SIAP_LAYOUT
  * 은 평범한 `static const` 배열로 둔다 — 플랫폼 무관을 우선한 것이며, AVR 에서는
  * 이 상수 테이블(각 70 byte 안팎) 이 .data/.rodata 로 RAM 에 얹힐 수 있다.
- * 개발_착수_지시서 §1.5 에 따라 단계 8 의 avr-size 실측이 전체-globals SRAM 예산
+ * avr-size 실측이 전체 globals SRAM 예산
  * (55%)을 넘으면 그때 보드별 바인딩 계층에서 PROGMEM 접근을 얹는 것으로 재검토한다.
- * 단계 8 Uno 실측은 50.0%(< 55%)라 재검토는 발동하지 않았다 — core/ 순수성을 유지한다
- * (2026-08-16, 펌웨어 설계서 §3.4·§3.5). 지금은 core/ 순수성이 우선한다.
+ * Uno 실측은 50.0%(< 55%)라 재검토는 발동하지 않았다 — core/ 순수성을 유지한다
+ * (2026-08-16). 지금은 core/ 순수성이 우선한다.
  */
 #include <stdbool.h>
 #include <stdint.h>
 
 /* C++/Arduino 스케치에서 C 링키지로 부를 수 있게 한다(bitpack.h 주석 참조) —
-   C 컴파일 시엔 비활성, 언어 매크로라 core 순수성(§1-5)과 무관하다. */
+   C 컴파일 시엔 비활성, 언어 매크로라 core 순수성과 무관하다. */
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -79,7 +79,7 @@ typedef enum {
 
     /* Notify / ACK 6종 (표 7-4). 0x0800 이 NOTI_ERROR/NOTI_DEVICE_VALUE 에 중복
        할당된 표준 원문의 결함은 여기서는 소실되지 않는다 — WIRE_CODE 값이
-       중복될 뿐 열거형 멤버는 항상 고유하다 (Frame 구조 명세서 §2). */
+       중복될 뿐 열거형 멤버는 항상 고유하다. */
     SIAP_NOTI_ERROR,
     SIAP_NOTI_DEVICE_VALUE,
     SIAP_NOTI_DISCONNECT,
@@ -98,7 +98,7 @@ typedef enum { SIAP_MODE_STRICT = 0, SIAP_MODE_EXTENDED = 1 } siap_mode_t;
 
 /* 표 7-6. 미정의값(0x03)은 열거형 밖이므로 raw uint8_t 로 다루고
    siap_trans_type_valid() 로만 판정한다 (Header.trans_type 과 동일 원칙,
-   Frame 구조 명세서 §3.2). */
+   ). */
 #define SIAP_TRANS_UNICAST   0x00u
 #define SIAP_TRANS_MULTICAST 0x01u
 #define SIAP_TRANS_BROADCAST 0x02u
@@ -167,8 +167,8 @@ static inline bool siap_status_valid(uint8_t v)        { return v <= (uint8_t)SI
 #define SIAP_NEC_BYTES     1u
 #define SIAP_DID_BYTES     1u
 
-/* 노드당 디바이스 상한 — 표준 미규정, 자체 결정 (CLAUDE.md §3.5).
-   RX/TX 스트리밍 윈도우 크기의 근거이기도 하다 (펌웨어 설계서 §3.4/§5.1). */
+/* 노드당 디바이스 상한 — 표준 미규정, 자체 결정.
+   RX/TX 스트리밍 윈도우 크기의 근거이기도 하다. */
 #define SIAP_MAX_DEVICES_PER_NODE 16u
 
 /* ═══════════════════════════════════════════════════════════════
@@ -229,7 +229,7 @@ typedef struct {              /* 표 7-18 — 56 bit. 시간 3필드 전부 sec 
 /* ═══════════════════════════════════════════════════════════════
  *  5. WIRE_CODE — 논리 종류 → 전송 코드.
  *     strict = 표준 원문 그대로 (0x0800 중복 포함, 고유 코드 33개).
- *     extended = 중복 해소 제안안 (고유 코드 34개). Frame 구조 명세서 §2.
+ *     extended = 중복 해소 제안안 (고유 코드 34개)..
  * ═══════════════════════════════════════════════════════════════ */
 static const uint16_t SIAP_WIRE_CODE[SIAP_KIND_COUNT] = {
     [SIAP_KIND_NONE] = 0xFFFFu,
@@ -315,23 +315,23 @@ static inline uint16_t siap_wire_code(siap_kind_t k, siap_mode_t mode) {
 }
 
 /* ═══════════════════════════════════════════════════════════════
- *  6-a. 하드웨어 추상화 — 함수 포인터 구조체 2종 (펌웨어 설계서 §2.2).
+ *  6-a. 하드웨어 추상화 — 함수 포인터 구조체 2종.
  *     node_state.c 가 아는 하드웨어의 전부다. 보드 디렉터리가 채워 넘긴다.
- *     ctx 도 멤버 하나이므로 크기 산정에서 별도로 더하지 않는다(§2.2).
+ *     ctx 도 멤버 하나이므로 크기 산정에서 별도로 더하지 않는다.
  * ═══════════════════════════════════════════════════════════════ */
 typedef struct {
     /* 1 byte 를 읽는다. 1 = 읽음 / 0 = 지금은 없음 / -1 = 링크 오류 */
     int8_t   (*read_byte)(void *ctx, uint8_t *out);
     /* len byte 를 쓴다. 쓴 개수 반환(논블로킹, 부분 쓰기 허용) */
     int16_t  (*write)(void *ctx, const uint8_t *buf, uint16_t len);
-    /* 부팅 후 경과 ms. 롤오버 허용(§6.4) */
+    /* 부팅 후 경과 ms. 롤오버 허용 */
     uint32_t (*millis)(void *ctx);
     void     *ctx;
 } siap_io_t;
 
 typedef struct {
     /* 디바이스 1개의 현재값을 32bit 원시 비트열로 읽는다. 0 = 성공, -1 = 오류
-       (합성 데이터 금지 — 실패 시 값을 지어내지 않는다, CLAUDE.md §1-1) */
+       (합성 데이터 금지 — 실패 시 값을 지어내지 않는다) */
     int8_t (*read_value)(void *ctx, uint8_t device_id, uint32_t *raw);
     /* 디바이스 1개에 제어값을 쓴다. 0 = 성공 */
     int8_t (*write_value)(void *ctx, uint8_t device_id, uint32_t raw);
@@ -340,7 +340,7 @@ typedef struct {
 
 /* ═══════════════════════════════════════════════════════════════
  *  6. LAYOUT — (고정부 byte, 요소 byte). N 산출의 정본.
- *     contracts/frame.py 의 LAYOUT 과 줄 단위로 대응한다 (펌웨어 설계서 §5.3).
+ *     contracts/frame.py 의 LAYOUT 과 줄 단위로 대응한다.
  * ═══════════════════════════════════════════════════════════════ */
 typedef struct { uint8_t fixed; uint8_t elem; } siap_layout_t;
 

@@ -65,7 +65,7 @@ def test_replayer_injects_only_rx_records(tmp_path):
 
 
 def test_replayer_normalizes_epoch_timestamps(tmp_path):
-    """§5.4 — 첫 레코드의 t 를 빼서 정규화한다. epoch 시각을 그대로 sleep
+    """첫 레코드의 t 를 빼서 정규화한다. epoch 시각을 그대로 sleep
     하면 재생이 사실상 영원히 끝나지 않는다."""
     log = tmp_path / "session.jsonl"
     big_epoch = 1_700_000_000.0

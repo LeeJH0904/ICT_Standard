@@ -4,11 +4,11 @@ backend/services/fms.py — TTAK.KO-10.0937 6.4 FMS(스마트팜모니터서비�
 "장치관리서비스를 통해 수집된 센서 및 구동기의 환경 데이터와 구동 데이터를
 모니터링하고 저장된 자료를 조회하는 서비스"(0937 6.4).
 
-담당 조항: 6.4 전부 · A.1-2·3·4·5 · A.3-2 (0937_요구사항_대조표.md §4.1)
+담당 조항: 6.4 전부 · A.1-2·3·4·5 · A.3-2
 진입점: query_env · query_device_states · list_alerts · check_stale_devices
 
 `on_device_value`의 실제 반영 로직은 `backend/ingest.py::_handle_device_value()`
-에 있다(단계 5) — 이 모듈은 그것을 재구현하지 않는다. 여기서는 API가
+에 있다 — 이 모듈은 그것을 재구현하지 않는다. 여기서는 API가
 필요로 하는 조회와 0937 6.4-3의 미수집 알림 판정만 새로 둔다.
 """
 from __future__ import annotations
@@ -39,7 +39,7 @@ def list_alerts(conn: sqlite3.Connection, **kwargs):
     return repository.list_alerts_page(conn, **kwargs)
 
 
-#: 0937_요구사항_대조표.md §4.4-b 배수 3의 근거 — 표 7-18 Num. of Retry 기본
+#: 미수집 판정 배수 3의 근거 — 표 7-18 Num. of Retry 기본
 #: 3회. 재전송이 전부 실패해야 미수집으로 본다.
 STALE_RETRY_MULTIPLIER = 3
 
@@ -57,7 +57,7 @@ def check_stale_devices(conn: sqlite3.Connection, now: str) -> list[str]:
     살아 있고 특정 디바이스의 `NOTI_DEVICE_VALUE`만 멈춘 경우는 Keep Alive로
     잡히지 않는다 — 이 함수가 그 간극을 메운다.
 
-    전용 스케줄러 스레드는 두지 않는다(새 스레드는 CLAUDE.md §4.3
+    전용 스케줄러 스레드는 두지 않는다(새 스레드는
     동시성 모델 확장이라 그 자체로 별도 결정이 필요하다). 대신 `api.py`가
     `GET /api/v1/alerts`(조회 시점, check-on-read)와 `GET /api/v1/stream`
     (SSE, 0.5초 틱마다)에서 이 함수를 호출한다 — 함수 자체는 DB만 보고

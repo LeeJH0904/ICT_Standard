@@ -1,7 +1,7 @@
 """
 siap/control.py — 송신 대기·재전송 (0943 7.2.2 매칭, 표 7-18 재전송).
 
-아키텍처 설계서 §3.1-b `_pending`/`_match_pending`/`_drain_request_queue`/
+`_pending`/`_match_pending`/`_drain_request_queue`/
 `_expire_pending` 의 로직을 여기로 옮긴다. `link.py`의 SIAP I/O 스레드가 이
 모듈의 `PendingTable`을 소유하지만, 이 파일 자체는 스레드나 실제 시리얼/소켓을
 만들지 않는다 — 시간 소스와 송신 콜백을 인자로 받아 순수 로직만 담아서,
@@ -94,7 +94,7 @@ class PendingTable:
         """타임아웃을 넘긴 대기 항목을 재전송하거나(재시도 남음, 표 7-18
         `Num. of Retry`) 포기한다(`_expire_pending`). `write_fn(frame)` 은
         재전송 바이트를 실제로 내보내는 콜백(link.py 가 주입) — `msg_id` 는
-        그대로 유지한다(, 새로 발번하면 노드가 중복 요청으로 처리한다)."""
+        그대로 유지한다(새로 발번하면 노드가 중복 요청으로 처리한다)."""
         now = self._now()
         with self._lock:
             items = list(self._pending.items())
@@ -119,7 +119,7 @@ class PendingTable:
 
     def wait(self, req: PendingRequest, timeout: float | None = None) -> Frame | None:
         """`send()` 대기 상한 = `Timeout × (Retry Count + 1)`(표 7-18 두 값에서
-        유도, 아키텍처 설계서 §3.1-b) — 호출자가 별도로 정하지 않는다.
+        유도) — 호출자가 별도로 정하지 않는다.
         `timeout` 을 명시하면 그 값을 대신 쓴다(테스트·특수 호출용)."""
         upper = timeout if timeout is not None else self._profile.recv_timeout * (self._profile.num_retry + 1)
         req.event.wait(timeout=upper)

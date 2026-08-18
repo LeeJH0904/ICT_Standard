@@ -1,15 +1,15 @@
 """
-backend/models.py — 읽기 전용 dataclass. ORM을 쓰지 않는다(CLAUDE.md §4.3).
+backend/models.py — 읽기 전용 dataclass. ORM을 쓰지 않는다.
 
 `schema.sql`이 정본이다. 이 파일은 그 행을 담는 그릇일 뿐 제약을 다시
-정의하지 않는다 — 표준 해석은 프로토콜 계층에만 있고(CLAUDE.md §3.4),
+정의하지 않는다 — 표준 해석은 프로토콜 계층에만 있고,
 스키마 무결성은 DB 제약에만 있다. 모든 dataclass는 `frozen=True`.
 
 각 클래스는 `from_row(row: sqlite3.Row) -> Self`를 갖는다. `sqlite3.Row`는
 컬럼명으로 접근한다(db.py의 `row_factory=sqlite3.Row`) — 위치 인덱스로
 읽으면 컬럼 추가 시 조용히 깨진다(류).
 
-테이블 31개 = A5 + B4 + C10 + D3 + E1 + F6 + G2. DB 스키마 설계서 §2 순서를
+테이블 31개 = A5 + B4 + C10 + D3 + E1 + F6 + G2. 순서를
 그대로 따른다.
 """
 from __future__ import annotations
@@ -544,8 +544,8 @@ class FrameViolation:                              # G-2 — 화면에 조항 �
                     row["clause"], row["detail"])
 
 
-# 31개 = A5 + B4 + C10 + D3 + E1 + F6 + G2 — fix_log/meta_verify.py, tools/db_live_verify.py
-# 가 schema.sql 의 테이블 목록과 이 표를 대조한다(디렉터리 전수, 이름 고정 금지 원칙은
+# 31개 = A5 + B4 + C10 + D3 + E1 + F6 + G2 — 검증기가
+# schema.sql의 테이블 목록과 이 표를 대조한다(디렉터리 전수, 이름 고정 금지 원칙은
 # 검증기 쪽 책임이고 여기는 목록 자체가 정본이 아니라 매핑일 뿐이다).
 TABLE_MODEL: dict[str, type] = {
     "farm_info": FarmInfo,

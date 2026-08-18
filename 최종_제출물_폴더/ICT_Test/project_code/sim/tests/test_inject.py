@@ -1,5 +1,5 @@
 """sim/inject.py 검증 — 골든 벡터 8종만 허용, 바이트가 golden.jsonl 원본과
-정확히 일치하는지(시연 시나리오 §3.1 "영상 속 hex 와 제출 golden.jsonl 의
+정확히 일치하는지("영상 속 hex 와 제출 golden.jsonl 의
 hex 가 같아야 한다")."""
 from __future__ import annotations
 

@@ -1,14 +1,14 @@
 /*
- * arduino_sensor_node/main.ino — Uno 센서 노드 (펌웨어 설계서 §7.2).
+ * arduino_sensor_node/main.ino — Uno 센서 노드.
  *
- * core/ 는 수정하지 않는다(CLAUDE.md §1-5). 이 파일이 채우는 것은 전송 계층
+ * core/ 는 수정하지 않는다. 이 파일이 채우는 것은 전송 계층
  * (UART/Serial) 바인딩과 센서 바인딩뿐이며, 표준 해석·상태 머신·프레임 코덱은
  * 전부 core/ 에 있다. Uno·Pro Mini 는 전송 계층 세 함수(uart_read_byte/
- * uart_write/uart_millis)가 같고, ESP32 만 이 셋을 TCP 로 바꾼다(§7.1).
+ * uart_write/uart_millis)가 같고, ESP32 만 이 셋을 TCP 로 바꾼다.
  *
  * 센서: device 1(온도)·2(습도)는 DHT22(디지털 1선, 비트뱅잉), device 3(토양)은
  * 아날로그(A2). 센서 종류·읽기 방식은 보드 계층의 자유이며 core/ 는 바뀌지
- * 않는다 — "동일 응용계층" 주장은 core/ 소스 해시 3종 동일로 증명된다(§7.5.1).
+ * 않는다 — "동일 응용계층" 주장은 core/ 소스 해시 3종 동일로 증명된다.
  *
  * core/ 는 C99 로 컴파일되므로 C++ 스케치에서 부르려면 extern "C" 로 감싼다.
  * core/ 를 Arduino 라이브러리로 노출하는 방법은 firmware/BUILD.md 참조.
@@ -33,8 +33,8 @@ bool     sensor_adc_plausible(uint16_t adc);
 static siap_dp_t   g_devices[3];
 static siap_node_t g_node;
 
-/* ── DHT22(AM2302) 1선 디지털 읽기 — 보드 계층(§1-5: core 는 센서 종류를 모른다).
-   비트뱅잉이라 외부 라이브러리 의존이 없다(§4.1). 40bit = 습도16 + 온도16 +
+/* ── DHT22(AM2302) 1선 디지털 읽기 — 보드 계층(core 는 센서 종류를 모른다).
+   비트뱅잉이라 외부 라이브러리 의존이 없다. 40bit = 습도16 + 온도16 +
    체크섬8. 비트 판정은 각 비트의 HIGH 길이를 직전 LOW 길이와 비교하는
    적응식이라(HIGH>LOW → 1) 루프 오버헤드·클럭 편차에 강하다. 반환 false =
    타임아웃/체크섬 실패 → read_value 가 -1 을 돌려 core 가 오류알림 경로를 탄다. */
@@ -103,7 +103,7 @@ extern "C" int8_t uart_read_byte(void *ctx, uint8_t *out) {
 
 extern "C" int16_t uart_write(void *ctx, const uint8_t *buf, uint16_t len) {
     (void)ctx;
-    /* 논블로킹 부분 쓰기 — 버퍼에 들어갈 만큼만 쓴다(§2.2 write 계약, §5.8).
+    /* 논블로킹 부분 쓰기 — 버퍼에 들어갈 만큼만 쓴다(write 계약).
        여유가 0이면 한 바이트도 쓰지 않고 0을 돌려준다. 이 가드가 없으면
        avail==0 일 때 n=len 으로 떨어져 포화된 버퍼에 Serial.write(buf,len) 을
        호출, 공간이 빌 때까지 블로킹해 그동안 수신·ACK·타이머가 지연된다. */
@@ -117,7 +117,7 @@ extern "C" uint32_t uart_millis(void *ctx) { (void)ctx; return millis(); }
 
 /* ── 디바이스 I/O — device 1·2 는 DHT22(디지털), device 3 은 토양(아날로그).
    센서 노드엔 구동기가 없다. 읽기 실패 시 -1 → core 가 Status ABNORMAL +
-   NOTI_ERROR(ERROR_DEVICE_INTERFACE) 를 보낸다(§7.2). 값을 지어내지 않는다(§1-1). */
+   NOTI_ERROR(ERROR_DEVICE_INTERFACE) 를 보낸다. 값을 지어내지 않는다. */
 extern "C" int8_t sensor_read_value(void *ctx, uint8_t device_id, uint32_t *raw) {
     (void)ctx;
     switch (device_id) {
@@ -149,7 +149,7 @@ static const siap_io_t      g_io      = { uart_read_byte, uart_write, uart_milli
 static const siap_dev_ops_t g_dev_ops = { sensor_read_value, sensor_write_value, NULL };
 
 /* FLOAT 디바이스 하나를 채운다. 물리 특성(Limit·Precision)은 설치 시 확정값
- * (1369-P1 6.3.2), 수집 정책은 기본값. value_type=FLOAT(§3.5). */
+ * (1369-P1 6.3.2), 수집 정책은 기본값. value_type=FLOAT(3.5). */
 static void init_float_device(siap_dp_t *d, uint8_t id, uint8_t subtype,
                               float lo, float hi, float precision) {
     d->main.device_id  = id;
@@ -185,7 +185,7 @@ void setup() {
     cfg.profile      = SIAP_PROFILE_DEFAULT;
     cfg.mode         = SIAP_MODE_STRICT;
 
-    /* 진입점 범위 검증에 실패하면 노드가 뜨지 않는다(§4.1-a). 로컬 정지만 —
+    /* 진입점 범위 검증에 실패하면 노드가 뜨지 않는다. 로컬 정지만 —
      * 게이트웨이에 알릴 수단이 없으므로 지어낸 프레임을 보내지 않는다. */
     if (!siap_node_init(&g_node, &cfg)) {
         for (;;) { /* halt */ }
@@ -193,5 +193,5 @@ void setup() {
 }
 
 void loop() {
-    siap_node_poll(&g_node);   /* 논블로킹 한 틱 — §2.4 */
+    siap_node_poll(&g_node);   /* 논블로킹 한 틱 — */
 }

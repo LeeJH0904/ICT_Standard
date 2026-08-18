@@ -1,36 +1,35 @@
 """
-sim/virtual_node.py — `simulate` 모드 가상 노드 서버 (아키텍처 설계서 §5.5).
+sim/virtual_node.py — `simulate` 모드 가상 노드 서버.
 
 `socket://127.0.0.1:5556` 로 게이트웨이(`SiapNodeLink`)가 클라이언트로
-접속한다(§5.2). 접속 후 노드 3종(Uno·Pro Mini·ESP32 흉내)이 한 연결
+접속한다. 접속 후 노드 3종(Uno·Pro Mini·ESP32 흉내)이 한 연결
 위에서 각자의 `Node ID`로 프레임을 주고받는다 — 실물은 노드마다 물리
 링크가 분리되지만, `simulate` 모드는 그 다중 링크를 하나의 TCP 연결 위
-프레임 다중화로 흉내낸다(§5.1 표: `simulate` 포트는 하나뿐이다).
+프레임 다중화로 흉내낸다(`simulate` 포트는 하나뿐이다).
 
 이 서버가 만드는 모든 바이트는 `sim/_wire.py`(독립 인코더)를 거친다 —
-`siap/codec.py`를 재사용하지 않는다(§5.5, 인코더 버그 상쇄 방지).
+`siap/codec.py`를 재사용하지 않는다(인코더 버그 상쇄 방지).
 
 센서값 출처 — **골든 벡터 DMI 값 재사용** (2026-08-09 사용자 확인).
-아키텍처 설계서 §5.5는 "센서값은 실측 로그의 값 분포를 재사용한다"고
-규정하지만, 실측 로그(`project_code/logs/*.jsonl`)는 단계 8(보드 3종
-실물 통합)에서만 채워진다 — 이 단계에는 존재하지 않는 산출물을 전제로
-한 순환 의존이다. 실측 데이터가 준비되기 전까지는 `contracts/vectors/
+실측 로그(`project_code/logs/*.jsonl`)는 보드 3종을 실물 통합한 뒤에 채워진다.
+그전에는 존재하지 않는 산출물을 전제로 할 수 없으므로, 실측 데이터가
+준비되기 전까지는 `contracts/vectors/
 golden.jsonl`의 `judgement=normal` DEVICE_MAIN_INFO.Value 값(사람이
 손으로 만들고 코드로 검증한, 이미 감사된 프로젝트 산출물)을 재사용한다
-— 무작위 함수나 사인파 생성으로 만든 값이 아니므로 CLAUDE.md §1-1
-(합성 데이터 금지) 위반이 아니다. 단계 8에서 실측 캡처가 준비되면
-`_load_value_pool()`을 실측 로그 기반으로 교체한다(§5.5 결정 표 참조).
+— 무작위 함수나 사인파 생성으로 만든 값이 아니므로
+(합성 데이터 금지) 위반이 아니다. 실측 캡처가 준비되면
+`_load_value_pool()`을 실측 로그 기반으로 교체한다.
 
-디바이스 구성 선언 — **.** `REQ_SET_CONNECTION`(8.1.1)은 페이로드가
+디바이스 구성 선언 — `REQ_SET_CONNECTION`(8.1.1)은 페이로드가
 없어(`contracts/frame.py::LAYOUT (0,0)`) 디바이스 구성을 실을 수 없다.
 이 서버는 `RES_SET_CONNECTION`(RSC=SUCCESS) 수신 직후 `REQ_SET_NODE_
 DEVICE_PROPERTY_ALL`(8.1.3.3, 노드→GCG) 1회로 자신의 전체 디바이스
-구성을 게이트웨이에 선언한다(CLAUDE.md §3.5 결정). 회신(`RES_SET_NODE_
+구성을 게이트웨이에 선언한다. 회신(`RES_SET_NODE_
 DEVICE_PROPERTY_ALL`)을 받을 때까지 유한 횟수 재전송한다 — fire-and-
 forget으로 두면 그 프레임 하나가 유실됐을 때 "장치 0개"로 조용히
 되돌아간다( GPT 검증 지적). `DEVICE_PROPERTY`의 USER DEPENDENT
 5필드(하한·상한값/한계·정밀도)에 쓰는 물리적 범위 상수(`_PROPERTY_RANGES`)
-는 손으로 고른 설정값이지 "측정값"이 아니다 — CLAUDE.md §1-1이 금지하는
+는 손으로 고른 설정값이지 "측정값"이 아니다 — 합성 데이터 금지 대상인
 무작위·주기함수 생성 대상이 아니다.
 """
 from __future__ import annotations
@@ -56,7 +55,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 GOLDEN_PATH = REPO_ROOT / "contracts" / "vectors" / "golden.jsonl"
 
 # 이 파일 전용 Subtype 상수(1369-P1 6.3.3/6.3.4) — contracts/frame.py 를
-# import 하지 않는다(§5.5 독립성 원칙, sim/_wire.py 와 같은 이유).
+# import 하지 않는다(독립성 원칙, sim/_wire.py 와 같은 이유).
 SUBTYPE_TEMPERATURE = 0x01        # 6.3.3.2
 SUBTYPE_HUMIDITY = 0x02           # 6.3.3.3
 SUBTYPE_IRRIGATION_VALVE = 0x85   # 6.3.4.6
@@ -64,7 +63,7 @@ SUBTYPE_COOLING_HEATER = 0x86     # 6.3.4.7
 
 # DEVICE_PROPERTY(표 7-15) USER DEPENDENT 5필드 중 하한·상한(Lower/Upper
 # Limit·Value 는 같은 범위를 재사용한다, 근거는 아래 함수 참고) — 손으로
-# 고른 물리적으로 합당한 설정 상수다. §1-1이 금지하는 것은 무작위·주기
+# 고른 물리적으로 합당한 설정 상수다. 금지 대상은 무작위·주기
 # 함수로 만든 "측정값"이지, 이런 설정용 상수가 아니다.
 # {subtype: (lower_limit, upper_limit, precision)}
 _PROPERTY_RANGES: dict[int, tuple[float, float, float]] = {
@@ -77,7 +76,7 @@ _PROPERTY_RANGES: dict[int, tuple[float, float, float]] = {
 # 노드가 자신의 디바이스 구성을 선언하는 REQ_SET_NODE_DEVICE_
 # PROPERTY_ALL 은 fire-and-forget이 아니다(응답을 기다리고 유한 재전송한다).
 # siap/link.py::DEFAULT_PROFILE(recv_timeout=2, num_retry=2)과 같은 이유로
-# 고른 값이지만 이 파일은 siap/를 import하지 않으므로(§5.5 독립성 원칙)
+# 고른 값이지만 이 파일은 siap/를 import하지 않으므로(독립성 원칙)
 # 독립적으로 같은 상수를 다시 적는다.
 PROPERTY_DECLARE_RETRY_SEC = 2.0
 PROPERTY_DECLARE_MAX_ATTEMPTS = 3
@@ -85,7 +84,7 @@ PROPERTY_DECLARE_MAX_ATTEMPTS = 3
 
 def _pack_by_type(value: float, value_type: int) -> int:
     """DEVICE_PROPERTY 의 USER DEPENDENT 필드를 main.value_type 규칙대로
-    32bit raw 로 packing한다(, WireDMI.value 와 같은 관례)."""
+    32bit raw로 packing한다(WireDMI.value와 같은 관례)."""
     if value_type == wire.VT_FLOAT:
         return wire.float_to_raw(float(value))
     return int(value) & 0xFFFFFFFF   # VT_UINT · VT_INT(2의 보수) 공통
@@ -177,8 +176,7 @@ def _dmi(pool: dict[int, tuple[int, int]], device_id: int, dev_type: int, subtyp
 
 def _device_property(d: SimDevice, period_sec: int) -> "wire.WireDP":
     """SimDevice 1개를 DEVICE_PROPERTY(표 7-15)로 편다. `Period` 는
-    실제 NOTI_DEVICE_VALUE 송신 주기와 같은 값을 그대로 쓴다(아키텍처
-    설계서 §5.5 결정 표) — 선언한 주기와 실제 전송 주기가 어긋나지 않는다.
+    실제 NOTI_DEVICE_VALUE 송신 주기와 같은 값을 그대로 쓴다 — 선언한 주기와 실제 전송 주기가 어긋나지 않는다.
     Lower/Upper Value 는 이 데모에 별도의 "목표 운용 범위" 개념이 없으므로
     Lower/Upper Limit(유효범위)과 같은 값을 재사용한다.
 
@@ -208,9 +206,9 @@ def _default_nodes(pool: dict[int, tuple[int, int]]) -> list[SimNode]:
     Uno 흉내 노드의 ID 는 101이 아니라 **3**이다. `contracts/vectors/
     golden.jsonl` 의 정상 34종·위반 8종(X01~X08) 은 B06(최대값 경계)·X02
     (미등록 Node ID 를 의도적으로 만드는 반례) 를 뺀 전부가 `Node ID=3` 을
-    쓴다 — 골든벡터 명세서가 손으로 고른 "표준 테스트 노드" 관례다.
+    쓴다 — 골든 벡터에서 손으로 고른 "표준 테스트 노드" 관례다.
     `sim/inject.py` 가 이 golden hex 를 바이트 그대로 링크에 흘려보내므로
-    (시연 시나리오 §3.1 "주입은 실제 바이트를 바꾼다"), 그 프레임들이
+    ("주입은 실제 바이트를 바꾼다"), 그 프레임들이
     가리키는 Node ID 도 그대로 3 이다. 이 서버가 3을 등록하지 않으면
     `decode_frame()` 은 Value Type·Subtype·NEC 를 보기도 전에
     `INVALID_NODE_ID` 로 판정해 X06·X07·X08 세 종의 목표 판정
@@ -234,7 +232,7 @@ def _default_nodes(pool: dict[int, tuple[int, int]]) -> list[SimNode]:
 
 
 def _late_node(pool: dict[int, tuple[int, int]]) -> SimNode:
-    """§5.5 "실행 중 노드 1개 추가 접속" — 기능 1 Plug & Play 시연용."""
+    """실행 중 노드 1개 추가 접속 — 기능 1 Plug & Play 시연용."""
     return SimNode(104, "실행 중 추가 접속 노드", [
         _dmi(pool, 1, wire.DEV_SENSOR, SUBTYPE_TEMPERATURE, (wire.VT_FLOAT, 0)),
     ])
@@ -242,7 +240,7 @@ def _late_node(pool: dict[int, tuple[int, int]]) -> SimNode:
 
 class VirtualNodeServer:
     """`simulate` 모드 TCP 서버. 게이트웨이가 클라이언트로 접속한다
-    (아키텍처 설계서 §5.2 "replay/simulate 서버는 같은 프로세스의
+    ("replay/simulate 서버는 같은 프로세스의
     스레드로 기동. 별도 실행 불필요")."""
 
     def __init__(self, host: str = "127.0.0.1", port: int = 5556, *,
@@ -398,7 +396,7 @@ class VirtualNodeServer:
     def _drain(self, conn: socket.socket, buf: bytearray) -> None:
         """가상 노드는 표준 준수 검증기가 아니다 — 헤더가 깨졌거나 길이가
         터무니없으면 그냥 버퍼를 비우고 다음 바이트부터 다시 헤더 후보로
-        본다. 진짜 §5.7 재동기 알고리즘은 `siap/codec.py`·`firmware/`의
+        본다. 진짜 재동기 알고리즘은 `siap/codec.py`·`firmware/`의
         몫이다."""
         while len(buf) >= wire.HEADER_BYTES:
             try:
@@ -525,10 +523,10 @@ class VirtualNodeServer:
             pass
 
     # ── 로컬 주입 제어 채널 — `sim/inject.py` 가 여기에 접속한다 ──
-    # (시연 시나리오 §3.1 S4-b "주입 버튼 클릭"이 실행할 대상. 단계 6 의
+    # S4-b "주입 버튼 클릭"이 실행할 대상.
     # `POST /api/v1/sim/inject` 는 이 서버 인스턴스를 직접 참조해
     # 이 로컬 소켓 왕복 없이 호출할 수도 있다 — 어느 쪽이든 최종적으로
-    # `sim.inject.inject()` 하나로 수렴한다.)
+    # `sim.inject.inject()` 하나로 수렴한다.
     def _control_loop(self) -> None:
         assert self._ctrl_srv is not None
         while not self._stop.is_set():

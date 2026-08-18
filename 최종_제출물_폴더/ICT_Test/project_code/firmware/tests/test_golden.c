@@ -1,7 +1,7 @@
 /*
- * 골든 벡터 53건 전량 왕복 — 개발_착수_지시서 §3.3 출구 ③ (B11 추가로 52 -> 53).
- * project_code/contracts/vectors/golden.jsonl (project_docs/contracts/vectors/
- * golden_layout.py 가 정본, CLAUDE.md §6.2)을 직접 읽어, C 스트리밍 디코더가
+ * 골든 벡터 53건 전량 왕복(B11 추가로 52 -> 53).
+ * project_code/contracts/vectors/golden.jsonl을 직접 읽어,
+ * C 스트리밍 디코더가
  * 손으로 만든 기대값(kind/n/judgement/violations)과 같은 판정을 내리는지,
  * 그리고 정상·alert 프레임은 디코드한 필드를 다시 인코드했을 때 원본 hex와
  * 바이트 단위로 같은지(round-trip)를 확인한다.
@@ -76,7 +76,7 @@ static bool extract_int(const char *line, const char *key, long *out)
 }
 
 /* violations[0] 만 본다 — 위반 케이스는 전부 위반 1건짜리다(첫 위반에서
-   중단, CLAUDE.md §3.5 "요소 단위 즉시 적용 + 첫 위반에서 중단"). */
+   중단, "요소 단위 즉시 적용 + 첫 위반에서 중단"). */
 static bool extract_first_violation(const char *line, long *code, char *clause, size_t clause_sz)
 {
     const char *v = find_key(line, "violations");
@@ -161,7 +161,7 @@ static size_t hex_to_bytes(const char *hex, uint8_t *out, size_t cap)
 
 /* ═══════════════════════════════════════════════════════════════
  *  1. 디코드 수집기 — kind 로 고정부/요소를 구분해 재인코딩용으로 보관한다.
- *     core/ 의 일부가 아니다(§3.4 RAM 예산은 여기 적용되지 않는다 — host
+ *     core/ 의 일부가 아니다(RAM 예산은 여기 적용되지 않는다 — host
  *     테스트에서 골든 벡터 전체를 대조하기 위한 임시 버퍼일 뿐이다).
  * ═══════════════════════════════════════════════════════════════ */
 typedef struct {
@@ -203,7 +203,7 @@ static int8_t g_on_fixed(void *ctx, const uint8_t *buf, uint8_t len)
     size_t bp;
     /* 크기만으로는 NEC/RSC(둘 다 1byte), NP/RSC+MCP(둘 다 8byte)가 겹친다 —
        그 두 경우만 kind 로 먼저 갈라내고 나머지는 크기로 충분하다
-       (펌웨어 설계서 §5.4 표에서 이미 kind 별로 고정부 구성이 정해진다). */
+       (표에서 이미 kind 별로 고정부 구성이 정해진다). */
     if (len == SIAP_NEC_BYTES && g->kind == SIAP_NOTI_ERROR) {
         g->nec = (siap_nec_t)buf[0]; g->has_nec = true;
     } else if (len == (SIAP_RSC_BYTES + SIAP_MCP_BYTES) && g->kind == SIAP_RES_GET_MSG_FLOW_CONTROL_PROFILE) {
@@ -262,7 +262,7 @@ static siap_sink_t make_sink(gcollect_t *g)
 /* ═══════════════════════════════════════════════════════════════
  *  2. 재인코딩 — 51byte 윈도우 그대로, 청크마다 flush 해 누적한다
  *     (501byte 짜리 프레임도 윈도우 크기와 무관하게 처리된다는 것 자체가
- *     §3.4/§5.1 스트리밍 주장의 증거다).
+ *     스트리밍 주장의 증거다).
  * ═══════════════════════════════════════════════════════════════ */
 typedef struct { uint8_t buf[600]; size_t len; } accum_t;
 

@@ -204,7 +204,7 @@ def test_get_greenhouse_location_none_when_missing(tmp_path):
 
 
 def test_get_greenhouse_manager_user_id_returns_seeded_manager(conn, greenhouse_id):
-    """`greenhouse_manage`(1369-P1 §7.1(3))는 시드로 이미 채워져
+    """`greenhouse_manage`(1369-P1 7.1(3))는 시드로 이미 채워져
     있다. 그 관리자를 그대로 조회할 수 있어야 한다."""
     user_id = repository.get_greenhouse_manager_user_id(conn, greenhouse_id)
     assert user_id is not None

@@ -9,9 +9,9 @@ test_bitpack.c 는 반환값을 절대 버리지 않으므로, SIAP_WUR 가 헤�
 실패하는 것"을 성공으로 판정한다.
 
 셸 스크립트(if/then/fi, 리다이렉션)로 짜지 않고 Python 으로 짠 이유
-( 처리 중 발견) — mingw32-make 는 POSIX sh 를 못 찾으면 cmd.exe 로
-조용히 떨어지는데, cmd.exe 는 sh 문법을 모른다. `tools/where.py` 가
-PowerShell 에서 `make` 를 부르는 경로가 정확히 이 상황이다. Make
+이 구현은 mingw32-make가 POSIX sh를 못 찾으면 cmd.exe로 조용히
+떨어지고, cmd.exe는 sh 문법을 모른다는 점을 고려했다. PowerShell에서
+`make`를 부르는 경로가 정확히 이 상황이다. Make
 레시피를 `python check_wur.py <CC> <CFLAGS...>` 한 줄로 두면 셸이
 무엇이든 동일하게 동작한다 — 단어 분리 말고는 셸 고유 문법이 없다.
 
@@ -44,12 +44,12 @@ HERE = Path(__file__).resolve().parent
 # (표시 이름, 소스 파일) — 각 함수를 독립적으로 검사한다. 하나로 합치면
 # 한쪽의 SIAP_WUR 만 빠지는 부분 회귀를 가려낼 수 없다.
 #
-# 재발(단계 2b) — siap_frame.h 로 SIAP_WUR 가 새로 9개 옮겨갔는데
+# 회귀 검사 — siap_frame.h로 SIAP_WUR가 새로 9개 옮겨갔는데
 # (siap_encode_hdr/np/mcp, siap_tx_put_hdr/rsc/nec/np/mcp/device_id) 이
 # 목록은 bitpack.h 의 2개뿐이었다. Makefile 의 새 테스트 타깃(test_siap_frame
 # 등)도 check_wur 를 선행조건으로 물지 않아, "반환값을 버리면 컴파일이
-# 실패한다"는 계약이 siap_frame.h 쪽에서는 자동 출구로 전혀 검증되지
-# 않았다 — bitpack.c/.h 에서 가 고쳤던 것과 같은 종류의 구멍이
+# 실패한다"는 계약이 siap_frame.h 쪽에서는 자동으로 전혀 검증되지
+# 않았다 — bitpack.c/.h에서 고쳤던 것과 같은 종류의 구멍이
 # 새 헤더에서 그대로 재발한 것이다.
 SNIPPETS = (
     ("bp_write", "test_bitpack_wur_bp_write.c"),

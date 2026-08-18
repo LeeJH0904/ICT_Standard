@@ -1,6 +1,6 @@
 /*
  * 상태 코드·메시지 코드공간 호스트 유닛테스트.
- * RSC(표 7-10)/NEC(표 7-12)/Subtype 레지스트리(SIAP 메시지 명세서 §5)의
+ * RSC(표 7-10)/NEC(표 7-12)/Subtype 레지스트리의
  * 값 자체와, WIRE_CODE(표 7-2~7-4)의 구조적 성질(블록 경계·Req/Res 대응·
  * 0x0800 중복)을 검증한다. 프레임 왕복은 test_siap_frame.c / test_golden.c 의
  * 몫이다 — 여기서는 "코드값이 표준과 같은가"만 본다.
@@ -72,7 +72,7 @@ static void test_table_7_14_codes(void)
 }
 
 /* ═══════════════════════════════════════════════════════════════
- *  Subtype 레지스트리 — SIAP 메시지 명세서 §5 / 1369-P1 6.3.3·6.3.4
+ *  Subtype 레지스트리 — / 1369-P1 6.3.3·6.3.4
  * ═══════════════════════════════════════════════════════════════ */
 static void test_subtype_registry(void)
 {
@@ -85,7 +85,7 @@ static void test_subtype_registry(void)
             if (SIAP_SUBTYPE_TABLE[i] == SIAP_SUBTYPE_TABLE[j]) dup = true;
     check("SUBTYPE: 코드 전량 고유", !dup);
 
-    /* 센서 10 / 액추에이터 6 (SIAP 메시지 명세서 §5 표) */
+    /* 센서 10 / 액추에이터 6 (표) */
     unsigned sensors = 0, actuators = 0;
     for (unsigned i = 0; i < SIAP_SUBTYPE_COUNT; i++) {
         if (siap_subtype_is_actuator(SIAP_SUBTYPE_TABLE[i])) actuators++;
@@ -143,7 +143,7 @@ static void test_wire_code_table_7_2_to_7_4(void)
                 if (siap_wire_code((siap_kind_t)i, SIAP_MODE_STRICT)
                     == siap_wire_code((siap_kind_t)j, SIAP_MODE_STRICT))
                     dup_count++;
-        check("WIRE: strict 중복은 정확히 1건 (고유 코드 33개, Frame 구조 명세서 §2)",
+        check("WIRE: strict 중복은 정확히 1건 (고유 코드 33개)",
               dup_count == 1);
     }
 
@@ -170,7 +170,7 @@ static void test_wire_code_table_7_2_to_7_4(void)
 }
 
 /* ═══════════════════════════════════════════════════════════════
- *  LAYOUT — RAM 예산(§3.4) 전제가 실제로 지켜지는가
+ *  LAYOUT — RAM 예산 전제가 실제로 지켜지는가
  * ═══════════════════════════════════════════════════════════════ */
 static void test_layout_memory_budget(void)
 {
@@ -187,7 +187,7 @@ static void test_layout_memory_budget(void)
 }
 
 /* ═══════════════════════════════════════════════════════════════
- *  clause_id — CLAUDE.md §3.3 "판정에는 반드시 clause 를 채운다"
+ *  clause_id — "판정에는 반드시 clause 를 채운다"
  * ═══════════════════════════════════════════════════════════════ */
 static void test_clause_ids_distinct(void)
 {

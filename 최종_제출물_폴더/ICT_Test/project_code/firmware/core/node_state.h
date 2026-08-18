@@ -1,26 +1,26 @@
 #ifndef SIAP_NODE_STATE_H
 #define SIAP_NODE_STATE_H
 /*
- * 노드 상태 머신 — 펌웨어 설계서 §6. siap_frame.c(스트리밍 코덱) 위에
- * 8상태 전이(§6.1) · pending 재전송(§6.4) · due 회전 커서(§6.4-a) ·
- * RES_SET_CONNECTION 오류 RSC 분류(§6.5)를 얹는다.
+ * 노드 상태 머신. siap_frame.c(스트리밍 코덱) 위에
+ * 8상태 전이 · pending 재전송 · due 회전 커서 ·
+ * RES_SET_CONNECTION 오류 RSC 분류를 얹는다.
  *
- * core/ 는 하드웨어 의존성 0이다(CLAUDE.md §1-5). 이 파일이 아는 하드웨어는
+ * core/ 는 하드웨어 의존성 0이다. 이 파일이 아는 하드웨어는
  * siap_io_t/siap_dev_ops_t(siap_types.h) 뒤에 있는 함수 포인터뿐이다.
- * "온실 관제" · "온도 센서" 같은 도메인 어휘는 여기 등장하지 않는다(§2.3).
+ * "온실 관제" · "온도 센서" 같은 도메인 어휘는 여기 등장하지 않는다.
  */
 #include "siap_types.h"
 #include "siap_frame.h"
 
 /* C++/Arduino 스케치에서 C 링키지로 부를 수 있게 한다(bitpack.h 주석 참조) —
-   C 컴파일 시엔 비활성, 언어 매크로라 core 순수성(§1-5)과 무관하다. */
+   C 컴파일 시엔 비활성, 언어 매크로라 core 순수성과 무관하다. */
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 /* ═══════════════════════════════════════════════════════════════
- *  0. 상태 — §6.1 다이어그램. 노드 자신의 상태이며 게이트웨이가 보는
- *     상태(아키텍처 §6.1)와는 다른 열거형이다.
+ *  0. 상태 — 다이어그램. 노드 자신의 상태이며 게이트웨이가 보는
+ *     상태와는 다른 열거형이다.
  * ═══════════════════════════════════════════════════════════════ */
 typedef enum {
     SIAP_NS_BOOT = 0,     /* 디바이스 자가진단 */
@@ -34,9 +34,9 @@ typedef enum {
 } siap_node_state_t;
 
 /* ═══════════════════════════════════════════════════════════════
- *  1. pending 슬롯 — §6.4. 요청·알림 공통, 동시 대기 1건.
+ *  1. pending 슬롯. 요청·알림 공통, 동시 대기 1건.
  *     kind 는 siap_kind_t 값을 그대로 담는다(SIAP_KIND_NONE = 비어 있음).
- *     설계서 §3.4 의 10 B 산정과 동일한 필드 구성이다.
+ *      10 B 산정과 동일한 필드 구성이다.
  * ═══════════════════════════════════════════════════════════════ */
 typedef struct {
     uint8_t  kind;     /* siap_kind_t. 비어 있으면 SIAP_KIND_NONE */
@@ -48,20 +48,20 @@ typedef struct {
 } siap_pending_t;
 
 /* ═══════════════════════════════════════════════════════════════
- *  2. due 비트 + 회전 커서 — §6.4-a. 기아 방지의 핵심.
+ *  2. due 비트 + 회전 커서. 기아 방지의 핵심.
  * ═══════════════════════════════════════════════════════════════ */
 #define SIAP_DUE_DEVICE_VALUE 0x01u   /* bit0 — dev_due(아래)가 하나라도 서면 선다 */
 #define SIAP_DUE_KEEP_ALIVE   0x02u   /* bit1 */
 #define SIAP_DUE_ERROR        0x04u   /* bit2 */
 
 /* ═══════════════════════════════════════════════════════════════
- *  2-a. 다중 청크 송신 진행 상태 — §5.8.
+ *  2-a. 다중 청크 송신 진행 상태.
  *
  *  헤더 하나에 요소(DP/DMI) 여러 개가 붙는 프레임(NOTI_DEVICE_VALUE ·
  *  RES_GET_DEVICE_PROPERTY · RES_GET_NODE_DEVICE_PROPERTY_ALL ·
  *  RES_GET_DEVICE_VALUE)은 TX_WINDOW(51B)가 헤더+요소 하나분이라 청크
  *  단위로 나눠 보낸다. siap_io_t.write 는 부분 쓰기를 허용하는 논블로킹
- *  계약이라(§2.2·§5.8), 이전 청크가 완전히 flush 되기 전에 다음 청크를
+ *  계약이라, 이전 청크가 완전히 flush 되기 전에 다음 청크를
  *  만들며 같은 win 을 siap_tx_reset() 하면 미전송 잔여가 지워진다
  * . 이 구조체가 "지금 몇 번째 청크까지 나갔는가"를 들고 있어
  *  poll() 이 이어서 마저 보낼 수 있게 한다. */
@@ -86,22 +86,22 @@ typedef struct {
 } siap_tx_seq_t;
 
 /* ═══════════════════════════════════════════════════════════════
- *  3. 노드 설정 — 보드가 core/ 에 넘기는 전부(펌웨어 설계서 §2.4).
+ *  3. 노드 설정 — 보드가 core/ 에 넘기는 전부.
  * ═══════════════════════════════════════════════════════════════ */
 typedef struct {
     uint32_t gcg_id;              /* 20bit. 표 7-8 */
     uint32_t node_id;             /* 20bit */
     uint8_t  sw_version;
-    const siap_io_t     *io;      /* §2.2 */
-    const siap_dev_ops_t *dev_ops;/* §2.2 */
+    const siap_io_t     *io;      /* */
+    const siap_dev_ops_t *dev_ops;/* */
     siap_dp_t *devices;           /* 보드가 소유하는 배열 — DEVICE_PROPERTY 언팩 구조체 */
     uint8_t   device_count;       /* 1~16 */
     siap_mcp_t profile;           /* MSG_CONTROL_PROFILE. 0 이면 SIAP_PROFILE_DEFAULT 를 쓴다 */
     siap_mode_t mode;             /* strict(기본) / extended */
 } siap_node_cfg_t;
 
-/* 표 7-18 기본값 — Message Receive Timeout 2s · Num. of Retry 3회(0937
-   요구사항 대조표 §"배수 3의 근거") · Notify Error Interval 30s ·
+/* 표 7-18 기본값 — Message Receive Timeout 2s · Num. of Retry 3회 ·
+   Notify Error Interval 30s ·
    Keep Alive Interval 60s. 전부 sec 단위다. */
 extern const siap_mcp_t SIAP_PROFILE_DEFAULT;
 
@@ -117,21 +117,21 @@ typedef struct {
     bool       tx_busy;  /* enc 에 flush 대기 중인 프레임이 있다 */
 
     uint16_t next_msg_id;      /* 0 부터. 7.2.2 그대로 — 0도 유효한 순번, 0xFFFF 다음 0 */
-    siap_pending_t pending;    /* 동시 대기 1건(§6.4). NOTI_DEVICE_VALUE 는 arg 에
+    siap_pending_t pending;    /* 동시 대기 1건. NOTI_DEVICE_VALUE 는 arg 에
                                    보낼 devices[] 인덱스 비트마스크를 담는다 */
     siap_tx_seq_t  tx_seq;     /* 다중 청크 송신 진행 상태 */
 
-    /* §6.4-a — 3 소스 공통 회전. t_keep_alive/t_error 는 다음 만료 절대
+    /* — 3 소스 공통 회전. t_keep_alive/t_error 는 다음 만료 절대
        시각(ms). DEVICE_VALUE 는 디바이스별로 갈린다 — 아래 dev_* 참조 */
     uint32_t t_keep_alive;
     uint32_t t_error;
     uint8_t  due;
     uint8_t  cursor;      /* 0=DEVICE_VALUE 1=KEEP_ALIVE 2=ERROR, 전송마다 +1 mod 3 */
 
-    /* 디바이스별 스캔 스케줄 —, 펌웨어 설계서 §6.3. Period(표 7-15)의
+    /* 디바이스별 스캔 스케줄 —,. Period(표 7-15)의
        표준상 의미는 "데이터 전달주기"다 — 본 구현에 샘플링 주기 전용
        필드가 없어 이를 내부 스캔 간격으로도 재사용할 뿐이며, 표준 필드
-       의미의 재정의가 아니다(표준 미규정 결정, CLAUDE.md §3.5). 스캔
+       의미의 재정의가 아니다(표준 미규정 결정). 스캔
        결과의 전송 여부만 Transfer Mode 가 가른다(_due_send_next 참조 —
        Both 는 이 구현에서 Periodic 과 동일하게 동작한다). dev_due 의
        비트 i 는 devices[i]가 스캔 대상이 됐고 아직 처리 전임을 뜻한다 —
@@ -144,15 +144,15 @@ typedef struct {
     uint8_t fault_nec;         /* siap_nec_t. FAULT 진입 사유 */
     uint8_t fault_device_idx;  /* devices[] 인덱스. 해소 재확인 대상 */
 
-    /* §5.7 재동기 T_gap 판정용 — 마지막 수신 바이트 시각 */
+    /* 재동기 T_gap 판정용 — 마지막 수신 바이트 시각 */
     uint32_t t_last_rx;
     bool     have_last_rx;
 
-    /* DISCONNECTED 백오프 — Timeout × 2ⁿ, 상한 300s(§6.5) */
+    /* DISCONNECTED 백오프 — Timeout × 2ⁿ, 상한 300s */
     uint32_t t_backoff_until;
     uint8_t  backoff_shift;
 
-    /* REBOOTING → BOOT 완료 후 실제 재기동은 보드의 몫이다(§6.6 과 같은
+    /* REBOOTING → BOOT 완료 후 실제 재기동은 보드의 몫이다(이 원칙과 같은
        경계: core/ 는 재기동 "수단"을 모른다). 이 콜백이 NULL 이 아니면
        BOOT 전이 시 한 번 호출한다 — 호스트 테스트는 NULL 로 두고
        state==SIAP_NS_BOOT 도달만 관찰한다. */
@@ -171,13 +171,13 @@ typedef struct {
     uint8_t     rx_ids_n;
 } siap_node_t;
 
-/* 초기화 — §4.1-a 진입점 범위 검증표를 강제한다: gcg_id/node_id 는
+/* 초기화 — 진입점 범위 검증표를 강제한다: gcg_id/node_id 는
    0~2^20-1, device_count 는 1~16, device_id 는 노드 내 유일, subtype 은
    레지스트리 등재값, value_type 은 0~2, period 는 0~2^14-1. 하나라도
-   벗어나면 false — "노드가 뜨지 않는다"(§4.1-a). */
+   벗어나면 false — "노드가 뜨지 않는다". */
 bool siap_node_init(siap_node_t *node, const siap_node_cfg_t *cfg);
 
-/* 논블로킹 한 틱. 보드 루프가 계속 부른다(펌웨어 설계서 §2.4). 매 호출마다
+/* 논블로킹 한 틱. 보드 루프가 계속 부른다. 매 호출마다
    가능한 만큼 바이트를 읽고 먹이고, pending timeout 을 검사하고, RUNNING
    에서는 due 소스를 회전 송신한다. */
 void siap_node_poll(siap_node_t *node);

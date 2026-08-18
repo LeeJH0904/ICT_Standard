@@ -1,13 +1,13 @@
 /*
- * 스트리밍 코덱 구현. 펌웨어 설계서 §5.
+ * 스트리밍 코덱 구현..
  *
- * 위반 판정 지점은 설계서 §5.4 표를 그대로 따른다:
+ * 위반 판정 지점은 표를 그대로 따른다:
  *   1 Version              -> S_HDR   (헤더 12byte 완성 직후)
  *   2 미등록 Node ID        -> on_header 콜백 (core/ 는 "내 ID" 를 모른다 — 그건
  *                              node_state 의 몫이다. 콜백이 음수를 돌려주면 거부)
  *   3 Payload Length 불일치 -> S_HDR   (resolve_kind 가 어떤 후보의 element_count 도
  *                              만족시키지 못할 때. 즉시 탐지 가능 범위는 펌웨어
- *                              설계서 §5.5 참조 — 나머지는 표준 자체의 결함이다)
+ *                              참조 — 나머지는 표준 자체의 결함이다)
  *   4 미정의 Message Type   -> S_HDR   (resolve_kind 후보 자체가 없을 때)
  *   5 Transmission Type     -> S_HDR
  *   6 Value Type            -> S_ELEM  (DEVICE_MAIN_INFO/DEVICE_PROPERTY 디코드)
@@ -20,7 +20,7 @@
  *  1. N 산출 / 종류 해석
  * ═══════════════════════════════════════════════════════════════ */
 
-/* contracts/frame.py element_count() 와 1:1 대응 (펌웨어 설계서 §5.3). */
+/* contracts/frame.py element_count 와 1:1 대응. */
 int32_t siap_element_count(siap_kind_t k, uint16_t payload_len)
 {
     const siap_layout_t *lay = &SIAP_LAYOUT[k];
@@ -30,7 +30,7 @@ int32_t siap_element_count(siap_kind_t k, uint16_t payload_len)
     if (rest % lay->elem) return -1;
     int32_t n = rest / lay->elem;
     if (n == 0 && lay->fixed == 0) return -1;   /* 가변부만 있는 메시지는 N>=1 */
-    /* 노드당 디바이스 상한(CLAUDE.md §3.5, contracts/frame.py 와
+    /* 노드당 디바이스 상한(contracts/frame.py 와
        동일한 MAX_DEVICES_PER_NODE=16). N=17 이상은 표준 미규정 영역을
        이 프로젝트가 자체 결정으로 닫은 것이지 표준 위반은 아니지만,
        Timeout·메모리 산정의 전제가 깨지므로 INVALID_FORMAT 으로 거부한다. */
@@ -47,7 +47,7 @@ int32_t siap_element_count(siap_kind_t k, uint16_t payload_len)
    element_count() 를 검사해, B02(REQ_SET_DEVICE_CONTROL 단일 후보,
    plen=0)에서 Python 원본과 다른 지점(resolve_kind 안)에서 실패를
    판정했다 — 최종 위반 코드/조항은 우연히 같았지만 분기 구조가 갈렸다
-   (펌웨어 설계서 §5.3 "Python 원본과 분기 구조가 같아야 한다"). */
+   ("Python 원본과 분기 구조가 같아야 한다"). */
 siap_kind_t siap_resolve_kind(uint16_t msg_type, uint16_t payload_len,
                                siap_mode_t mode, siap_clause_t *out_clause)
 {
@@ -134,7 +134,7 @@ void siap_decode_np(const uint8_t *buf, size_t *bitpos, siap_np_t *np)
 siap_result_t siap_encode_dmi(uint8_t *buf, size_t *bitpos, const siap_dmi_t *dmi)
 {
     /* 위반 케이스 6·7 — 인코딩 쪽도 디코딩과 동일 기준으로 거부한다
-       (SIAP 메시지 명세서 §10.4 한쪽만 막으면 판정 기준이 무너진다). */
+       (한쪽만 막으면 판정 기준이 무너진다). */
     if (dmi->value_type > SIAP_VALUE_TYPE_FLOAT)
         return (siap_result_t){ false, SIAP_RSC_INVALID_DATA_TYPE, SIAP_CLAUSE_TABLE_7_14 };
     if (!siap_subtype_valid(dmi->subtype))
@@ -161,7 +161,7 @@ siap_result_t siap_decode_dmi(const uint8_t *buf, size_t *bitpos, siap_dmi_t *dm
 
     /* 순서가 결과에 영향을 준다: 위반 케이스 6(Value Type=RESERVED)과 7(미등록
        Subtype)이 같은 요소에 동시에 있을 수는 없지만(값 하나만 조작), Value
-       Type을 먼저 판정한다 — SIAP 메시지 명세서 §10.4. */
+       Type을 먼저 판정한다. */
     if (dmi->value_type == SIAP_VALUE_TYPE_RESERVED)
         return (siap_result_t){ false, SIAP_RSC_INVALID_DATA_TYPE, SIAP_CLAUSE_TABLE_7_14 };
     if (!siap_subtype_valid(dmi->subtype))
@@ -216,7 +216,7 @@ siap_result_t siap_decode_dp(const uint8_t *buf, size_t *bitpos, siap_dp_t *dp)
     dp->status        = (uint8_t)bp_read(buf, bitpos, 8);
     /* 표 7-15 Transfer Mode(0x03)·Status(0x03~0xFF)는 Reserved.
        30byte 를 전부 읽은 뒤 판정한다 — 요소는 자기완결적이고 고정폭이므로
-       (§5.6) 실패해도 *bitpos 는 이미 정확한 요소 경계에 있다. */
+        실패해도 *bitpos 는 이미 정확한 요소 경계에 있다. */
     if (!siap_transfer_mode_valid(dp->transfer_mode))
         return (siap_result_t){ false, SIAP_RSC_INVALID_FORMAT, SIAP_CLAUSE_7_3_1 };
     if (!siap_status_valid(dp->status))
@@ -241,10 +241,10 @@ void siap_decode_mcp(const uint8_t *buf, size_t *bitpos, siap_mcp_t *mcp)
 }
 
 /* ═══════════════════════════════════════════════════════════════
- *  3. 수신 스트리밍 상태 머신 — 펌웨어 설계서 §5.1/§5.7
+ *  3. 수신 스트리밍 상태 머신
  * ═══════════════════════════════════════════════════════════════ */
 
-/* 재동기 4조건 (펌웨어 설계서 §5.7). Node ID 는 포함하지 않는다 — core/ 는
+/* 재동기 4조건. Node ID 는 포함하지 않는다 — core/ 는
    "내 주소"를 모르므로 순수 구조적 유효성만 본다. */
 static bool resync_check(const uint8_t *hdrbuf, siap_mode_t mode,
                           siap_hdr_t *out_h, siap_kind_t *out_k, int32_t *out_n)
@@ -269,7 +269,7 @@ static bool resync_check(const uint8_t *hdrbuf, siap_mode_t mode,
 static void begin_drain(siap_dec_t *d, uint16_t remaining)
 {
     d->buf_len = 0;
-    d->resync = true;   /* §5.7 — 위반 후에는 항상 재동기 모드로 */
+    d->resync = true;   /* — 위반 후에는 항상 재동기 모드로 */
     if (remaining == 0) {
         d->state = SIAP_DEC_ST_HDR;
     } else {
@@ -340,7 +340,7 @@ static void handle_header_complete(siap_dec_t *d)
            `S_DRAIN` 으로 선폐기하면 안 된다 — 잡음이 아니라 마침 뒤따라온
            정상 프레임을 삼켜 버린다(재현: Version=0x99, payload_len=12 뒤에
            정상 ACK 12byte). `begin_drain(d, 0)` 은 아무것도 버리지 않고 바로
-           §5.7 의 1byte 슬라이딩 재동기로 넘어간다. 이는 이미 구조가
+            1byte 슬라이딩 재동기로 넘어간다. 이는 이미 구조가
            확인된 뒤(S_FIXED/S_ELEM 이후) 잔여를 payload_len 만큼 정확히
            버리는 것과는 다른 경우다 — 그쪽은 그대로 둔다. */
         if (h.version != SIAP_VERSION) {                          /* 위반 1 */
@@ -358,7 +358,7 @@ static void handle_header_complete(siap_dec_t *d)
         /* B02 — 단일 후보 코드는 resolve_kind() 가 element_count
            를 보지 않고 확정하므로(Python 원본과 동일), 그 유효성은 여기서
            별도로 확인해야 한다. 고정부 없이 가변부만 있는 메시지의 N=0 이
-           바로 이 경로로 걸린다(Frame 구조 명세서 §4.1, 7.3.1). */
+           바로 이 경로로 걸린다(7.3.1). */
         n = siap_element_count(k, h.payload_len);
         if (n < 0) {                                                /* 위반 3(단일 후보, B02 류) */
             begin_drain(d, 0);                                     /* */
@@ -414,7 +414,7 @@ void siap_dec_init(siap_dec_t *d, siap_sink_t sink, siap_mode_t mode)
     d->mode = mode;
     d->buf_len = 0;
     d->state = SIAP_DEC_ST_HDR;
-    d->resync = false;   /* 최초 진입은 정상 정렬을 가정한다 (§5.7 트리거 미발생) */
+    d->resync = false;   /* 최초 진입은 정상 정렬을 가정한다 (트리거 미발생) */
     d->kind = SIAP_KIND_NONE;
     d->n = 0;
     d->fixed_len = 0;
@@ -438,7 +438,7 @@ void siap_dec_feed(siap_dec_t *d, uint8_t byte)
 
             /* COMBINED_PROPERTY 3종(REQ_SET_NODE_DEVICE_PROPERTY_ALL·
                RES_SET_CONNECTION·RES_GET_NODE_DEVICE_PROPERTY_ALL, 0943
-               §7.3.3.4)은 디바이스 개수를 두 번 주장한다: 고정부
+               )은 디바이스 개수를 두 번 주장한다: 고정부
                NODE_PROPERTY.Num. of Devices(표 7-13)와 Payload Length 로
                역산한 N(표 7-16, DEVICE_PROPERTY 는 N*240bit). 이 조합은
                "고정부에 NODE_PROPERTY 가 있고(fixed_len>=NP_BYTES) 가변부가
@@ -563,15 +563,15 @@ void siap_dec_on_gap(siap_dec_t *d)
 }
 
 /* ═══════════════════════════════════════════════════════════════
- *  4. 송신 — Payload Length 선산출 + 51byte 윈도우 (펌웨어 설계서 §5.8)
+ *  4. 송신 — Payload Length 선산출 + 51byte 윈도우
  * ═══════════════════════════════════════════════════════════════ */
 
 /* bp_write/siap_encode_* 는 버퍼 크기를 모른다(bitpack.c 의 4개
-   함수 계약에 capacity 인자가 없다, CLAUDE.md §4.2). 그래서 각 진입점을
+   함수 계약에 capacity 인자가 없다). 그래서 각 진입점을
    부르기 *전에* 여기서 남은 용량을 확인해야 한다 — 쓰고 나서 bitpos 만
    되돌리는 방식은 이미 win[] 배열 밖에 발생한 메모리 쓰기 자체를 되돌리지
    못해 소용없다. siap_types.h 의 표준 유래 바이트 폭 상수(SIAP_*_BYTES)를
-   그대로 재사용한다 — 폭을 여기 새로 정의하지 않는다(정본은 그쪽 하나). */
+   그대로 재사용한다 — 폭을 여기 새로 정의하지 않는다. */
 static bool _tx_has_room(const siap_enc_t *e, size_t need_bytes)
 {
     return e->bitpos + (need_bytes * 8u) <= (size_t)SIAP_TX_WINDOW * 8u;
@@ -629,7 +629,7 @@ siap_result_t siap_tx_put_dmi(siap_enc_t *e, const siap_dmi_t *dmi)
     /* 용량 부족은 프레임 형식 위반이 아니라 호출자가 flush 없이 계속 쌓은
        내부 오류다 — 그래도 네트워크로 나가지 않는 siap_result_t 채널이므로
        기존 인코드 실패(bp_write 범위 초과)와 같은 코드를 재사용한다. 호출자는
-       .ok 만 보고 flush 후 재시도해야 한다(펌웨어 설계서 §5.8). */
+.ok 만 보고 flush 후 재시도해야 한다. */
     if (!_tx_has_room(e, SIAP_DMI_BYTES))
         return (siap_result_t){ false, SIAP_RSC_INVALID_FORMAT, SIAP_CLAUSE_7_3_1 };
     return siap_encode_dmi(e->win, &e->bitpos, dmi);

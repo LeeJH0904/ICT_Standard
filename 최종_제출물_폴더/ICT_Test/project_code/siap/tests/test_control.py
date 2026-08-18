@@ -23,7 +23,7 @@ def _profile(timeout=2, retry=2):
 
 
 def test_register_returns_none_for_no_reply_expected():
-    """RES_*·ACK 송신은 회신을 기다리지 않는다(§8.1)."""
+    """RES_*·ACK 송신은 회신을 기다리지 않는다."""
     clock = FakeClock()
     pt = PendingTable(_profile(), now_fn=clock)
     b = FrameBuilderImpl(gcg_id=1)

@@ -1,10 +1,10 @@
 """
 siap/build.py — FrameBuilder 구현 (contracts/siap_iface.py 의 Protocol).
 
-두 묶음(Frame 구조 명세서 §5.1):
+두 묶음:
   (1) 게이트웨이발 Request 5종 — `link.send()` 경유. msg_id 는 이 파일이
       발번한다(0943 7.2.2 "0~65535 순환, 송신마다 +1, 65535 다음 0". 초기값
-      0 — 0도 유효한 순번이다. 펌웨어 설계서 §6.4 가 정한 노드측
+      0 — 0도 유효한 순번이다. 노드 측
       규칙과 대칭이 되도록 게이트웨이 쪽도 같은 규약을 쓴다).
   (2) 노드발 메시지에 대한 즉시 회신 7종 — `ingest.handle()` 의 반환값.
       msg_id·GCG ID·Node ID 를 원본 Frame 에서 그대로 복사한다(7.2.2) — 새로
@@ -40,7 +40,7 @@ class MsgIdAllocator:
     """0943 7.2.2 원문 — "Message Identifier는 … '0'에서 '65535'까지 사용할
     수 있다. 일련번호는 데이터 전송 시마다 +1을 하며 만료되면 0부터 다시
     시작한다." 0을 건너뛰지 않는다 — 이전 버전은 "0은 미할당
-    표시로 예약"이라며 펌웨어 §6.4 의 결정을 그대로 옮겼지만, 그 예약은
+    표시로 예약"이라며 노드 측 결정을 그대로 옮겼지만, 그 예약은
     `pending.kind==SIAP_KIND_NONE` 하나로 이미 충분한 "비어 있음" 판정을
     msg_id 에도 중복 적용한 근거 없는 결정이었다(node_state.c 쪽도로
     같이 고쳤다)."""
@@ -81,8 +81,7 @@ class FrameBuilderImpl:
 
     def _reply_header(self, req: Frame, kind: MsgKind, payload_len: int) -> Header:
         """msg_id·GCG ID·Node ID 를 원본에서 복사한다(7.2.2). 새로
-        발번하면 노드가 중복 요청으로 처리한다(표준 미규정 → 자체 결정,
-        CLAUDE.md §3.5)."""
+        발번하면 노드가 중복 요청으로 처리한다(표준 미규정 → 자체 결정)."""
         if req.header is None:
             raise ValueError("header 가 없는 불완전 Frame 에는 회신할 수 없다")
         return Header(version=SIAP_VERSION, msg_type=self._wire(kind),
@@ -95,13 +94,12 @@ class FrameBuilderImpl:
         value_type)` 만 받는다 — DEVICE_MAIN_INFO(표 7-14)는 `Type`·`Subtype`
         도 요구하는데 그 둘을 전달할 통로가 시그니처에 없다(발견 사항 —
         `contracts/siap_iface.py::FrameBuilder.device_control()` 이 애초에
-        갖고 있던 간극이며, 이 파일에서 새로 만든 것이 아니다. §5 절차 대상
+        갖고 있던 간극이며, 이 파일에서 새로 만든 것이 아니다. 절차 대상
         여부는 사용자 보고 예정). `registry` 에서 그 노드의 실제
         DEVICE_MAIN_INFO 를 device_id 로 찾아 채운다.
 
         이전에는 registry 가 없거나 조회에 실패하면 `ACTUATOR +
-        WINDOW_OPENER` 로 조용히 대체했다. 이는 CLAUDE.md §1-1(합성 데이터
-        금지)의 정신과 같은 문제다 — 실제로 존재하지 않거나 확인 못 한
+        WINDOW_OPENER` 로 조용히 대체했다. 실제로 존재하지 않거나 확인 못 한
         디바이스 종류를 지어내 제어 프레임에 실으면, 엉뚱한 종류로 해석하는
         노드에 잘못된 제어값이 전달될 수 있다. registry 가 없거나 그 노드에
         `device_id` 가 없으면 조용히 넘어가지 않고 실패시킨다."""
@@ -168,9 +166,9 @@ class FrameBuilderImpl:
             use_node, use_devices = node, tuple(devices)
         else:
             # 표준은 실패 시 페이로드 형태를 규정하지 않는다(표준 미규정). 이
-            # 구현은 LAYOUT(고정부=RSC+NODE_PROPERTY, §4.1 "N=0 허용")을 그대로
-            # 따르고 자리표시 NodeProperty(N=0)를 채운다 — 아키텍처 설계서
-            # §3.1-a "RSC 만 싣는다"는 "실제 디바이스 데이터를 담지 않는다"는
+            # 구현은 LAYOUT(고정부=RSC+NODE_PROPERTY, "N=0 허용")을 그대로
+            # 따르고 자리표시 NodeProperty(N=0)를 채운다. "RSC 만 싣는다"는
+            # "실제 디바이스 데이터를 담지 않는다"는
             # 뜻으로 해석했다. LAYOUT 자체를 바꾸지 않는 한 RES_SET_CONNECTION
             # 은 항상 RSC+NODE_PROPERTY(9byte) 고정부를 갖는다.
             use_node = NodeProperty(sw_version=0, gcg_id=req.header.gcg_id,

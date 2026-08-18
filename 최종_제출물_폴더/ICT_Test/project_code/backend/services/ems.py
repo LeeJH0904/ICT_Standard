@@ -5,11 +5,11 @@ backend/services/ems.py — TTAK.KO-10.0937 6.1 EMS(장치관리서비스).
 설치·변경·삭제 및 자동화된 연결을 지원하고, 장치의 상태 및 운영 정보를
 수집하는 서비스"(0937 6.1).
 
-담당 조항: 6.1 전부 · A.1-1 · A.2-1 (0937_요구사항_대조표.md §4.1)
+담당 조항: 6.1 전부 · A.1-1 · A.2-1
 진입점: list_nodes · get_node · list_node_devices · set_device_property
 
 노드발 프레임(`REQ_SET_CONNECTION` 등)의 실제 반영은 `backend/ingest.py`가
-한다(단계 5부터) — 이 모듈은 그 로직을 재구현하지 않는다. 여기서는
+한다 — 이 모듈은 그 로직을 재구현하지 않는다. 여기서는
 API가 필요로 하는 조회와, 게이트웨이발 `REQ_SET_DEVICE_PROPERTY` 송신
 (`PATCH /device-property`)만 새로 둔다.
 """
@@ -50,7 +50,7 @@ def list_nodes(conn: sqlite3.Connection, link: SiapLink) -> list[dict]:
     """`GET /api/v1/nodes` — 0943 8.1.1 연결 설정을 마친 노드. `status`는
     `SiapLink.registry()`(in-memory, 표 7-13)가 정본이다. `connected_at`·
     `last_seen_at`는 `NodeProperty`에 없는 필드라 `frame_log`에서 유도한다
-    (API 명세서 §5)."""
+."""
     return [_node_dict(conn, node_id, prop) for node_id, prop in sorted(link.registry().items())]
 
 
@@ -73,7 +73,7 @@ def _node_dict(conn: sqlite3.Connection, node_id: int, prop) -> dict:
 
 def list_node_devices(conn: sqlite3.Connection, node_id: int):
     """`GET /api/v1/nodes/{id}/devices` — 표 7-15로 등록된 항목이 1369-P1
-    7.2.2.5 장치설치정보로 저장된 결과다(API 명세서 §3)."""
+    7.2.2.5 장치설치정보로 저장된 결과다."""
     return repository.list_device_installs_by_node(conn, node_id)
 
 
@@ -159,7 +159,7 @@ def _lookup_current(link: SiapLink, node_id: int, device_id: int) -> DeviceMainI
 
 
 def _validate_value_type(install_id: str, value_type: ValueType, patch: dict) -> None:
-    """CLAUDE.md §3.5 — 표 7-15 USER DEPENDENT 5필드는 `DEVICE_MAIN_INFO.
+    """표 7-15 USER DEPENDENT 5필드는 `DEVICE_MAIN_INFO.
     Value Type`을 따른다. `lower_value`/`upper_value`가 그 타입의 32bit
     범위(0943 표 7-14)를 벗어나면 422(INVALID_DATA_TYPE)."""
     for key in ("lower_value", "upper_value"):

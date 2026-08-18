@@ -1,14 +1,14 @@
 """
 backend/repository.py — SQL 담당. `schema.sql`이 정본이고 트리거·CHECK가
-거기 있다(CLAUDE.md §4.3) — 이 파일은 그 제약을 재해석하지 않고 그대로
+거기 있다 — 이 파일은 그 제약을 재해석하지 않고 그대로
 믿는다. ORM 미사용, 전부 파라미터 바인딩(`?`) — 문자열 포매팅으로 SQL을
 조립하지 않는다.
 
-쓰기 소유권은 테이블 단위다(아키텍처 설계서 §4.4-a). 이 파일의 함수들은
+쓰기 소유권은 테이블 단위다. 이 파일의 함수들은
 "어느 스레드가 부르는가"를 모른다 — 소유권은 **호출자**(`ingest.py` =
 I/O 스레드, `api.py`와 그 서비스 = API 스레드)가 지킨다. 이 파일은 SQL만 안다.
 
-식별자는 UUID4(TEXT), 시간은 ISO 8601(TEXT) — 1369-P1 6.1, 설계 원칙 §1-3.
+식별자는 UUID4(TEXT), 시간은 ISO 8601(TEXT) — 1369-P1 6.1, 설계 원칙 1-3.
 """
 from __future__ import annotations
 
@@ -45,7 +45,7 @@ def record_config_change(conn: sqlite3.Connection, *, table_name: str, row_id: s
                           changed_at: str | None = None) -> str:
     """1369-P1 6.2.1 "설정형 데이터는... 변경(생성, 수정, 삭제)에
     대해 이력이 관리되어야 한다". 시드 로더(`fixtures/seed.sql`)만 이
-    테이블을 쓴다고 알려져 있었으나(아키텍처 §4.4-a①), 실제 설정형 데이터
+    테이블을 쓴다고 알려져 있었으나(①), 실제 설정형 데이터
     변경 대부분은 런타임의 `REQ_SET_DEVICE_PROPERTY`·
     `REQ_SET_NODE_DEVICE_PROPERTY_ALL` 디바이스 선언으로 일어난다 — 이
     경로가 함수를 부르지 않아 동적 등록·재선언의 변경 이력이 항상 0건이었다
@@ -53,7 +53,7 @@ def record_config_change(conn: sqlite3.Connection, *, table_name: str, row_id: s
     유발하지 않아 None이고, 사용자발 설정은 `api.py`가 호출한 서비스가
     API 스레드에서 실제 사용자 ID를 넘긴다.
     `version`은 DEFAULT 1을 그대로 쓴다 — 이 참조 구현은 행 단위 버전
-    카운터를 별도로 올리지 않는다(표준 미규정, 필요 시 CLAUDE.md §3.5
+    카운터를 별도로 올리지 않는다(표준 미규정, 필요 시
     갱신 대상)."""
     id_ = new_id()
     changed_at = changed_at or now_iso()
@@ -77,7 +77,7 @@ def get_by_id(conn: sqlite3.Connection, table: str, id_: str):
 
 # ═══════════════════════════════════════════════════════════════
 #  A/B — device_info · device_install_info · device_install
-#         (노드발 등록은 SIAP I/O 스레드, 아키텍처 §4.4-a②·④)
+#         (노드발 등록은 SIAP I/O 스레드, ②·④)
 #         — REQ_SET_DEVICE_PROPERTY / REQ_SET_NODE_DEVICE_PROPERTY_ALL 결과
 # ═══════════════════════════════════════════════════════════════
 
@@ -86,7 +86,7 @@ def get_or_create_device_info(conn: sqlite3.Connection, *, device_kind: str,
                                manufacturer: str | None = None,
                                device_characteristics: str | None = None) -> str:
     """`model_name`은 7.2.2.4상 불변·전역 식별이다 — 이미 등록된 모델이면
-    재사용하고, 없으면 새로 만든다. 노드 종류를 분기하지 않는다(CLAUDE.md §1-6):
+    재사용하고, 없으면 새로 만든다. 노드 종류를 분기하지 않는다:
     `model_name`은 오직 SIAP `Subtype` 코드에서 유도되며 호출자(ingest.py)가
     어느 보드인지는 이 함수에 전달되지도 않는다.
 
@@ -148,8 +148,8 @@ def upsert_device_install_info(conn: sqlite3.Connection, *, device_info_id: str,
     만 새 값으로 바뀌고 `device_info_id`는 예전 모델(예: TEMPERATURE)을
     계속 참조했다 — 이후 값 알림이 새 subtype(예: HUMIDITY)으로 들어와도
     설치 행이 가리키는 `device_info.device_kind`는 예전 것이라 정체성이
-    어긋났다(1369-P1 §7.1(6) "장치 설치 정보는 정확히 하나의 장치 기본
-    정보를 가진다", §7.2.2.5 "device_info_id는 갱신 가능").
+    어긋났다(1369-P1 7.1(6) "장치 설치 정보는 정확히 하나의 장치 기본
+    정보를 가진다", "device_info_id는 갱신 가능").
 
     `install_location`·`install_loc_unit`·`unit`은 이전에는 호출자
     (`ingest.py::_handle_device_property`)가 넘길 수단이 없어 항상 `None`으로
@@ -219,7 +219,7 @@ def link_device_install(conn: sqlite3.Connection, greenhouse_id: str, install_id
 
 
 def get_greenhouse_manager_user_id(conn: sqlite3.Connection, greenhouse_id: str) -> str | None:
-    """1369-P1 §7.1(3) "온실은 정확히 1명의 사용자가 관리한다"
+    """1369-P1 7.1(3) "온실은 정확히 1명의 사용자가 관리한다"
     (`greenhouse_manage`, `UNIQUE(greenhouse_id)`) — 그 온실의 관리자를
     돌려준다. `link_device_manage()`의 호출자가 "이 장치의 관리자는
     누구인가"를 결정하는 데 쓴다. 없으면 None — 시드 누락 등 방어적 상황."""
@@ -230,8 +230,8 @@ def get_greenhouse_manager_user_id(conn: sqlite3.Connection, greenhouse_id: str)
 
 
 def link_device_manage(conn: sqlite3.Connection, user_id: str, install_id: str) -> None:
-    """1369-P1 §7.1(7) "설치된 장치들은 1명의 사용자에 의해
-    관리된다" / §7.2.2.10. `UNIQUE(install_id)`가 강제하므로 이미 관리자가
+    """1369-P1 7.1(7) "설치된 장치들은 1명의 사용자에 의해
+    관리된다" /. `UNIQUE(install_id)`가 강제하므로 이미 관리자가
     있으면 조용히 건너뛴다(재연결 시 재삽입 금지 — `link_device_install()`
     과 같은 멱등 패턴)."""
     exists = conn.execute(
@@ -246,11 +246,11 @@ def get_greenhouse_location(conn: sqlite3.Connection, greenhouse_id: str) -> tup
     """1369-P1 6.2.5 "장치설치정보에는... 설치위치 등이 포함되어야
     한다" / 7.2.2.5 "설치 위치 속성은 속성값과 단위가 함께 포함되어야
     한다". 이 참조 구현에는 장치별 세부 설치위치를 입력할 별도 수단이
-    없다(0943 REQ_SET_CONNECTION은 위치를 나르지 않는다, API 명세서 §3
+    없다(0943 REQ_SET_CONNECTION은 위치를 나르지 않는다,
     쓰기 7건에도 없다) —(장치 관리자 = 소속 온실 관리자)과 같은
     근거로, 그 장치가 설치된 온실 자신의 위치(`greenhouse_info.location`/
     `location_unit`)를 기본값으로 쓴다. 온실 위치도 없으면 (None, None) —
-    지어내지 않는다(CLAUDE.md §1-1)."""
+    지어내지 않는다."""
     row = conn.execute(
         "SELECT location, location_unit FROM greenhouse_info WHERE id = ?", (greenhouse_id,)
     ).fetchone()
@@ -259,7 +259,7 @@ def get_greenhouse_location(conn: sqlite3.Connection, greenhouse_id: str) -> tup
 
 def get_default_greenhouse_id(conn: sqlite3.Connection) -> str | None:
     """이 참조 구현은 온실 1개 고정 데모다(`fixtures/seed.sql`, DB 스키마
-    설계서 §7.4). 온실이 없으면 None — 호출자가 그 프레임 처리를 건너뛴다.
+    ). 온실이 없으면 None — 호출자가 그 프레임 처리를 건너뛴다.
     여러 개면 가장 먼저 생성된 것을 쓴다(결정적 — created_at 오름차순)."""
     row = conn.execute(
         "SELECT id FROM greenhouse_info ORDER BY created_at ASC LIMIT 1"
@@ -297,7 +297,7 @@ def record_env_measurement(conn: sqlite3.Connection, *, install_id: str, greenho
     if subtype not in ENV_SUBTYPES:
         raise ValueError(f"미등록 환경 subtype: {subtype}")
     # 그림 7-3: RAIN_DETECTION은 측정값 단독 — 오차범위·유효범위는 CHECK가 거부한다.
-    # 여기서 미리 비워 스키마의 이 결정을 그대로 존중한다(6.3.3.8, CLAUDE.md §3.5).
+    # 여기서 미리 비워 스키마의 이 결정을 그대로 존중한다(6.3.3.8).
     if subtype == "RAIN_DETECTION":
         error_range = lower_limit = upper_limit = None
     esd_id = new_id()
@@ -321,13 +321,13 @@ def record_device_state(conn: sqlite3.Connection, *, install_id: str, subtype: s
                          reported_at: str | None = None) -> str:
     """device_state_data + 서브타입 테이블 + device_state 관계를 함께 기록한다.
 
-    구현 결정(표준 미규정, CLAUDE.md §3.5) — 0943 DEVICE_MAIN_INFO(표 7-14)는
+    구현 결정(표준 미규정) — 0943 DEVICE_MAIN_INFO(표 7-14)는
     디바이스 1개당 값 1개만 나른다. 1369-P1의 장치상태 서브타입 중 2개 이상의
     물리량을 갖는 것(관수펌프의 압력+분사도, 송풍기의 전원+바람세기, 냉난방기의
     전원+온도+바람세기)은 이 프레임 구조로 한 번에 표현할 수 없다 — 주 필드에만
     값을 싣고 나머지는 NULL로 둔다. 전원(on/off) 필드는 NOT NULL이므로 값 != 0
-    을 켜짐으로 해석한다. 별도 채널(device_id)로 나누는 것은 계약 확장이라
-    CLAUDE.md §5 절차 대상이며 이 단계의 범위가 아니다."""
+    을 켜짐으로 해석한다. 별도 채널(device_id)로 나누는 것은 계약 확장이므로
+    현재 구현 범위에 포함하지 않는다."""
     if subtype not in DEVICE_STATE_SUBTYPES:
         raise ValueError(f"미등록 장치상태 subtype: {subtype}")
     dsd_id = new_id()
@@ -355,7 +355,7 @@ def record_device_state(conn: sqlite3.Connection, *, install_id: str, subtype: s
     elif subtype == "COOLING_HEATER":
         # power 하나만 주 필드로 채운다(FAN과 같은 패턴). 이전에는
         # 같은 value를 power와 temperature 두 필드에 중복 기입해, 관측
-        # 근거가 하나인데 두 물리량을 관측한 것처럼 보였다 — 위 §3.5
+        # 근거가 하나인데 두 물리량을 관측한 것처럼 보였다 — 위
         # 결정("주 필드에만 값을 싣고 나머지는 NULL") 자체를 어겼다.
         conn.execute("INSERT INTO dsd_cooling_heater(id,power,temperature,wind_level) VALUES(?,?,NULL,NULL)",
                      (dsd_id, 1 if value else 0))
@@ -408,10 +408,10 @@ def list_alerts(conn: sqlite3.Connection, *, limit: int = 100) -> list[models.Al
 def list_alerts_page(conn: sqlite3.Connection, *, since: str | None = None, until: str | None = None,
                       unacked: bool | None = None, limit: int = 100,
                       offset: int = 0) -> tuple[list[models.Alert], int]:
-    """단계 6 — `GET /api/v1/alerts`(0937 6.4-3 · 6.5-2) 전용. `list_alerts()`
-    는 단계 5부터 `list[Alert]`를 돌려주는 계약으로 굳어 있어(기존 회귀
+    """`GET /api/v1/alerts`(0937 6.4-3 · 6.5-2) 전용. `list_alerts()`
+    는 `list[Alert]`를 돌려주는 기존 계약이 있어(회귀
     테스트 3건이 그 계약에 의존한다) 시그니처를 바꾸지 않는다 — 페이지네이션
-    (`total` 포함, API 명세서 §4.7)이 필요한 이 호출을 별도 함수로 둔다."""
+    (`total` 포함)이 필요한 이 호출을 별도 함수로 둔다."""
     where: list[str] = []
     params: list = []
     if since is not None:
@@ -475,7 +475,7 @@ def list_frame_violations(conn: sqlite3.Connection, frame_id: str) -> list[model
 
 
 # ═══════════════════════════════════════════════════════════════
-#  단계 6 — API 스레드가 쓰는 테이블(아키텍처 §4.4-a③)과 읽기 전용 조회.
+#  API 스레드가 쓰는 테이블과 읽기 전용 조회.
 #  이 절 아래는 backend/services/*.py · backend/api.py 가 부르는 SQL이다.
 #  쓰기 소유권은 여전히 호출자(API 스레드)가 지킨다 — 이 파일은 SQL만 안다.
 # ═══════════════════════════════════════════════════════════════
@@ -500,7 +500,7 @@ def _epoch_to_iso(t: float) -> str:
 # ── public_data_source / record — 0937 6.2 DMS ────────────────────────────
 
 def list_public_data_sources(conn: sqlite3.Connection) -> list[models.PublicDataSource]:
-    """`public_data_source`는 시드 전용(아키텍처 §4.4-a①) — 여기선 조회만."""
+    """`public_data_source`는 시드 전용이므로 여기선 조회만 한다."""
     rows = conn.execute("SELECT * FROM public_data_source ORDER BY registered_at").fetchall()
     return [models.PublicDataSource.from_row(r) for r in rows]
 
@@ -513,7 +513,7 @@ def insert_public_data_record(conn: sqlite3.Connection, *, source_id: str, paylo
                                fetched_at: str | None = None, period_from: str | None = None,
                                period_to: str | None = None, region: str | None = None,
                                item: str | None = None) -> str:
-    """0937 6.2 DMS 부속서 A 2.3 수집 이력. API 스레드 소유(아키텍처 §4.4-a③)
+    """0937 6.2 DMS 부속서 A 2.3 수집 이력. API 스레드 소유.
     — 외부 HTTP 호출이 SIAP I/O 스레드를 막으면 안 된다."""
     id_ = new_id()
     conn.execute(
@@ -551,7 +551,7 @@ def get_control_model(conn: sqlite3.Connection, model_id: str) -> models.Control
     return get_by_id(conn, "control_model", model_id)
 
 
-# ── control_rule — 0937 6.3 MMS / 부속서 A 3.2 (API 스레드 소유, §4.4-a③) ──
+# ── control_rule — 0937 6.3 MMS / 부속서 A 3.2 (API 스레드 소유) ──
 
 def insert_control_rule(conn: sqlite3.Connection, *, origin: str, draft_text: str,
                          model_id: str | None = None, generation: str | None = None,
@@ -589,7 +589,7 @@ def list_control_rules(conn: sqlite3.Connection, *, approved: bool | None = None
 def approve_control_rule(conn: sqlite3.Connection, rule_id: str, *, condition_expr: str,
                           action_json: str, target_install_id: str, approved_by: str,
                           approved_at: str | None = None) -> None:
-    """단일 UPDATE로 승인 스냅샷 5필드를 동시에 채운다(API 명세서 §4.2) —
+    """단일 UPDATE로 승인 스냅샷 5필드를 동시에 채운다 —
     `schema.sql`의 CHECK·트리거가 부분 상태·재승인·변조를 막는다. 실패하면
     `sqlite3.IntegrityError`를 그대로 던진다 — 호출자(services/mms.py)가
     `constraint` 이름을 메시지에서 뽑아 Problem 으로 옮긴다."""
@@ -609,12 +609,12 @@ def reject_control_rule(conn: sqlite3.Connection, rule_id: str, *, reason: str,
     )
 
 
-# ── control_execution — 0937 6.5 FCS (교차 소유, §4.4-a④) ─────────
+# ── control_execution — 0937 6.5 FCS (교차 소유, 4.4-a④) ─────────
 
 def insert_control_execution(conn: sqlite3.Connection, *, origin: str, install_id: str,
                               command: dict, rule_id: str | None = None,
                               issued_by: str | None = None, issued_at: str | None = None) -> str:
-    """INSERT는 API 스레드가 한다 — 기록이 송신의 선행 조건이다(아키텍처 §3.2).
+    """INSERT는 API 스레드가 한다 — 기록이 송신의 선행 조건이다.
     미승인 규칙이면 `trg_exec_requires_approval` 등이 `sqlite3.IntegrityError`
     로 막는다 — 여기서 삼키지 않고 그대로 전파한다."""
     id_ = new_id()
@@ -632,7 +632,7 @@ def update_execution_result(conn: sqlite3.Connection, exec_id: str, *,
                              siap_msg_id: int | None, result_rsc: int | None,
                              responded_at: str | None) -> None:
     """`SiapLink.send()`가 응답을 동기 반환하므로 API 스레드가 이
-    UPDATE도 (같은 커넥션으로) 직접 수행한다(아키텍처 §4.4-a④ 정정)."""
+    UPDATE도 (같은 커넥션으로) 직접 수행한다(④ 정정)."""
     conn.execute(
         "UPDATE control_execution SET siap_msg_id=?, result_rsc=?, responded_at=? WHERE id=?",
         (siap_msg_id, result_rsc, responded_at, exec_id),
@@ -666,7 +666,7 @@ def list_control_executions(conn: sqlite3.Connection, *, origin: str | None = No
     return [models.ControlExecution.from_row(r) for r in rows], total
 
 
-# ── 사용자 실재 확인 — API 명세서 §2.1 (X-User-Id 는 인증이 아니라 실재 확인) ──
+# ── 사용자 실재 확인 — (X-User-Id 는 인증이 아니라 실재 확인) ──
 
 def user_exists(conn: sqlite3.Connection, user_id: str) -> bool:
     return conn.execute("SELECT 1 FROM user_info WHERE id = ?", (user_id,)).fetchone() is not None
@@ -689,7 +689,7 @@ def list_device_installs_by_node(conn: sqlite3.Connection, siap_node_id: int) ->
 def list_device_installs_by_selector(conn: sqlite3.Connection, *, greenhouse_id: str | None = None,
                                       install_location: str | None = None,
                                       subtype: int | None = None) -> list[models.DeviceInstallInfo]:
-    """0937 6.4-2 구역 일괄 선택 — `PATCH /device-property`(API 명세서).
+    """0937 6.4-2 구역 일괄 선택 — `PATCH /device-property`.
     구역의 기본 의미는 온실 전체이며 `install_location`·`subtype`은 좁히는
     선택 항목이다."""
     where: list[str] = []
@@ -798,8 +798,8 @@ def list_telemetry(conn: sqlite3.Connection, *, install_id: str | None = None,
 
 #: 서브타입 → (서브타입 테이블, `DeviceState.attributes`로 노출할 컬럼).
 #: `record_device_state()`가 쓰는 테이블 집합을 조회 방향으로 미러링한 것 —
-#: CLAUDE.md §1-6이 금지하는 하드코딩은 board/MCU 분기다(0937 대조표 §4.3
-#: "종류는 Subtype 레지스트리 조회로만 해석"). SQLite 테이블명은 리터럴일
+#: 종류 하드코딩 금지 원칙이 금지하는 것은 board/MCU 분기다.
+#: 종류는 Subtype 레지스트리 조회로만 해석한다. SQLite 테이블명은 리터럴일
 #: 수밖에 없고, 이 집합은 이미 위 DEVICE_STATE_SUBTYPES·schema.sql CHECK와
 #: 동일한 6종이다 — 새 MCU 보드 추가는 이 표를 건드리지 않는다.
 _DSD_ATTRS: dict[str, tuple[str, tuple[str, ...]]] = {
@@ -939,13 +939,13 @@ def node_last_seen_at(conn: sqlite3.Connection, node_id: int) -> str | None:
     return _epoch_to_iso(row["t1"]) if row and row["t1"] is not None else None
 
 
-# ── DB 제약 위반 → 사람이 읽을 트리거 이름 (API 명세서 §4.5 `constraint`) ────
+# ── DB 제약 위반 → 사람이 읽을 트리거 이름 (`constraint`) ────
 
 #: `RAISE(ABORT, '메시지')`의 메시지는 트리거의 SQL 이름이 아니라 자유
 #: 문자열이다 — sqlite3 예외에는 트리거 이름이 실리지 않으므로, `schema.sql`
 #: 의 각 트리거가 실제로 내는 메시지 원문을 그대로 키로 매핑한다. 새 트리거를
 #: 추가하면서 이 표를 잊으면 `constraint`가 `None`으로 빠질 뿐 예외 자체는
-#: 그대로 전파되므로(§11.5 "근거 없이 기각하지 않는다"와 같은 정직성 원칙),
+#: 그대로 전파되므로("근거 없이 기각하지 않는다"와 같은 정직성 원칙),
 #: 조용히 틀린 이름을 보고하는 것보다 안전하다.
 _TRIGGER_MESSAGES: dict[str, str] = {
     "0937 A.3.2: control_execution requires an approved rule": "trg_exec_requires_approval",

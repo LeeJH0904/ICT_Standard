@@ -1,9 +1,9 @@
 /*
- * esp32_node/esp32_node.ino — ESP32 노드 (펌웨어 설계서 §7.4).
+ * esp32_node/esp32_node.ino — ESP32 노드.
  *
  * core/ 는 Uno·Pro Mini 와 **동일 파일**이다. 다른 것은 전송 계층뿐 — UART 대신
  * TCP over Wi-Fi. **같은 SIAP 바이트열이 TCP 위를 그대로 지나간다**(길이 프리앰블·
- * JSON 래핑 없음, §7.4) — 이것이 3종 혼용 주장의 핵심이다. 재동기 코드도 core/ 에
+ * JSON 래핑 없음) — 이것이 3종 혼용 주장의 핵심이다. 재동기 코드도 core/ 에
  * 있고 ESP32 도 그대로 쓴다(보드별 분기를 만들지 않는다).
  *
  * 보드 지역 함수는 전부 `board_` 접두사를 쓴다 — ESP-IDF(`esp_`)·lwIP(`tcp_`)의
@@ -95,7 +95,7 @@ extern "C" int8_t board_read_value(void *ctx, uint8_t device_id, uint32_t *raw) 
 extern "C" int8_t board_write_value(void *ctx, uint8_t device_id, uint32_t raw) {
     (void)ctx;
     if (device_id != DEV_ID_WINDOW) return -1;  /* 센서엔 쓰지 않는다 */
-    g_window_state = raw;                        /* 범위 검사는 core 가 이미 마쳤다(§3.4) */
+    g_window_state = raw;                        /* 범위 검사는 core 가 이미 마쳤다 */
     return 0;
 }
 
@@ -139,7 +139,7 @@ void setup() {
     cfg.profile      = SIAP_PROFILE_DEFAULT;
     cfg.mode         = SIAP_MODE_STRICT;
 
-    if (!siap_node_init(&g_node, &cfg)) { for (;;) { /* halt — §4.1-a */ } }
+    if (!siap_node_init(&g_node, &cfg)) { for (;;) { /* halt — */ } }
 }
 
 void loop() {

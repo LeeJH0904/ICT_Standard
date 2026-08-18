@@ -2,7 +2,7 @@
 
 `contracts/frame.py`의 `Frame`을 직접 만들어 `handle()`에 넣는다 — `siap/`를
 전혀 거치지 않는다(backend가 `siap/` 내부 심볼을 import하지 않는다는
-CLAUDE.md §2.2 계약을 테스트 구성 자체로도 지킨다).
+계약을 테스트 구성 자체로도 지킨다).
 
 이 파일이 손으로 만드는 "연결" 프레임은 `kind=REQ_SET_NODE_DEVICE_
 PROPERTY_ALL`이다(예전에는 `REQ_SET_CONNECTION`이었는데, 그 메시지는
@@ -122,7 +122,7 @@ def test_handle_connection_creates_install_and_links_greenhouse(conn):
 
 def test_handle_connection_links_device_manage_to_greenhouse_manager(conn):
     """ 재현 — 디바이스 속성 선언 처리 뒤 device_manage 가 그 온실의
-    관리자로 채워져야 한다(1369-P1 §7.1(7)). 이전에는 이 관계가 런타임
+    관리자로 채워져야 한다(1369-P1 7.1(7)). 이전에는 이 관계가 런타임
     경로에서 항상 0행이었다."""
     _connect_sensor(conn, device_id=1, subtype=Subtype.TEMPERATURE)
     install = repository.find_device_install_by_siap(conn, NODE_ID, 1)
@@ -248,7 +248,7 @@ def test_handle_connection_dev_type_inconsistent_with_subtype_is_skipped(conn):
 
 
 def test_handle_connection_does_not_hardcode_node_kind(conn):
-    """CLAUDE.md §1-6 — device_info.model_name 은 오직 Subtype 코드에서
+    """device_info.model_name 은 오직 Subtype 코드에서
     유도된다. 서로 다른 Node ID 라도 같은 subtype 이면 같은 device_info 를
     공유한다(노드 종류별 분기가 없다는 증거)."""
     _connect_sensor(conn, device_id=1, subtype=Subtype.TEMPERATURE)
@@ -341,7 +341,7 @@ def test_handle_device_value_actuator_records_device_state(conn):
 
 def test_handle_device_value_env_measurement_carries_install_location(conn):
     """환경 측정 위치는 설치 행의 install_location/install_loc_unit
-    을 참조한다(1369-P1 §7.2.3.3). 이전에는 이 두 값을
+    을 참조한다(1369-P1 7.2.3.3). 이전에는 이 두 값을
     record_env_measurement() 호출에 아예 넘기지 않아 항상 NULL 이었다."""
     _connect_sensor(conn, device_id=1, subtype=Subtype.TEMPERATURE)
     # 위치는 지금 디바이스 속성 선언 경로로는 들어오지 않는다 — 이미 관리 중인
@@ -362,7 +362,7 @@ def test_handle_device_value_env_measurement_carries_install_location(conn):
 
 
 def test_handle_device_value_sensor_out_of_range_is_discarded(conn):
-    """1369-P1 §6.3.2 "센서 유효범위를 벗어난 값은 측정 오류로 보고
+    """1369-P1 6.3.2 "센서 유효범위를 벗어난 값은 측정 오류로 보고
     무시해야 하며". _connect_sensor 는 lower_limit=-40 / upper_limit=80 로
     등록한다 — 그 범위를 크게 벗어난 값은 정상 환경 데이터로 저장되면 안 된다."""
     _connect_sensor(conn, device_id=1, subtype=Subtype.TEMPERATURE)
@@ -474,7 +474,7 @@ def test_handle_device_value_without_prior_connection_is_skipped(conn):
 
 def test_handle_frame_processing_failure_rolls_back_partial_writes(conn):
     """ 재현 — 프레임 처리 중 예외가 나면 같은 프레임에서 이미 실행된
-    INSERT도 rollback돼야 한다(아키텍처 §4.4 "프레임 1건 = 트랜잭션 1건",
+    INSERT도 rollback돼야 한다("프레임 1건 = 트랜잭션 1건",
     이유: "부분 반영 방지"). SQLite의 `RAISE(ABORT,...)`는 현재 문장만
     되돌리고 트랜잭션은 열어 둔 채 남기므로, `handle()` 자신이 예외 시
     전체를 rollback해야 앞선 요소(TEMPERATURE)의 INSERT가 남지 않는다.
@@ -586,7 +586,7 @@ def test_handle_device_value_links_operating_env_when_unambiguous(conn):
 
 def test_handle_device_value_skips_operating_env_when_ambiguous(conn):
     """장치상태가 2건 이상이면(어느 것과 짝지어야 할지 프레임만으로 정할 수
-    없다) operating_env 를 만들지 않는다(§3.5 결정)."""
+    없다) operating_env 를 만들지 않는다."""
     _connect_sensor(conn, device_id=1, subtype=Subtype.TEMPERATURE)
     _connect_actuator(conn, device_id=2, subtype=Subtype.IRRIGATION_VALVE)
     dmi_sensor = DeviceMainInfo(device_id=1, dev_type=DevType.SENSOR, subtype=int(Subtype.TEMPERATURE),

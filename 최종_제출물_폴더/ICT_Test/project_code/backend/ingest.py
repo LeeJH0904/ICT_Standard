@@ -1,14 +1,13 @@
 """
-backend/ingest.py — ★ Frame 소비 지점. 유일한 경계 (CLAUDE.md §2.2).
+backend/ingest.py — ★ Frame 소비 지점. 유일한 경계.
 
 `handle(frame)` 위쪽에 로직을 두지 않는다 — Frame이 어디서 왔는지(하드웨어냐
 replay 냐 simulate 냐) 이 계층은 모른다. `contracts/frame.py`의 `Frame`
 외에는 아무것도 참조하지 않는다 — `siap/` 내부 심볼(codec·link·registry)을
-import하지 않는다(CLAUDE.md §2.2). 표준 해석(위반 판정)은 이미 프로토콜
-계층이 끝냈다 — 여기는 그 결과를 테이블에 적을 뿐 다시 판정하지 않는다
-(CLAUDE.md §3.4).
+import하지 않는다. 표준 해석(위반 판정)은 이미 프로토콜
+    계층이 끝냈다 — 여기는 그 결과를 테이블에 적을 뿐 다시 판정하지 않는다.
 
-DB 스키마 설계서 §7 "Frame → 테이블 매핑 규칙":
+"Frame → 테이블 매핑 규칙":
   REQ_SET_DEVICE_PROPERTY /
   REQ_SET_NODE_DEVICE_PROPERTY_ALL → device_install_info + device_install (기능 1)
                         REQ_SET_CONNECTION(8.1.1)이 아니다. 이 두 메시지가
@@ -16,7 +15,7 @@ DB 스키마 설계서 §7 "Frame → 테이블 매핑 규칙":
                         싣는 실제 통로다. REQ_SET_CONNECTION의 LAYOUT은 (0,0)이라
                         `frame.device_properties`가 구조적으로 항상 비어 있다 —
                         예전 버전은 REQ_SET_CONNECTION에 바인딩돼 있어 이 함수가
-                        한 번도 실행되지 않는 죽은 코드였다(아래 §3.5 결정 참고).
+                        한 번도 실행되지 않는 죽은 코드였다(아래 결정 참고).
   NOTI_DEVICE_VALUE  → env_state_data+env_measurement+env_measure (FMS, 센서)
                         또는 device_state_data+dsd_*+device_state (액추에이터)
   NOTI_ERROR         → alert                                      (FCS)
@@ -31,8 +30,8 @@ DB 스키마 설계서 §7 "Frame → 테이블 매핑 규칙":
 
 `handle(frame, conn)`은 DB 반영만 하고 회신 Frame을 만들지 않는다
 (반환값 없음). `siap/link.py`의 `on_frame` 훅은 이제 부수효과 전용이라
-(, 회신은 `_default_reply()`가 계속 만든다 — 표준 해석은 프로토콜
-계층에만, CLAUDE.md §3.4) `bind(conn)`으로 그 훅에 맞는 단일 인자 콜백을
+    회신은 `_default_reply()`가 계속 만든다 — 표준 해석은 프로토콜
+계층에만) `bind(conn)`으로 그 훅에 맞는 단일 인자 콜백을
 만들면 된다. `backend/`가 `siap/build.py`(FrameBuilder 구현)를 몰라도 되는
 이유이기도 하다 — 회신 구성은 애초에 이 계층의 책임이 아니다.
 
@@ -66,7 +65,7 @@ except ImportError:
     from backend import repository
 
 #: 0943 NEC(표 7-12) → 1369-P1 alert.severity(INFO/WARN/CRITICAL) 매핑.
-#: 표준 미규정 구현 결정(CLAUDE.md §3.5 갱신 대상) — 0943은 NEC에 심각도
+#: 표준 미규정 구현 결정 — 0943은 NEC에 심각도
 #: 등급을 두지 않는다. 전원·배터리 계열(장치가 곧 통신 불능이 되는 원인)을
 #: CRITICAL로, 그 외(SW/HW 타이머·수신 오류 등 일시적 이상)를 WARN으로 본다.
 _NEC_SEVERITY: dict[int, str] = {
@@ -83,7 +82,7 @@ def _nec_severity(nec: int) -> str:
 
 def _serialize_elements(frame: Frame) -> str | None:
     """`siap/codec.py`가 이미 디코딩해 준 가변 요소를 `frame_log.
-    elements_json`에 그대로 옮긴다(재해석 없음, §3.4 — 표준 해석은 여전히
+    elements_json`에 그대로 옮긴다(재해석 없음 — 표준 해석은 여전히
     프로토콜 계층 하나뿐이다). `api.py`가 조회 시점에 이 값을 필드 분해
     패널(FieldSlice)로 펼친다. 위반 프레임은 두 튜플이 항상 비어 있으므로
     (`_violation()` 보장) 자동으로 `None`이 된다.
@@ -117,9 +116,9 @@ def handle(frame: Frame, conn: sqlite3.Connection) -> None:
 
     반환값 없음 — `backend/`는 회신 프레임을 만들지 않는다(그건 프로토콜
     계층의 책임, `siap/build.py`·`siap/link.py`). `run.py`가 이 함수와
-    프로토콜 계층의 회신 로직을 각자 부르는 방식으로 조립한다(단계 6).
+    프로토콜 계층의 회신 로직을 각자 부르는 방식으로 조립한다.
 
-    아키텍처 설계서 §4.4 "프레임 1건 = 트랜잭션 1건"(이유: "부분
+    "프레임 1건 = 트랜잭션 1건"(이유: "부분
     반영 방지"). 이전에는 성공 경로 끝에서만 `commit()`을 걸어, 여러 요소
     중 뒤쪽에서 예외가 나면 앞쪽 요소의 INSERT가 열린 트랜잭션에 그대로
     남았다 — 이 함수는 예외를 던지고 끝나지만, 같은 `conn`을 나중에 다른
@@ -158,7 +157,7 @@ def handle(frame: Frame, conn: sqlite3.Connection) -> None:
         if frame.kind in (MsgKind.REQ_SET_DEVICE_PROPERTY, MsgKind.REQ_SET_NODE_DEVICE_PROPERTY_ALL):
             # REQ_SET_CONNECTION이 아니다. LAYOUT[(REQ_SET_CONNECTION)]==(0,0)
             # 이라 그 프레임의 device_properties는 디코더가 만드는 한 항상 빈
-            # 튜플이다(위 헤더 §3.5 참고) — 여기 바인딩해 두면 다시 죽은 코드가
+            # 튜플이다(위 헤더 참고) — 여기 바인딩해 두면 다시 죽은 코드가
             # 된다. 노드가 자신의 디바이스 구성을 게이트웨이에 선언하는 실제
             # 통로는 이 두 메시지다(표 7-2, `NODE_ORIGINATED_REQUESTS`).
             _handle_device_property(conn, frame)
@@ -183,11 +182,11 @@ def bind(conn: sqlite3.Connection) -> Callable[[Frame], None]:
 
     `handle()` 자체를 `conn` 없이 두 인자로 남긴 이유는 테스트에서 매 호출마다
     다른(또는 `:memory:`) 연결을 명시적으로 넘기기 위해서다 — 전역 연결
-    상태를 두지 않는다(아키텍처 설계서 §4.1 "스레드별 연결" 원칙과 같은 이유).
+    상태를 두지 않는다("스레드별 연결" 원칙과 같은 이유).
 
     **`conn`은 반드시 실제로 `on_frame`이 호출될 스레드(SIAP I/O
     스레드)에서 연 연결이어야 한다.** SQLite 연결은 만든 스레드에서만 쓸 수
-    있다(`check_same_thread=False` 금지, §4.1) — 메인 스레드에서 연 연결을
+    있다(`check_same_thread=False` 금지) — 메인 스레드에서 연 연결을
     여기 넘기면 첫 프레임 처리에서 `ProgrammingError`로 죽는다. 그래서
     `run.py`는 이 함수를 직접 쓰지 않고, I/O 스레드 안에서 지연 연결하는
     자체 래퍼(`_make_on_frame()`)를 쓴다 — 이 함수는 스레드 경계가 이미
@@ -216,7 +215,7 @@ def _handle_device_property(conn: sqlite3.Connection, frame: Frame) -> None:
     예전 이름은 `_handle_connection`이었고 `REQ_SET_CONNECTION`
     (8.1.1)에 바인딩돼 있었다. 그러나 `contracts/frame.py::LAYOUT
     [MsgKind.REQ_SET_CONNECTION] == (0, 0)`(고정부·가변부 전부 0, SIAP
-    메시지 명세서 §2.4 표도 "(없음)")이라 그 프레임의 `frame.device_properties`
+    표도 "(없음)")이라 그 프레임의 `frame.device_properties`
     는 디코더가 만드는 한 구조적으로 항상 빈 튜플이다 — 이 함수의 for 루프가
     한 번도 실행되지 않는 죽은 코드였다. 노드가 자신의 디바이스 구성을
     선언하는 실제 통로는 이 두 메시지다 — `contracts/frame.py::
@@ -225,35 +224,35 @@ def _handle_device_property(conn: sqlite3.Connection, frame: Frame) -> None:
     보내는가는 0943이 절차를 규정하지 않는 표준 미규정 사항이다 — 이 참조
     구현은 "연결 성공(`RES_SET_CONNECTION` RSC=SUCCESS) 직후, 세션마다
     `REQ_SET_NODE_DEVICE_PROPERTY_ALL` 1회로 전체 구성을 선언한다"로
-    결정했다(`CLAUDE.md` §3.5, `sim/virtual_node.py`가 이 결정을 구현한다).
+    결정했다(`sim/virtual_node.py`가 이 결정을 구현한다).
     `REQ_SET_DEVICE_PROPERTY`(부분 집합)로 와도 이 함수는 원소 단위
     upsert라 동일하게 처리된다 — 전체 교체와 부분 갱신을 구분해야 하는
     쪽은 런타임 registry(`siap/registry.py::merge_device_properties`)다.
 
-    노드 종류를 분기하지 않는다(CLAUDE.md §1-6) — `device_info`의 `model_name`
+    노드 종류를 분기하지 않는다 — `device_info`의 `model_name`
     은 오직 `Subtype` 코드에서 유도된다(`SIAP-0x..`), 어느 보드(Uno/Pro Mini/
     ESP32)가 보냈는지는 이 함수에 아예 전달되지 않는다. 온실은 이 데모의
-    고정 시드(§7.4)를 그대로 쓴다 — 온실이 없으면(시드 누락) 조용히
+    고정 시드를 그대로 쓴다 — 온실이 없으면(시드 누락) 조용히
     건너뛴다: 이 함수는 표준을 재해석하지 않으므로 그 상황을 판정하지 않는다.
 
-   가 `_handle_device_value()`에 추가한 Type/Subtype 일관성
+    `_handle_device_value()`에 추가한 Type/Subtype 일관성
     검사(표 7-14의 Type은 Subtype과 독립된 1bit 필드라 코덱이 조합 자체를
     거부하지 않는다)를 이 함수에도 그대로 적용한다. 여기서 걸러내지
     않으면 `device_info.device_kind`가 Type(예: ACTUATOR)으로, 이후
     값 알림은 그 subtype이 실제로 속한 종류(예: HUMIDITY→SENSOR)로 들어와
     가드에 막혀 저장은 안 되지만 등록 정체성 자체가 이미
-    모순(1369-P1 §7.1(6)·§7.2.2.5)인 채로 남는다.
+    모순(1369-P1 7.1(6)·7.2.2.5)인 채로 남는다.
 
-    1369-P1 §7.1(7) "설치된 장치들은 1명의 사용자에 의해 관리된다"
+    1369-P1 7.1(7) "설치된 장치들은 1명의 사용자에 의해 관리된다"
     (device_manage, `UNIQUE(install_id)`). 이 참조 구현은 별도의 "장치
-    관리자 지정" 입력이 없으므로(§3.5 갱신 대상), 장치가 설치된 온실의
-    관리자(`greenhouse_manage`, 1369-P1 §7.1(3)로 이미 N:1 확정)를 그
+    관리자 지정" 입력이 없으므로, 장치가 설치된 온실의
+    관리자(`greenhouse_manage`, 1369-P1 7.1(3)로 이미 N:1 확정)를 그
     장치의 관리자로도 삼는다 — 이 데모는 온실 1개 고정이라 결과가 유일하다.
 
-    1369-P1 §6.2.5 "장치설치정보에는... 설치위치 등이 포함되어야
+    1369-P1 6.2.5 "장치설치정보에는... 설치위치 등이 포함되어야
     한다". 0943 DEVICE_PROPERTY(표 7-15)는 위치를 나르지 않고 이 참조 구현에는
-    장치별 세부 위치를 입력할 별도 수단도 없으므로(§3.5 갱신 대상과
-    같은 사정), 그 장치가 설치된 온실 자신의 위치를 기본값으로 쓴다
+    장치별 세부 위치를 입력할 별도 수단도 없으므로, 그 장치가 설치된
+    온실 자신의 위치를 기본값으로 쓴다
     (`repository.get_greenhouse_location`). **최초 등록(신규 install
     행)에서만** 이 기본값을 넘긴다 — 재연결(기존 install 행 UPDATE)에서도
     매번 넘기면 `upsert_device_install_info`의 COALESCE가 "새 값이
@@ -325,14 +324,13 @@ def _handle_device_value(conn: sqlite3.Connection, frame: Frame) -> None:
     `UNIQUE`라 환경상태 1건은 정확히 하나의 장치상태에만 귀속될 수 있다
     (7.1(10)) — 이 프레임에서 장치상태가 **정확히 1건** 생성됐을 때만 묶는다.
     2건 이상이면 어느 장치상태와 짝지어야 하는지 프레임 자체로는 정할 수
-    없어(표준 미규정) 건너뛴다 — 틀리게 짝짓느니 비워 두는 쪽을 택했다
-    (CLAUDE.md §3.5 갱신 대상).
+    없어(표준 미규정) 건너뛴다 — 틀리게 짝짓느니 비워 두는 쪽을 택했다.
 
     환경 측정 위치는 그 장치의 설치 위치(`install_location`/
-    `install_loc_unit`)를 참조하도록 결정돼 있다(1369-P1 §7.2.3.3). 설치
+    `install_loc_unit`)를 참조하도록 결정돼 있다(1369-P1 7.2.3.3). 설치
     행이 이미 그 값을 들고 있으므로 그대로 넘긴다.
 
-   /1369-P1 §6.3.2 "센서 유효범위를 벗어난 값은 측정 오류로
+    1369-P1 6.3.2 "센서 유효범위를 벗어난 값은 측정 오류로
     보고 무시해야 하며" — 설치 시 등록된 `lower_limit`/`upper_limit`을 벗어난
     센서 값은 정상 환경 데이터로 저장하지 않고 그 요소만 건너뛴다. 두 경계는
     스키마상 각각 독립적으로 nullable이다(편측 유효범위 — 하한만 있거나
@@ -340,8 +338,8 @@ def _handle_device_value(conn: sqlite3.Connection, frame: Frame) -> None:
     경계만 등록된 장치는 그 경계를 넘는 값도 그대로 통과한다. 있는 경계만
     독립적으로 검사한다.
 
-    §7.1(6) "장치 설치 정보는 정확히 하나의 장치 기본 정보를
-    가진다" / §7.2.2.5. 설치 행을 찾은 뒤 알림의 `subtype`이 **등록된
+    "장치 설치 정보는 정확히 하나의 장치 기본 정보를
+    가진다" /. 설치 행을 찾은 뒤 알림의 `subtype`이 **등록된
     `siap_subtype`과 같은지** 대조한다 — node/device 번호만으로 찾으면,
     SENSOR로 등록된 주소가 ACTUATOR 알림(또는 그 반대)을 보내도 알림이
     주장하는 `dev_type`을 그대로 믿고 저장하게 된다. `ENV_SUBTYPES`와
@@ -368,7 +366,7 @@ def _handle_device_value(conn: sqlite3.Connection, frame: Frame) -> None:
             # 표 7-14의 Type은 Subtype과 별개인 독립 1bit 필드라
             # 코덱이 조합 자체를 거부하지 않는다(값 자체는 정상 디코드된다).
             # subtype이 일치해도 Type이 그 subtype의 정의(Subtype.dev_type,
-            # Frame 구조 명세서 §2.3)와 어긋나면 아래 SENSOR/ACTUATOR 분기가
+            # )와 어긋나면 아래 SENSOR/ACTUATOR 분기가
             # 서로 다른 서브타입 집합(ENV_SUBTYPES/DEVICE_STATE_SUBTYPES)을
             # 잘못 골라 record_device_state()/record_env_measurement()가
             # ValueError로 죽는다(재현: HUMIDITY subtype + ACTUATOR Type).

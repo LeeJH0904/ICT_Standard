@@ -3,9 +3,9 @@ backend/services/dms.py — TTAK.KO-10.0937 6.2 DMS(데이터관리서비스).
 
 "공공데이터(Public Data)서비스로부터 필요한 외부 데이터를 수집하여
 데이터베이스에 기록하는 서비스"(0937 6.2). 노드·디바이스 속성 설정은
-여기 없다 — 그건 6.1 EMS의 일이다(, `ems.py` 참조).
+여기 없다 — 그건 6.1 EMS의 일이다(`ems.py` 참조).
 
-담당 조항: 6.2 전부 · A.2-2·3·4 (0937_요구사항_대조표.md §4.1)
+담당 조항: 6.2 전부 · A.2-2·3·4
 진입점: fetch_public_data · get_source · list_records
 """
 from __future__ import annotations
@@ -28,7 +28,7 @@ except ImportError:
 FIXTURES_DIR = Path(__file__).resolve().parent.parent.parent / "fixtures"
 MOCK_PATH = FIXTURES_DIR / "kma_forecast_mock.json"
 
-#: 기상청 API 키. 부재 시 fixtures 목업으로 자동 폴백한다(CLAUDE.md §7).
+#: 기상청 API 키. 부재 시 fixtures 목업으로 자동 폴백한다.
 API_KEY_ENV = "KMA_API_KEY"
 
 _KMA_URL = ("https://apihub.kma.go.kr/api/typ02/openApi/VilageFcstInfoService_2.0"
@@ -36,8 +36,8 @@ _KMA_URL = ("https://apihub.kma.go.kr/api/typ02/openApi/VilageFcstInfoService_2.
 
 
 def get_source(conn: sqlite3.Connection, source_id: str):
-    """0937 6.2-2 — `public_data_source`는 시드 전용(아키텍처 §4.4-a①,
-    등록 API는 §5-2 후속 과제) — 조회만 한다."""
+    """0937 6.2-2 — `public_data_source`는 시드 전용(①,
+    등록 API는 후속 과제) — 조회만 한다."""
     return repository.get_public_data_source(conn, source_id)
 
 
@@ -77,7 +77,7 @@ def _derive_region_item(payload: dict) -> tuple[str | None, str | None]:
 
 def _fetch_kma_live(kma_key: str, *, timeout: float = 3.0) -> dict:
     """실제 기상청 단기예보 조회서비스 호출. 오프라인 기본 경로가 아니므로
-    (CLAUDE.md §7 "네트워크 필수 의존 금지") `KMA_API_KEY`가 있을 때만
+    ("네트워크 필수 의존 금지") `KMA_API_KEY`가 있을 때만
     시도되고, 실패하면 호출자가 목업으로 폴백한다."""
     url = f"{_KMA_URL}?authKey={kma_key}&dataType=JSON&numOfRows=100&pageNo=1"
     req = urllib.request.Request(url, headers={"User-Agent": "siap-reference/1.0"})
@@ -92,9 +92,9 @@ def fetch_public_data(conn: sqlite3.Connection, *, source_id: str | None = None,
     이 결과의 `payload`를 읽는다.
 
     반환: (PublicDataRecord, fallback). `fallback=True`면 목업을 썼다 —
-    `Health.public_data_fallback`(API 명세서 §5)가 이 값을 그대로 노출한다.
+    `Health.public_data_fallback`가 이 값을 그대로 노출한다.
 
-    API 스레드 소유(아키텍처 §4.4-a③) — 외부 HTTP 호출이 SIAP I/O 스레드를
+    API 스레드 소유 — 외부 HTTP 호출이 SIAP I/O 스레드를
     막으면 안 된다."""
     source = get_source(conn, source_id) if source_id else default_source(conn)
     if source is None:

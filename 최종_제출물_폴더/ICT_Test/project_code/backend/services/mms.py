@@ -1,12 +1,12 @@
 """
 backend/services/mms.py — TTAK.KO-10.0937 6.3 MMS(모델관리서비스) / 부속서 A 3.2.
 
-담당 조항: 6.3-1·2·3·4·5·6·10 · A.3-3·5·6 (0937_요구사항_대조표.md §4.1)
+담당 조항: 6.3-1·2·3·4·5·6·10 · A.3-3·5·6
 진입점: get_model · run_model · draft_rule · approve_rule · reject_rule
 
 승인 게이트는 `backend/schema.sql`의 CHECK·트리거 8종이 이미 봉인했다
  — 이 모듈은 그 게이트를 "시도조차
-못 하게" 감싸기만 하고, 우회 경로를 새로 만들지 않는다(CLAUDE.md §1-7).
+못 하게" 감싸기만 하고, 우회 경로를 새로 만들지 않는다.
 AI 초안은 `approved_at`이 NULL인 동안 `action_json`·`target_install_id`를
 절대 가질 수 없다 — DB가 구조로 강제하므로 이 파일은 그 사실을 다시
 검사하지 않는다.
@@ -74,7 +74,7 @@ def _extract_tmax(payload: dict) -> float | None:
 def _threshold_draft(model, inputs: dict) -> str:
     """0937 6.3-6 내장 실행 방법(`exec_method='threshold'`). `llm_draft`의
     폴백 경로이기도 하다( THRESHOLD_FALLBACK) — 생성형 AI 없이도
-    오프라인에서 항상 결과를 낸다(CLAUDE.md §7).
+    오프라인에서 항상 결과를 낸다.
 
     `inputs['forecast_payload']`는 `api.py`가 `dms.fetch_public_data()`
     결과에서 채워 넘긴다(6.3-4 "사전 획득 방식") — 이 함수는 공공데이터를
@@ -86,7 +86,7 @@ def _threshold_draft(model, inputs: dict) -> str:
     기준을 서버 코드 수정 없이 요청마다 바꿀 수 있다. 권장 조치 문구는
     모델의 `output_spec.recommend_action`을 그대로 쓴다(6.3-2 "출력값"
     메타정보) — 송풍기·냉난방기 등 다른 장치를 위한 모델을 추가할 때도
-    `control_model` 행 하나만 새로 등록하면 된다(CLAUDE.md §0 주장 3).
+    `control_model` 행 하나만 새로 등록하면 된다(주장 3).
     """
     payload = inputs.get("forecast_payload")
     tmax = _extract_tmax(payload) if isinstance(payload, dict) else None
@@ -105,12 +105,12 @@ def _threshold_draft(model, inputs: dict) -> str:
 
 
 def _try_llm_draft(inputs: dict) -> str | None:
-    """생성형 AI 제공자 연동 시도. API 명세서 §6 "생성형 AI 제공자·프롬프트:
+    """생성형 AI 제공자 연동 시도. "생성형 AI 제공자·프롬프트:
     기능 3 구현 시. fixtures 폴백 필수" — 이 참조 구현은 실제 제공자를
-    붙이지 않는다(CLAUDE.md §4.1 "의존성 최소화", 새 패키지는 사용자 확인
+    붙이지 않는다("의존성 최소화", 새 패키지는 사용자 확인
     필수). 제공자 키가 있어도 항상 `None`을 돌려 호출자가 threshold로
     폴백하게 한다 — 미승인 AI 규칙이 구동기로 전달되는 경로를 만들지
-    않는다는 원칙(CLAUDE.md §1-7)은 이 함수가 무엇을 하든 DB CHECK가
+    않는다는 원칙은 이 함수가 무엇을 하든 DB CHECK가
     이미 지킨다: `control_rule.action_json`은 승인 전까지 항상 NULL이다."""
     del inputs  # 이 참조 구현 범위에서는 사용하지 않는다
     return None
@@ -144,7 +144,7 @@ def draft_rule(conn: sqlite3.Connection, *, origin: str, model_id: str | None = 
     클라이언트가 보낸 문구를 그대로 AI 산출물로 저장하지 않는다.
 
     `action`·`target_install_id`는 이 함수의 인자에 아예 없다 — 받지
-    않으므로 실을 수도 없다(API 명세서 §4.2, `RuleDraftRequest`)."""
+    않으므로 실을 수도 없다(`RuleDraftRequest`)."""
     if origin == "AI_DRAFT":
         if not model_id:
             raise ValueError("origin=AI_DRAFT 는 model_id 가 필수다")
@@ -166,7 +166,7 @@ def approve_rule(conn: sqlite3.Connection, rule_id: str, *, user_id: str,
     """`POST /api/v1/rules/{id}/approve` — 0937 부속서 A 3.2 절차 3 "사용자는
     최종 의사결정 후 제어 조건 조정을 한다". 조건식·명령·대상·승인자·
     승인시각을 한 번의 UPDATE로 동시에 채운다 — 부분 승인 상태가 없다
-    (API 명세서 §4.2)."""
+."""
     rule = repository.get_control_rule(conn, rule_id)
     if rule is None:
         raise RuleNotFound(f"control_rule {rule_id} 없음")
@@ -189,7 +189,7 @@ def approve_rule(conn: sqlite3.Connection, rule_id: str, *, user_id: str,
 
 
 def reject_rule(conn: sqlite3.Connection, rule_id: str, *, user_id: str, reason: str):
-    """`POST /api/v1/rules/{id}/reject` —. 거부도 승인과 대칭으로
+    """`POST /api/v1/rules/{id}/reject`. 거부도 승인과 대칭으로
     영속·불변이다(0937 부속서 A 3.2 절차 3 "조정"에는 반려가 포함된다)."""
     rule = repository.get_control_rule(conn, rule_id)
     if rule is None:

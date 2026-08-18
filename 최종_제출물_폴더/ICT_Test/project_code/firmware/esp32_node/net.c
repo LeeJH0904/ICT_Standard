@@ -1,6 +1,6 @@
 /*
  * esp32_node/net.c — 순수 C. f32 비트 인코딩 · ADC 변환 · 재접속 백오프 산술만.
- * WiFi/WiFiClient API(C++)는 esp32_node.ino 가 부른다(§7.4). 그래서 플랫폼 헤더가
+ * WiFi/WiFiClient API(C++)는 esp32_node.ino 가 부른다. 그래서 플랫폼 헤더가
  * 없고 C 로 컴파일된다.
  *
  * 함수 이름은 board_/siap_ 접두사만 쓴다 — ESP-IDF 는 `esp_` 접두사를, lwIP 는
@@ -11,7 +11,7 @@
 #include <stdint.h>
 #include <string.h>
 
-/* IEEE-754 single 비트열 인코딩 (CLAUDE.md §3.5 FLOAT 결정). */
+/* IEEE-754 single 비트열 인코딩 (FLOAT 결정). */
 uint32_t siap_f32_bits(float v) {
     uint32_t bits;
     memcpy(&bits, &v, sizeof bits);
@@ -30,7 +30,7 @@ float board_conv_co2(uint16_t adc) {
 }
 
 /* 물리 재접속 백오프 — 1·2·4·8s, 상한 8s. board 의 TCP 재시도 간격이며, core
- * 상태 머신의 DISCONNECTED 백오프(§6.5)와는 계층이 다르다(그건 프로토콜 타이머). */
+ * 상태 머신의 DISCONNECTED 백오프와는 계층이 다르다(그건 프로토콜 타이머). */
 uint32_t board_backoff_ms(uint8_t shift) {
     uint32_t s = (shift >= 3u) ? 8u : (1u << shift);
     return s * 1000u;

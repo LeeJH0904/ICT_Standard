@@ -5,7 +5,7 @@
 
 `SiapLink`·`FrameBuilder`는 실제 프로토콜 계층(`siap/`) 대신
 `contracts/fake_link.py`의 대역체를 쓴다 — `backend/`는 애초에 `siap/`를
-import하지 않으므로(CLAUDE.md §2.2) 이 테스트도 그 경계를 넘지 않는다.
+import하지 않으므로 이 테스트도 그 경계를 넘지 않는다.
 """
 from __future__ import annotations
 
@@ -89,7 +89,7 @@ def _register_device_install(tmp_path, node_id=3, device_id=1, subtype=0x85, kin
 
 # ── system ──────────────────────────────────────────────────────────────
 
-def test_health_7_0937_6_3(app):                                    # 아키텍처 §6.3
+def test_health_7_0937_6_3(app):
     r = call(app, "GET", "/api/v1/health")
     assert r.status_code == 200
     body = r.json()

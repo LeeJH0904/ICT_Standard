@@ -1,9 +1,9 @@
-"""siap/codec.py 검증 — 골든 벡터 53건 왕복 + Value 범위(/047/055/058).
+"""siap/codec.py 검증 — 골든 벡터 53건 왕복 + Value 범위 검사.
 
-개발_착수_지시서 §3.5 출구 ① `pytest siap/tests/`. C 호스트 테스트
+C 호스트 테스트
 (`firmware/tests/test_golden.c`)와 같은 골든 파일을 읽어, 같은 판정을
 Python 쪽에서도 내리는지 확인한다 — 같은 명세서를 두 번 타이핑해 같은
-결과가 나오는지가 교차 검증이다(CLAUDE.md §6.2).
+결과가 나오는지가 교차 검증이다.
 """
 from __future__ import annotations
 
@@ -104,7 +104,7 @@ def test_encode_rejects_headerless_frame_f215():
         codec.encode_frame(frame)
 
 
-# ── pack_value / unpack_value 경계값 (/047/055/058) ───────────────
+# ── pack_value / unpack_value 경계값 ───────────────
 
 def test_pack_int_boundaries():
     assert codec.pack_int(-(2 ** 31)) == 0x80000000
@@ -204,7 +204,7 @@ def _golden_bytes(vector_id: str) -> bytes:
 
 
 def test_decoder_classifies_sequential_injected_violations_f146():
-    """시연 시나리오 §3.1 S4-b 순서(X01→X03→X05)를 한 스트림에
+    """S4-b 순서(X01→X03→X05)를 한 스트림에
     이어 붙여 먹여도 셋 다 개별적으로 분류돼야 한다. 이전에는 X01 위반
     직후 재동기 모드에 들어간 뒤, X03·X05 자신의 헤더가 (각자의 위반
     때문에) 4조건 재동기 게이트를 통과하지 못해 노이즈로 오인되어
@@ -253,7 +253,7 @@ def test_decoder_resync_does_not_mistake_stray_version_byte_for_new_header_f151(
 def test_decoder_resync_still_classifies_unregistered_node_after_violation_f151():
     """ 수정이 X02(Node ID 만 미등록, 나머지 구조는 전부 정상)를
     다시 삼키지 않는지 확인한다 — Node ID 조건을 무조건 거부로 쓰면
-    시연 시나리오 §3.1 몽타주(X02 가 다른 위반 직후 연쇄 주입될 때)에서
+    몽타주(X02 가 다른 위반 직후 연쇄 주입될 때)에서
     INVALID_NODE_ID 자체가 재동기 노이즈로 오인돼 사라진다. Node ID 만
     미등록이고 resolve_kind·Transmission Type·element_count 가 전부
     자기충족적으로 유효하면 후보로 인정해야 한다."""

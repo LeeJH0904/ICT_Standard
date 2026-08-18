@@ -1,8 +1,8 @@
 /*
- * 노드 상태 머신 호스트 유닛테스트. 펌웨어 설계서 §6 / §8.1.
+ * 노드 상태 머신 호스트 유닛테스트..
  * siap_io_t/siap_dev_ops_t 를 페이크로 채워 하드웨어 없이 8상태 전이 ·
- * pending 재전송(§6.4) · due 회전 커서(§6.4-a) · RES_SET_CONNECTION 오류
- * RSC 분류(§6.5) 를 검증한다(CLAUDE.md §0 "하드웨어 없이 표준 준수를
+ * pending 재전송 · due 회전 커서 · RES_SET_CONNECTION 오류
+ * RSC 분류 를 검증한다("하드웨어 없이 표준 준수를
  * 검증할 수 있다").
  *
  * 실행: cd project_code/firmware/tests && make test_node_state && ./test_node_state
@@ -107,7 +107,7 @@ static void rx_append(fake_io_t *io, const siap_enc_t *e)
     for (size_t i = 0; i < n && io->rx_len < FIO_BUF; i++) io->rx[io->rx_len++] = e->win[i];
 }
 
-/* TX_WINDOW(51B, siap_frame.h)는 헤더+요소 하나분이다(§5.8) — N개 DEVICE_PROPERTY
+/* TX_WINDOW(51B, siap_frame.h)는 헤더+요소 하나분이다 — N개 DEVICE_PROPERTY
    를 한 인코더 버퍼에 다 쌓을 수 없다. 청크(헤더+RSC+NP, 그 다음 요소마다 1개)
    단위로 리셋·재사용하며 rx 큐에 이어 붙인다. */
 static void push_res_set_connection(fake_io_t *io, uint32_t gcg, uint32_t nid, uint16_t msg_id,
@@ -182,7 +182,7 @@ static siap_hdr_t decode_tx_hdr(const fake_io_t *io)
     return h;
 }
 
-/* pending 이 빌 때까지 매 회 즉시 ACK 를 돌려주며 poll 한다(§6.2-a(2)).
+/* pending 이 빌 때까지 매 회 즉시 ACK 를 돌려주며 poll 한다.
    회전 커서가 한 번에 due 소스 하나씩만 보내므로, 같은 "지금 시각"
    안에서 여러 개가 밀려 있으면 이 루프가 전부 소진시킨다. */
 static void drain_pending_with_ack(siap_node_t *node, fake_io_t *io, uint32_t gcg, uint32_t nid,
@@ -317,7 +317,7 @@ static void fixture_run_to_running(fixture_t *f)
 }
 
 /* ═══════════════════════════════════════════════════════════════
- *  1. 초기화 검증 — 펌웨어 설계서 §4.1-a 진입점 범위 검증표
+ *  1. 초기화 검증 — 진입점 범위 검증표
  * ═══════════════════════════════════════════════════════════════ */
 static void test_init_validation_4_1_a(void)
 {
@@ -372,7 +372,7 @@ static void test_init_validation_4_1_a(void)
 }
 
 /* ═══════════════════════════════════════════════════════════════
- *  2. 연결 설정 — 8.1.1 / §6.1 / §6.5
+ *  2. 연결 설정 — 8.1.1
  * ═══════════════════════════════════════════════════════════════ */
 static void test_boot_to_connecting_sends_req_8_1_1(void)
 {
@@ -405,7 +405,7 @@ static void test_connecting_retryable_rsc_waits_for_timeout_6_5(void)
     siap_node_poll(&f.node);
     check("6_5: INVALID_NODE_ID(재시도 가능) 수신 직후에도 CONNECTING 유지",
           f.node.state == SIAP_NS_CONNECTING);
-    check("6_5: msg_id 즉시 바뀌지 않음(Timeout 후 재송신, §6.4)",
+    check("6_5: msg_id 즉시 바뀌지 않음(Timeout 후 재송신)",
           f.node.pending.msg_id == mid1);
 
     f.io.tx_len = 0;
@@ -445,11 +445,11 @@ static void test_connecting_unretryable_rsc_halts_6_5_F076(void)
 }
 
 /* ═══════════════════════════════════════════════════════════════
- *  3. 주기 알림 회전 — §6.4-a ( 재현 방지)
+ *  3. 주기 알림 회전 — ( 재현 방지)
  * ═══════════════════════════════════════════════════════════════ */
 static void test_periodic_rotation_no_starvation_6_4_a_100cycles(void)
 {
-    fixture_t f; fixture_boot(&f, 1, 60);   /* Period 60s == Keep Alive 60s(§6.3) */
+    fixture_t f; fixture_boot(&f, 1, 60);   /* Period 60s == Keep Alive 60s */
     fixture_run_to_running(&f);
     check("6_4_a: RUNNING 진입", f.node.state == SIAP_NS_RUNNING);
 
@@ -464,7 +464,7 @@ static void test_periodic_rotation_no_starvation_6_4_a_100cycles(void)
 }
 
 /* ═══════════════════════════════════════════════════════════════
- *  4. 디바이스 오류 — 8.2.1.1 / §6.1
+ *  4. 디바이스 오류 — 8.2.1.1
  * ═══════════════════════════════════════════════════════════════ */
 static void test_fault_enter_and_recover_8_2_1_1(void)
 {
@@ -482,7 +482,7 @@ static void test_fault_enter_and_recover_8_2_1_1(void)
     /* 매 60s 마다 한 번만 poll 하는 이 테스트는 30s 주기의 Notify Error
        Interval 을 그 사이에서 "이미 지난" 상태로 처음 관측하므로, 같은
        due_tick 안에서 오류 알림이 한 번 더 걸릴 수 있다 — pending 이 완전히
-       빌 때까지 ACK 로 소진한다(§6.2-a(2), drain_pending_with_ack 재사용). */
+       빌 때까지 ACK 로 소진한다(drain_pending_with_ack 재사용). */
     int err_count = 0;
     drain_pending_with_ack(&f.node, &f.io, GCG, NID, NULL, NULL, &err_count);
     check("8_2_1_1: 오류 알림 소진 후에도 FAULT 유지(오류 미해소)", f.node.state == SIAP_NS_FAULT);
@@ -513,7 +513,7 @@ static void test_noti_disconnect_ack_then_reconnect_8_2_1_3(void)
     push_empty(&f.io, SIAP_NOTI_DISCONNECT, GCG, NID, 500);
     siap_node_poll(&f.node);
     siap_hdr_t h = decode_tx_hdr(&f.io);
-    check("8_2_1_3: NOTI_DISCONNECT 수신 -> 즉시 ACK 회신(§6.2-a(1))",
+    check("8_2_1_3: NOTI_DISCONNECT 수신 -> 즉시 ACK 회신",
           h.msg_type == siap_wire_code(SIAP_ACK, SIAP_MODE_STRICT) && h.msg_id == 500);
     check("8_2_1_3: DISCONNECTED 로 전이", f.node.state == SIAP_NS_DISCONNECTED);
 
@@ -522,7 +522,7 @@ static void test_noti_disconnect_ack_then_reconnect_8_2_1_3(void)
     check("8_2_1_3: 백오프 후 CONNECTING 재시도", f.node.state == SIAP_NS_CONNECTING);
 }
 
-/* §6.2-a(1)의 상태 게이트 선행 규칙을 NOTI_REBOOT에도 적용한다.
+/*  상태 게이트 선행 규칙을 NOTI_REBOOT에도 적용한다.
    BOOT/INIT는 한 poll 안에서 CONNECTING으로 진행하므로, 수신 가능한 안정 상태
    5종을 전부 검사하고 HALTED가 유일한 예외임을 별도로 고정한다. */
 static void check_noti_reboot_ack_in_state(siap_node_state_t state, uint16_t msg_id,
@@ -615,7 +615,7 @@ static void test_reboot_completes_on_retry_exhaustion_8_1_6(void)
 }
 
 /* ═══════════════════════════════════════════════════════════════
- *  7. 구동기 제어 — §6.6 (유일한 actuation 경로)
+ *  7. 구동기 제어 — (유일한 actuation 경로)
  * ═══════════════════════════════════════════════════════════════ */
 static void test_device_control_write_path_6_6(void)
 {
@@ -655,7 +655,7 @@ static void test_device_control_write_path_6_6(void)
 }
 
 /* ═══════════════════════════════════════════════════════════════
- *  8. 링크 오류 — §6.2 마지막 행
+ *  8. 링크 오류 — 마지막 행
  * ═══════════════════════════════════════════════════════════════ */
 static void test_link_error_disconnects(void)
 {
@@ -696,7 +696,7 @@ static void test_device_specific_period_scheduling_F130(void)
     f.io.tx_len = 0;
     f.io.now = 60000u;   /* device_id=2 의 Period(60s) 도 이번엔 함께 도래 —
                              Keep Alive Interval 기본값도 60s 라 due 회전
-                             커서(§6.4-a)가 그걸 먼저 집을 수 있다. due_send_next
+                             커서가 그걸 먼저 집을 수 있다. due_send_next
                              는 한 poll 에 한 소스만 보내므로, DEVICE_VALUE 가
                              나올 때까지 다른 소스를 ACK 로 흘려보낸다. */
     siap_node_poll(&f.node);
@@ -754,7 +754,7 @@ static void test_event_only_fault_detection_F130(void)
 }
 
 /* ═══════════════════════════════════════════════════════════════
- *  10. RES_SET_CONNECTION 오류 RSC 9종 전량(§6.5 표 전체)
+ *  10. RES_SET_CONNECTION 오류 RSC 9종 전량(표 전체)
  * ═══════════════════════════════════════════════════════════════ */
 static void _check_rsc_outcome(const char *tag, siap_rsc_t rsc, bool retryable)
 {
@@ -851,7 +851,7 @@ static void test_msg_id_wraps_to_zero_not_one_F135(void)
 
 /* 연결 성공 직후 노드가 REQ_SET_NODE_DEVICE_PROPERTY_ALL(8.1.3.3)로
    자기 디바이스 구성을 선언한다. REQ_SET_CONNECTION(8.1.1)은 페이로드가 없어
-   (LAYOUT (0,0)) 이 역할을 못 한다. pending 에 실려 RES 수신까지 §6.4 재전송
+   (LAYOUT (0,0)) 이 역할을 못 한다. pending 에 실려 RES 수신까지 재전송
    타이머가 재시도하고, RES_SET_NODE_DEVICE_PROPERTY_ALL(SUCCESS) 로 멈춘다.
    DP/NP 의 바이트 폭·순서 자체는 test_golden.c(C↔골든 벡터)와
    xcodec_verify(C↔Python sim/_wire) 가 이미 대조한다 — 여기서는 "선언이
@@ -918,7 +918,7 @@ static void test_connection_declares_node_device_property_all_F198(void)
 
 int main(void)
 {
-    printf("노드 상태 머신 호스트 유닛테스트 (펌웨어 설계서 §6)\n\n");
+    printf("노드 상태 머신 호스트 유닛테스트 \n\n");
 
     test_init_validation_4_1_a();
     test_boot_to_connecting_sends_req_8_1_1();

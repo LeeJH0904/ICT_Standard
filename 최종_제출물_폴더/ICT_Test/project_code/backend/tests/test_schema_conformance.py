@@ -1,15 +1,13 @@
 """
-backend/tests/test_schema_conformance.py — DB 스키마 설계서 §6.2 (표준 유래
-제약 동작 테스트 98종)을 pytest로 이식한 것이다(개발 착수 지시서 §3.7).
+backend/tests/test_schema_conformance.py — 표준 유래
+제약 동작 테스트를 pytest로 이식한 것이다.
 
-정본은 `project_docs/db/verify.py` — 이 파일은 그 케이스 목록을 **같은
+이 파일은 제약 케이스 목록을 **같은
 내용으로 다시** 만든다(같은 명세서를 두 번 타이핑해 같은 판정이 나오는지가
-교차 검증이다, CLAUDE.md §6.2와 같은 원칙). `project_code/`는 `project_docs/`
-를 import하지 않으므로(CLAUDE.md §2.2) 케이스를 공유 모듈로 빼지 않고
-독립적으로 다시 적는다. 대상 스키마는 `project_code/backend/schema.sql`
-(`project_docs/db/schema.sql`과 동기).
+교차 검증이다, 골든 벡터 분리 원칙과 같은 원칙). 케이스를 공유 모듈로 빼지 않고
+독립적으로 다시 적는다. 대상은 `project_code/backend/schema.sql`이다.
 
-CLAUDE.md §3.2 — 테스트 함수명에 조항 번호를 넣는다. 98건을 손으로 각각
+테스트 함수명에 조항 번호를 넣는다. 전체 케이스를 손으로 각각
 def 하는 대신, 아래 케이스 표에서 **실제 개별 pytest 함수를 생성**한다 —
 `pytest --collect-only`에 98개의 개별 이름(조항 번호 포함)이 그대로 뜬다.
 """
@@ -606,7 +604,7 @@ _case("임계 알림은 프레임 없이 허용", "0937 부속서A 1.3",
 
 
 # ═══════════════════════════════════════════════════════════════
-#  케이스 → 실제 pytest 함수 생성 (CLAUDE.md §3.2 — 함수명에 조항 번호)
+#  케이스 → 실제 pytest 함수 생성 (함수명에 조항 번호)
 # ═══════════════════════════════════════════════════════════════
 
 def _slug(name: str, clause: str) -> str:
@@ -648,12 +646,12 @@ for _name, _clause, _fn, _expect_fail in _CASES:
 
 
 def test_case_count_matches_design_doc_109():
-    """DB 스키마 설계서 §6.2 — "109종 109/109 통과"(당시 98종 —
+    """케이스 수를 대조한다(당시 98종 —
     로 설치일자 NOT NULL·model_name UNIQUE 검사 2건 추가, 이어서로
     설치일자 빈 문자열 차단 검사 1건으로 설치일자 형식(ISO 8601)
     검사 2건 추가, 당시 103종 —로 시간 형식(ISO 8601) 검사를
     installed_at 하나에서 created_at·updated_at·issued_at 등 나머지
     시간 컬럼으로 넓히며 5건 추가, 당시 108종 —로 장치정보
     장치특성 컬럼 존재 검사 1건 추가). 이 파일의 케이스 수가 어긋나면
-    설계서 수치가 낡았거나 이식이 누락된 것이다(류 재발 방지)."""
+    케이스 목록 반영이 누락된 것이다."""
     assert len(_CASES) == 109

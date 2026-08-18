@@ -1,5 +1,5 @@
 /*
- * bitpack.c/.h 호스트 유닛테스트. 펌웨어 설계서 §4.4 표의 케이스 1~10을
+ * bitpack.c/.h 호스트 유닛테스트. 표의 케이스 1~10을
  * 그대로 옮긴다(케이스 11 "반환값을 버리면 빌드 실패"는 이 실행 파일
  * 안에서 표현할 수 없다 — 그 자체가 컴파일을 막아야 하는 코드라서다.
  * 대신 firmware/tests/Makefile 의 -Werror=unused-result 가 상시 강제하며,
@@ -59,8 +59,8 @@ static void case_20bit_boundary_crossing(void)
           memcmp(buf, expect_msb_first, sizeof(expect_msb_first)) == 0);
 }
 
-/* 케이스 2b — 바이트 경계를 넘는 9bit 쓰기/읽기 (개발_착수_지시서
-   §3.2 ③이 "20bit·14bit·9bit" 세 폭을 각각 요구한다. 이전에는 9bit이
+/* 케이스 2b — 바이트 경계를 넘는 9bit 쓰기/읽기 (
+   ③이 "20bit·14bit·9bit" 세 폭을 각각 요구한다. 이전에는 9bit이
    전 폭 스윕(케이스 10)에만 있었는데, 거기서는 매 폭마다 bitpos=0에서
    시작해 9bit이 항상 바이트 정렬 위치에서만 쓰였다 — "bitpos%8!=0일
    때만 조용히 아무것도 안 쓰고 true를 반환하는" 결함은 그 경로로는

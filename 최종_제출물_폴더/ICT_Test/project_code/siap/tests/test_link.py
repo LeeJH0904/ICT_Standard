@@ -1,6 +1,6 @@
 """siap/link.py 통합 검증 — simulate 모드 소켓 왕복.
 
-실제 sim/virtual_node.py(단계 4)는 아직 없으므로, 여기서는 노드 역할을 하는
+실제 sim/virtual_node.py와 독립적으로, 여기서는 노드 역할을 하는
 얇은 TCP 서버를 테스트 안에서 직접 띄운다. 검증 대상은 link.py 의 배선
 (SIAP I/O 스레드가 REQ_SET_CONNECTION 을 자동 등록하고, send() 가 큐잉·매칭·
 타임아웃을 스레드 경계 너머로 올바르게 전달하는가)이다.
@@ -193,7 +193,7 @@ def test_req_set_connection_auto_registers(node_socket_pair):
 def test_recv_stamps_real_wall_clock_time_f203(node_socket_pair):
     """`decode_frame()` 은 `Frame.t` 를 채우지 않는다(순수 함수, 골든
     벡터 재생·단독 코덱 테스트의 결정론을 지키기 위해 의도적이다). 실제
-    수신 시각(Frame 구조 명세서 §3)은 I/O 스레드가 디코더에서 완결된 프레임을
+    수신 시각은 I/O 스레드가 디코더에서 완결된 프레임을
     받는 "지금"만 안다 — `_io_loop()` 이 `dataclasses.replace(frame, t=...)`
     로 그 시각을 채워야 한다. 이전에는 이 자리가 없어 `Frame.t` 기본값 0.0
     이 그대로 `frame_log.t`에 저장돼 모든 프레임·노드 시각이 1970년으로
