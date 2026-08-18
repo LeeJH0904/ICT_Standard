@@ -27,7 +27,7 @@
   <div class="verify-grid">
     <section class="panel verify-list-panel" aria-labelledby="inject-h list-h" data-state="loading">
       <div class="inject-controls">
-        <h2 id="inject-h">주입 8종 <span class="hint">(simulate · replay 모드에서만 동작)</span></h2>
+        <h2 id="inject-h">시나리오 주입 8종 <br><span class="hint">(simulate · replay mode only)</span></h2>
         <div class="inject-grid" id="inject-buttons"></div>
         <p id="inject-status" class="hint" role="status"></p>
       </div>
@@ -248,7 +248,7 @@ async function selectFrame(id) {
   renderFrameList();
   // getFrame(frameId) — 목록 항목도 전체 필드 분해를 담고 있지만, 선택
   // 시점의 최신 판정을 프레임 1건 상세 엔드포인트로 다시 확인한다
-  // (verify.html 읽기: listFrames·listViolations·getFrame).
+  // (화면_설계서.md §2.1 verify.html 읽기: listFrames·listViolations·getFrame).
   let frame = state.byId.get(id);
   try {
     frame = await api.getFrame(id);
@@ -304,14 +304,14 @@ function upsertFrame(frame) {
   return true;
 }
 
-// "누락 보정": 폴백 중 놓친 프레임은 재연결
+// F-200 — 화면_설계서.md §3.2 "누락 보정": 폴백 중 놓친 프레임은 재연결
 // 직후 listFrames?since= 로 채운다. onPollTick(loadFrames)은 폴백 중 매초
 // 최신 100건만 다시 그려 대체로 화면을 살아있게 유지하지만, 그 창(100건)을
 // 넘는 프레임이 끊긴 동안 도착했으면 poll 만으로는 영영 복구되지 않는다.
-// 재연결 시각(until)을 스냅샷으로 고정하고 total까지 offset 페이지를
+// F-205 — 재연결 시각(until)을 스냅샷으로 고정하고 total까지 offset 페이지를
 // 모두 소비해 "마지막으로 확인한 프레임 이후 전부"를 복구한다. 스냅샷 뒤
 // 프레임은 이미 다시 열린 SSE가 전달하므로 페이지 이동 중 삽입에도 흔들리지 않는다.
-// 최초 단절 순간의 마지막 연속 커서를 폴링 표시 목록과 분리한다.
+// F-233 — 최초 단절 순간의 마지막 연속 커서를 폴링 표시 목록과 분리한다.
 // 재연결 복구가 실패하면 다음 재연결에서도 같은 커서를 다시 사용한다.
 function pinRecoveryCursor() {
   if (state.recoverySince !== undefined) return;

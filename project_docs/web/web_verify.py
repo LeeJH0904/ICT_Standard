@@ -243,8 +243,8 @@ t("신규 경로가 표 7-15 사용자 지정 4필드만 받는다",
   _props == {"transfer_mode", "period_sec", "lower_value", "upper_value"}, str(sorted(_props)))
 t("신규 경로에 제어값(Value) 필드가 없다 (CLAUDE.md 1-7)",
   "value" not in _props and _sch.get("additionalProperties") is False)
-t("설계서가 표 7-15 8필드의 쓰기·읽기 구분을 표로 선언",
-  len(rows("| 표 7-15 필드 | 이 화면 | 이유 |", 3)) == 4)
+t("설계서가 표 7-15 8필드의 쓰기·읽기 구분을 표로 선언",  # 화면 축소로 3열→4열(화면/API 구분), 4행→5행
+  len(rows("| 표 7-15 필드 | 화면 | API(`DevicePropertyPatch`) | 이유 |", 4)) == 5)
 t("쓰기 경로 증가를 근거와 함께 적었다", "검증 표면" in DOC)
 
 # ═══════════════════════════════════════════════════════════════

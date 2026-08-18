@@ -1,20 +1,27 @@
-"""개발용 대역 SiapLink / FrameBuilder.
+"""개발용 대역 SiapLink — Frame_구조_명세서.md §7 "다음 단계" 1항.
 
-실제 게이트웨이(siap/link.py)가 없어도 backend/·web/ 이 `SiapLink` Protocol
-(contracts/siap_iface.py)에 기대어 작성·단위테스트될 수 있게 하는 대역체다.
-서비스 계층은 이 파일이 아니라 Protocol 만 참조하며, 이 파일은 그 Protocol 을
-구조적으로 만족하는 예시일 뿐 실제 실행 경로에 배선되지 않는다.
+실제 게이트웨이(siap/link.py, 단계 3에서 구현)가 아직 없어도 backend/·web/이
+`SiapLink` Protocol(contracts/siap_iface.py)에 기대어 작성·단위테스트될 수 있게
+하는 대역체다. 서비스 계층은 이 파일이 아니라 Protocol만 참조해야 하며(계층
+규칙, CLAUDE.md §2.2), 이 파일은 그 Protocol을 구조적으로 만족하는 예시일 뿐
+production 경로에 배선되지 않는다.
 
-합성 데이터(난수·주기함수로 만든 가짜 수치)를 만들지 않는다 — 상태 없는 빈
-registry 로 시작하며 어떤 수치도 꾸며내지 않는다. `FakeFrameBuilder` 는
-`FrameBuilder` Protocol 을 만족해, 실제 `siap/build.py` 없이도 `services/` 를
-단위테스트하게 한다.
+CLAUDE.md §1-1 — project_code/ 전체에서 합성 데이터(난수·주기함수로 만든 가짜
+수치)를 금지한다. 이 대역체는 상태를 갖지 않는 빈 registry로 시작하며, 어떤
+수치도 꾸며내지 않는다. 실제 프레임 흐름 검증은 골든 벡터를 재생하는
+sim/replayer.py(단계 4)의 몫이다.
+
+단계 6 — `FakeFrameBuilder`를 추가했다. `FrameBuilder` Protocol도
+`contracts/siap_iface.py`에 있어(§2.2가 backend/에 허용하는 두 참조 대상 중
+하나) `backend/tests/`·`tools/gate_e2e.py`·`tools/route_verify.py`가 실제
+`siap/build.py`(FrameBuilderImpl) 없이도 `services/fcs.py`·`services/ems.py`를
+단위테스트할 수 있다.
 """
 from __future__ import annotations
 
 from typing import Iterator
 
-try:                    # 패키지로 import될 때
+try:                    # F-025 — 패키지로 import될 때
     from .frame import (
         DeviceMainInfo, DeviceProperty, DevType, Frame, Header, LAYOUT, Mode,
         MsgKind, MsgControlProfile, NodeProperty, RSC, RESPONSE_OF, Status,
@@ -57,7 +64,7 @@ class FakeSiapLink:
 
     def recv(self) -> Iterator[Frame]:
         """대역체는 능동적으로 프레임을 만들어내지 않는다 — 빈 스트림.
-        노드 시뮬레이션이 필요하면 sim/virtual_node.py 를 쓴다."""
+        노드 시뮬레이션이 필요하면 sim/virtual_node.py(단계 4)를 쓴다."""
         return iter(())
 
     def send(self, frame: Frame, timeout: float | None = None) -> Frame | None:
@@ -72,7 +79,7 @@ class FakeSiapLink:
         from dataclasses import replace
         header = replace(
             frame.header,
-            msg_type=0,   # 실제 코드 배정은 siap/build.py 의 몫
+            msg_type=0,   # 실제 코드 배정은 siap/build.py(단계 3)의 몫
             payload_len=1,
         )
         return Frame(header=header, kind=res_kind, rsc=RSC.SUCCESS, raw=b"")
@@ -90,15 +97,16 @@ class FakeSiapLink:
 class FakeFrameBuilder:
     """`FrameBuilder` Protocol 을 만족하는 개발용/테스트용 대역.
 
-    실제 SIAP 인코딩 규칙(siap/build.py::FrameBuilderImpl)을 흉내내지 않는다 —
-    siap/ 내부 심볼은 여기서 참조할 수 없다(계층 규칙). 대신 `Frame` 객체의
-    형태(header.msg_id 발번, kind 채우기)만 맞춰 `services/`·`api.py` 가 실제
-    프로토콜 계층 없이 단위테스트되게 한다.
+    실제 SIAP 인코딩 규칙(siap/build.py::FrameBuilderImpl)을 흉내내지
+    않는다 — `siap.codec.SIAP_VERSION` 등 siap/ 내부 심볼은 여기서 참조할
+    수 없다(계층 규칙, CLAUDE.md §2.2). 대신 `Frame` 객체의 형태(header.msg_id
+    발번, kind 채우기)만 맞춰 `services/`·`api.py` 가 실제 프로토콜 계층 없이
+    단위테스트되게 한다.
 
     `device_control()` — 실물 `FrameBuilderImpl`은 대상 (node_id, device_id)의
-    실제 Type/Subtype 을 `NodeRegistry` 에서 찾아 채운다(임의 종류로 대체하지
-    않는다). 이 대역체도 같은 원칙을 지킨다 — `device_kinds`에 미리 등록해 두지
-    않은 (node_id, device_id) 로 호출하면 예외를 낸다."""
+    실제 Type/Subtype 을 `NodeRegistry` 에서 찾아 채운다(F-137, 임의 종류로
+    대체하지 않는다). 이 대역체도 같은 원칙을 지킨다 — `device_kinds`에
+    미리 등록해 두지 않은 (node_id, device_id) 로 호출하면 예외를 낸다."""
 
     def __init__(self, gcg_id: int = 1) -> None:
         self._gcg_id = gcg_id
@@ -113,7 +121,7 @@ class FakeFrameBuilder:
 
     def _header(self, kind: MsgKind, node_id: int, payload_len: int) -> Header:
         # msg_type 은 실제 전송 코드가 아니라 자리표시(0) — 실제 배정은
-        # siap/build.py 의 몫이다. FakeSiapLink.send() 와 같은 원칙.
+        # siap/build.py(단계 3)의 몫이다. FakeSiapLink.send() 와 같은 원칙.
         return Header(version=0x12, msg_type=0, trans_type=int(TransType.UNICAST),
                       msg_id=self._next_id(), payload_len=payload_len,
                       gcg_id=self._gcg_id, node_id=node_id)
@@ -134,7 +142,7 @@ class FakeFrameBuilder:
             if kind is None:
                 raise ValueError(
                     f"FakeFrameBuilder.device_control(node_id={node_id}): "
-                    f"device_id={device_id} 가 device_kinds 에 없다 — 테스트가 먼저 등록해야 한다"
+                    f"device_id={device_id} 가 device_kinds 에 없다 — 테스트가 먼저 등록해야 한다 (F-137과 같은 원칙)"
                 )
             dev_type, subtype = kind
             infos.append(DeviceMainInfo(device_id=device_id, dev_type=dev_type,

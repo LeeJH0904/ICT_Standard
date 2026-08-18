@@ -1,14 +1,14 @@
 """
-sim/replayer.py — `replay` 모드 TCP 서버.
+sim/replayer.py — `replay` 모드 TCP 서버 (아키텍처 설계서 §5.3~§5.4).
 
 `socket://127.0.0.1:5555`로 게이트웨이가 클라이언트로 접속하면, 로그
 파일의 `dir=="rx"` 레코드는 원래 간격을 정규화해 그대로 흘려보내고,
 `dir=="tx"` 레코드는 같은 시점의 게이트웨이 실제 송신과 바이트 대조한다.
 
-`dir=="tx"` 레코드는 주입하지 않는다. 그 레코드는 "그 세션에서 게이트웨이가
-실제로 보냈던 바이트"이지 재생 입력이 아니다. 무시하면 과거의
-`RES_SET_CONNECTION`이 현재 세션의 수신으로 들어와 `INVALID_NODE_ID` 같은 조작
-없는 위반이 발생한다.
+F-042 — `dir=="tx"` 레코드는 주입하지 않는다. 그 레코드는 "그 세션에서
+게이트웨이가 실제로 보냈던 바이트"이지 재생 입력이 아니다(아키텍처
+설계서 §5.4-a). 무시하면 과거의 `RES_SET_CONNECTION`이 현재 세션의
+수신으로 들어와 `INVALID_NODE_ID` 같은 조작 없는 위반이 발생한다.
 """
 from __future__ import annotations
 
@@ -61,7 +61,7 @@ class Replayer:
                 except (json.JSONDecodeError, ValueError) as exc:
                     raise ValueError(f"{self._log_path.name}:{lineno}: {exc}") from exc
                 d = rec.get("dir")
-                if d == "rx":                        # tx는 주입하지 않는다
+                if d == "rx":                        # F-042 — tx는 주입하지 않는다
                     records.append(rec)
                 elif d == "tx":
                     records.append(rec)
@@ -105,8 +105,8 @@ class Replayer:
             try:
                 self._play(conn)
             except Exception as exc:
-                # daemon 작업 스레드의 traceback은 호출자에게 전달되지 않는다.
-                # 오류를 명시적으로 보관하고 done과 함께 공개한다.
+                # F-219 — daemon 작업 스레드의 traceback은 호출자에게 전달되지
+                # 않는다. 오류를 명시적으로 보관하고 done과 함께 공개한다.
                 self.error = exc
             # 마지막 프레임을 보낸 직후 바로 close() 하면(그 다음 줄), 상대
             # 쪽 recv() 가 아직 커널 버퍼의 마지막 바이트를 읽지 않은
@@ -120,8 +120,9 @@ class Replayer:
             self.done.set()
 
     def _play(self, conn: socket.socket) -> None:
-        """`t`는 epoch 시각이다. 첫 레코드를 빼서 정규화하고 `time.monotonic()`
-        과 비교한다(`time.time()`을 쓰면 시스템 시계 조정에 재생이 튄다)."""
+        """§5.4 — `t`는 epoch 시각이다. 첫 레코드를 빼서 정규화하고
+        `time.monotonic()`과 비교한다(`time.time()`을 쓰면 시스템 시계
+        조정에 재생이 튄다)."""
         records = self._load_records()
         if not records:
             return

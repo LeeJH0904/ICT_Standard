@@ -2,10 +2,12 @@
 sim/golden_log.py — 실측 로그가 없는 단계에서 `replay` 모드가 재생할
 골든 벡터 기반 세션 로그를 만든다.
 
-실물 보드 통합 단계의 실측 캡처가 준비되기 전까지 `logs/`는 골든 벡터만 재생한다
-— 이 스크립트가 그 세션 로그를 만든다. 포맷은 `{"t","dir","hex"}`.
+개발 착수 지시서 §3.6 "하지 않을 것": "`logs/`는 단계 8의 실측 캡처로
+채운다. 그전까지는 **골든 벡터만 재생**한다." — 이 스크립트가 그 문장을
+실제 파일로 만든다. 아키텍처 설계서 §5.3의 포맷(`{"t","dir","hex"}`)을
+그대로 따른다.
 
-합성 금지는 **페이로드 바이트**(센서값 등)에 적용된다.
+합성 금지(CLAUDE.md §1-1)는 **페이로드 바이트**(센서값 등)에 적용된다.
 이 로그의 수신 payload는 전부 `golden.jsonl` 원본 그대로다. 기대 응답은
 골든 응답 payload를 쓰되 Message Identifier·GCG ID·Node ID를 바로 앞 RX와
 결속한다(7.2.2). 서로 무관한 골든 Request/Response의 헤더를 그대로 나열하면
@@ -24,9 +26,9 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 GOLDEN_PATH = REPO_ROOT / "contracts" / "vectors" / "golden.jsonl"
 DEFAULT_OUT = REPO_ROOT / "logs" / "session_00_golden.jsonl"
 
-#: 골든 벡터 dir("N->G"/"G->N") -> 세션 로그 dir("rx"/"tx"). 게이트웨이 관점:
-#: 노드가 보낸 것(N->G)이 게이트웨이의 수신(rx), 게이트웨이가 보낸 것(G->N)이
-#: 게이트웨이의 송신(tx).
+#: 골든 벡터 dir("N->G"/"G->N") -> 세션 로그 dir("rx"/"tx"). 아키텍처
+#: 설계서 §5.3 — 게이트웨이 관점: 노드가 보낸 것(N->G)이 게이트웨이의
+#: 수신(rx), 게이트웨이가 보낸 것(G->N)이 게이트웨이의 송신(tx).
 #: "양방향"은 매핑하지 않는다(의도적 — 위 모듈 docstring 참조).
 _DIR_MAP = {"N->G": "rx", "G->N": "tx"}
 
@@ -40,14 +42,14 @@ DEFAULT_VECTOR_IDS = [
     "N34",  # NOTI_DEVICE_VALUE — 센서값 통지 (DEVICE_MAIN_INFO x2)
     "N09",  # NOTI_KEEP_ALIVE
     "N33",  # NOTI_ERROR — 정상 오류 알림(위반 아님)
-    "X08",  # NOTI_ERROR — NEC=ERROR_BATTERY_LOW, judgement=alert(위반 아님)
+    "X08",  # NOTI_ERROR — NEC=ERROR_BATTERY_LOW, judgement=alert(위반 아님, F-060)
     "N17",  # RES_SET_DEVICE_CONTROL — 제어 응답
     "N07",  # NOTI_DISCONNECT — 정상 연결 해제
 ]
 
 
 def _default_session(by_id: dict[str, dict], interval: float) -> list[dict]:
-    """기본 벡터를 실제 양방향 세션으로 결속한다.
+    """기본 벡터를 실제 양방향 세션으로 결속한다(F-218).
 
     연결 응답의 본문은 런타임 기본 계약(Software Version=1, GCG/Node ID는
     요청값, NORMAL, N=0)으로 독립 구성하고 헤더는 N01과 상관관계를 맞춘다.

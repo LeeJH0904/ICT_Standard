@@ -1,18 +1,20 @@
 #ifndef SIAP_SUBTYPE_REGISTRY_H
 #define SIAP_SUBTYPE_REGISTRY_H
 /*
- * Subtype 코드 레지스트리 — 0943 표 7-14 의 Subtype(8bit).
+ * Subtype 코드 레지스트리 — SIAP 메시지 명세서 §5 / contracts/frame.py Subtype.
  *
- * 표 7-14 의 Subtype 각주는 [RUCFS-0009] 온실 관제 데이터 규격을 참조하나 해당
- * 규격을 확보하지 못했다. 따라서 항목 집합은 TTAK.KO-10.1369-Part1 6.3.3(센서)/
- * 6.3.4(액추에이터)에서 도출하고 코드값만 본 구현이 할당한다.
+ * 0943 표 7-14 의 Subtype(8bit)은 각주에서 [RUCFS-0009] 온실 관제 데이터 규격을
+ * 참조하도록 되어 있으나 해당 규격을 확보하지 못했다. 항목 집합은
+ * TTAK.KO-10.1369-Part1 6.3.3(센서)/6.3.4(액추에이터)에서 도출하고 코드값만
+ * 자체 할당한다 — 치환 지점 1/2 (다른 한 곳은 contracts/frame.py 의 Subtype).
  *
  * 최상위 비트로 센서(0x00~0x7F)/액추에이터(0x80~0xFF)를 구분한다.
  */
 #include <stdbool.h>
 #include <stdint.h>
 
-/* C++/Arduino 스케치에서 C 링키지로 호출할 수 있게 한다(bitpack.h 참조). */
+/* C++/Arduino 스케치에서 C 링키지로 부를 수 있게 한다(bitpack.h 주석 참조) —
+   C 컴파일 시엔 비활성, 언어 매크로라 core 순수성(§1-5)과 무관하다. */
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -49,8 +51,8 @@ static const uint8_t SIAP_SUBTYPE_TABLE[SIAP_SUBTYPE_COUNT] = {
     SIAP_SUBTYPE_IRRIGATION_PUMP, SIAP_SUBTYPE_IRRIGATION_VALVE, SIAP_SUBTYPE_COOLING_HEATER,
 };
 
-/* 미등록 Subtype 수신은 INVALID_DATA_SUBTYPE(0x07, 0943 7.3.1 / 표 7-14)로 판정한다.
-   16건이라 선형 탐색으로 충분하다(AVR 에서도 가볍다). */
+/* 미등록 Subtype 수신 시 INVALID_DATA_SUBTYPE (0x07, 7.3.1 / 표 7-14 근거) —
+   기능 2 위반 케이스 7번의 판정 근거. 선형 탐색이면 충분하다(16건, AVR 에서도 가볍다). */
 static inline bool siap_subtype_valid(uint8_t code) {
     for (uint8_t i = 0; i < SIAP_SUBTYPE_COUNT; i++) {
         if (SIAP_SUBTYPE_TABLE[i] == code) return true;
@@ -58,7 +60,8 @@ static inline bool siap_subtype_valid(uint8_t code) {
     return false;
 }
 
-/* 최상위 비트로 센서/액추에이터 구분 — DEVICE_MAIN_INFO.Type(표 7-14)과의 교차 대조에 쓴다. */
+/* 최상위 비트로 센서/액추에이터 구분 — DEVICE_MAIN_INFO.Type 과 중복되지만
+   검증(교차 대조)에 쓸 수 있다 (SIAP 메시지 명세서 §5). */
 static inline bool siap_subtype_is_actuator(uint8_t code) { return (code & 0x80u) != 0u; }
 
 #ifdef __cplusplus

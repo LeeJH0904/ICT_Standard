@@ -1,4 +1,4 @@
-// a11y.js — 라이브 리전 · 포커스 관리 (WCAG 2.1 AA)
+// a11y.js — 라이브 리전 · 포커스 관리 (화면_설계서.md §1 static/a11y.js, §8 WCAG 2.1 AA)
 
 /** #live(aria-live="polite")에 문장을 넣어 스크린리더에 알린다. §3.1 공통 셸. */
 export function announce(text) {

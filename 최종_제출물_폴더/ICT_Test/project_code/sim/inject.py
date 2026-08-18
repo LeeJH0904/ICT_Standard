@@ -1,18 +1,20 @@
 """
-sim/inject.py — 위반 프레임 주입.
+sim/inject.py — 위반 프레임 주입 (시연 시나리오 §3.1 S4-b, 개발 착수 지시서 §3.6).
 
-주입은 실제 바이트를 바꾼다 — `sim/inject.py`가 골든 벡터의 hex를 그대로 링크에
-흘려보내므로, 영상 속 hex와 제출 `golden.jsonl`의 hex가 같다.
+"주입은 실제 바이트를 바꾼다. 화면에 결과만 찍는 것이 아니라 `sim/inject.py`가
+골든 벡터의 hex를 그대로 링크에 흘려보낸다. 영상 속 hex와 제출 `golden.jsonl`의
+hex가 같아야 한다." — 시연 시나리오 §3.1.
 
-허용 대상은 위반 케이스 8종(`X01`~`X08`)뿐이다 — 자유 바이트열을 받으면 "주입
-결과가 골든 벡터와 같다"는 기능 2의 판정 근거가 사라지므로, 골든 ID로만 입력을
-제한한다.
+허용 대상은 CLAUDE.md §6.3 위반 케이스 8종(`X01`~`X08`)뿐이다 — 자유
+바이트열을 받으면 "주입 결과가 골든 벡터와 같다"는 기능 2의 판정 근거가
+사라진다(F-084 처리 기록과 동일한 이유로 이 파일도 골든 ID로만 입력을
+제한한다).
 
 두 가지 쓰임:
   1. 라이브러리 — `inject(vector_id, sock)` 을 직접 호출한다. 이미 열린
      소켓(게이트웨이와 연결된 소켓)에 골든 벡터의 원본 바이트를 그대로
-     쓴다. `sim/virtual_node.py`의 로컬 제어 채널과 `POST /api/v1/sim/inject`
-     가 둘 다 이 함수로 수렴한다.
+     쓴다. `sim/virtual_node.py`의 로컬 제어 채널과 단계 6의
+     `POST /api/v1/sim/inject`(F-084) 가 둘 다 이 함수로 수렴한다.
   2. CLI — `python -m sim.inject --vector X03` 은 `virtual_node.py`의
      제어 채널(기본 포트 5557)에 접속해 `INJECT X03`을 보낸다. 터미널에서
      또는 시연 리허설에서 웹 버튼 없이 주입을 재현할 때 쓴다.
@@ -26,8 +28,8 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 GOLDEN_PATH = REPO_ROOT / "contracts" / "vectors" / "golden.jsonl"
 
-#: 기능 2가 판정하는 위반 케이스 8종. 이 집합 밖의 ID는 거부한다 — 임의
-#: 바이트열 주입 경로를 만들지 않는다.
+#: CLAUDE.md §6.3 — 기능 2가 판정하는 위반 케이스 8종. 이 집합 밖의 ID는
+#: 거부한다(F-084 근거와 동일 — 임의 바이트열 주입 경로를 만들지 않는다).
 ALLOWED_VECTORS = frozenset(f"X0{i}" for i in range(1, 9))
 
 

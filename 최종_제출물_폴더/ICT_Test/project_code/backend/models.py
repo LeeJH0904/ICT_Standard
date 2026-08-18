@@ -1,13 +1,16 @@
 """
-backend/models.py — 읽기 전용 dataclass. ORM을 쓰지 않는다.
+backend/models.py — 읽기 전용 dataclass. ORM을 쓰지 않는다(CLAUDE.md §4.3).
 
-`schema.sql`이 정본이다. 이 파일은 그 행을 담는 그릇일 뿐 제약을 다시 정의하지
-않는다 — 스키마 무결성은 DB 제약에만 있다. 모든 dataclass는 `frozen=True`.
+`schema.sql`이 정본이다. 이 파일은 그 행을 담는 그릇일 뿐 제약을 다시
+정의하지 않는다 — 표준 해석은 프로토콜 계층에만 있고(CLAUDE.md §3.4),
+스키마 무결성은 DB 제약에만 있다. 모든 dataclass는 `frozen=True`.
 
 각 클래스는 `from_row(row: sqlite3.Row) -> Self`를 갖는다. `sqlite3.Row`는
-컬럼명으로 접근한다 — 위치 인덱스로 읽으면 컬럼 추가 시 조용히 깨진다.
+컬럼명으로 접근한다(db.py의 `row_factory=sqlite3.Row`) — 위치 인덱스로
+읽으면 컬럼 추가 시 조용히 깨진다(F-024/F-049류).
 
-테이블 31개 = A5 + B4 + C10 + D3 + E1 + F6 + G2.
+테이블 31개 = A5 + B4 + C10 + D3 + E1 + F6 + G2. DB 스키마 설계서 §2 순서를
+그대로 따른다.
 """
 from __future__ import annotations
 
@@ -62,7 +65,7 @@ class GreenhouseInfo:                              # A-2 — 6.2.3 / 7.2.2.3
     medium_type: str | None
     irrigation_type: str | None
     heating_type: str | None
-    crop: str | None                                # 생육작물 (1369-P1 6.2.3 본문)
+    crop: str | None                                # 생육작물 (6.2.3 본문, F-032 회귀)
     crop_season: str | None
     usage_state: str | None
 
@@ -86,7 +89,7 @@ class DeviceInfo:                                  # A-3 — 6.2.4 / 7.2.2.4
     device_kind: str
     model_name: str                                 # 불변, 전역 식별
     manufacturer: str | None
-    device_characteristics: str | None              # 장치특성 (1369-P1 6.2.4)
+    device_characteristics: str | None              # 장치특성 (F-185)
 
     @classmethod
     def from_row(cls, row: sqlite3.Row) -> "DeviceInfo":
@@ -101,7 +104,7 @@ class DeviceInstallInfo:                           # A-4 — 6.2.5 / 7.2.2.5 (+0
     created_at: str
     updated_at: str
     device_name: str
-    installed_at: str                                 # 설치일자 (1369-P1 6.2.5)
+    installed_at: str                                 # 설치일자 (6.2.5, F-158)
     install_location: str | None
     install_loc_unit: str | None
     device_info_id: str
@@ -433,14 +436,14 @@ class ControlRule:                                 # F-4 — 0937 6.3 / 부속�
     model_id: str | None
     created_at: str
     origin: str                                      # AI_DRAFT / WIZARD / SCRIPT
-    generation: str | None                           # AI / THRESHOLD_FALLBACK / WIZARD / SCRIPT
+    generation: str | None                           # AI / THRESHOLD_FALLBACK / WIZARD / SCRIPT (F-083)
     draft_text: str
     condition_expr: str | None
     action_json: str | None
-    target_install_id: str | None                    # 승인된 제어 대상 장치
+    target_install_id: str | None                    # F-049
     approved_at: str | None
     approved_by: str | None
-    rejected_at: str | None                          # 거부도 영속 상태다
+    rejected_at: str | None                          # F-083
     rejected_by: str | None
     reject_reason: str | None
 
@@ -490,7 +493,7 @@ class Alert:                                       # F-6 — 0937 6.4 FMS / 6.5 
     siap_nec: int | None
     message: str
     ack_at: str | None
-    frame_id: str | None                              # NEC 알림 결속
+    frame_id: str | None                              # F-085 — NEC 알림 결속
 
     @classmethod
     def from_row(cls, row: sqlite3.Row) -> "Alert":
@@ -516,7 +519,7 @@ class FrameLog:                                    # G-1
     gcg_id: int | None
     node_id: int | None
     is_valid: bool
-    elements_json: str | None = None   # device_main_infos/device_properties 그대로
+    elements_json: str | None = None   # F-187 — device_main_infos/device_properties 그대로
 
     @classmethod
     def from_row(cls, row: sqlite3.Row) -> "FrameLog":
@@ -541,8 +544,9 @@ class FrameViolation:                              # G-2 — 화면에 조항 �
                     row["clause"], row["detail"])
 
 
-# 31개 = A5 + B4 + C10 + D3 + E1 + F6 + G2 — schema.sql 의 테이블명 → dataclass 매핑.
-# 정본은 schema.sql 이며 이 표는 매핑일 뿐이다.
+# 31개 = A5 + B4 + C10 + D3 + E1 + F6 + G2 — fix_log/meta_verify.py, tools/db_live_verify.py
+# 가 schema.sql 의 테이블 목록과 이 표를 대조한다(디렉터리 전수, 이름 고정 금지 원칙은
+# 검증기 쪽 책임이고 여기는 목록 자체가 정본이 아니라 매핑일 뿐이다).
 TABLE_MODEL: dict[str, type] = {
     "farm_info": FarmInfo,
     "greenhouse_info": GreenhouseInfo,

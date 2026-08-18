@@ -1,16 +1,24 @@
 """
 sim/_wire.py — 가상 노드 전용 독립 SIAP 바이트 인코더/디코더.
 
-`sim/virtual_node.py`가 만드는 프레임은 `siap/codec.py`를 재사용하지 않고 이
-파일이 독립적으로 만든다 — 같은 코덱을 쓰면 인코더 버그가 서로 상쇄되어 드러나지
-않기 때문이다. 그래서 비트 패킹 기법도 의도적으로 다르게 짠다: `codec.py`는 바이트
-배열에 비트 포인터를 옮겨가며 쓰지만, 이 파일은 파이썬 big int 누산기 하나에
-필드를 왼쪽으로 밀어 넣는다. 결과 바이트는 같아야 하지만 그 결과에 이르는 절차는
-다르다(이 동일성 대조 자체가 상호운용성 증거다).
+아키텍처 설계서 §5.5: "`sim/virtual_node.py`가 노드 3종을 흉내낸다.
+**`siap/codec.py`를 재사용하지 않고 독립적으로 프레임을 만든다** — 같은
+코덱을 쓰면 인코더 버그가 상쇄되어 드러나지 않는다."
 
-`sim/` 전용이다 — `siap/`·`backend/`는 이 파일을 참조하지 않는다. 인코딩 규칙:
-big-endian(network byte order), FLOAT는 IEEE-754 single precision 4byte, 가변
-요소 개수 N은 Payload Length 역산.
+그래서 이 파일은 `project_code/siap/codec.py`를 import 하지 않고, 비트
+패킹 기법도 의도적으로 다르게 짠다 — `codec.py`의 `BitWriter`/`BitReader`는
+바이트 배열에 비트 포인터를 옮겨가며 쓰지만, 이 파일은 파이썬 big int
+누산기 하나에 필드를 왼쪽으로 밀어 넣는다. 결과 바이트는 같아야 하지만
+(그래야 `tools/xcodec_verify.py`류의 교차검증이 의미가 있다), 그 결과에
+이르는 절차는 다르다.
+
+`sim/` 전용이다 — `siap/`·`backend/`는 이 파일을 참조하지 않는다
+(CLAUDE.md §2.2 계층 규칙과 무관하게,애초에 `siap/codec.py`가 정본이고
+이 파일은 정본을 흉내 내는 테스트 더블이다).
+
+인코딩 규칙은 CLAUDE.md §3.5 그대로 따른다: big-endian(network byte
+order), FLOAT는 IEEE-754 single precision 4byte, 가변 요소 개수 N은
+Payload Length 역산.
 """
 from __future__ import annotations
 
@@ -19,16 +27,18 @@ from dataclasses import dataclass
 
 # ═══════════════════════════════════════════════════════════════
 #  wire code — 표 7-2/7-3/7-4 (strict 모드). contracts/frame.py::WIRE_CODE
-#  와 값은 같을 수밖에 없다(같은 표준 조항의 결과) — 여기서는 그 표를 import
-#  하지 않고 이 파일 안에서 다시 적는다(독립 재기술).
+#  와 값은 같을 수밖에 없다(같은 표준 조항의 결과) — 여기서는 그 표를
+#  import 하지 않고 이 파일 안에서 다시 적는다(독립 재기술).
 # ═══════════════════════════════════════════════════════════════
 MT_REQ_SET_CONNECTION = 0x0000       # 표 7-2, 8.1.1
-MT_REQ_SET_NODE_DEVICE_PROPERTY_ALL = 0x0005  # 표 7-2, 8.1.3.3 (노드→GCG)
+MT_REQ_SET_DEVICE_PROPERTY = 0x0004  # 표 7-2, 8.1.3.2 (GCG→노드, 양방향, F-241)
+MT_REQ_SET_NODE_DEVICE_PROPERTY_ALL = 0x0005  # 표 7-2, 8.1.3.3 (노드→GCG, F-198)
 MT_REQ_SET_DEVICE_CONTROL = 0x000C   # 표 7-2, 8.1.5
 MT_RES_SET_CONNECTION = 0x0400       # 표 7-3
+MT_RES_SET_DEVICE_PROPERTY = 0x0404  # 표 7-3, 8.1.3.2 (F-241)
 MT_RES_SET_NODE_DEVICE_PROPERTY_ALL = 0x0405  # 표 7-3, 8.1.3.3
 MT_RES_SET_DEVICE_CONTROL = 0x040C   # 표 7-3
-MT_NOTI_DEVICE_VALUE = 0x0800        # 표 7-4 (NOTI_ERROR 와 코드 중복)
+MT_NOTI_DEVICE_VALUE = 0x0800        # 표 7-4 (NOTI_ERROR 와 코드 중복 — F-001)
 MT_NOTI_DISCONNECT = 0x0801          # 표 7-4
 MT_NOTI_KEEP_ALIVE = 0x0803          # 표 7-4
 MT_ACK = 0x0C00                      # 6.2.2
@@ -54,9 +64,11 @@ TM_BOTH = 0x02
 STATUS_NORMAL = 0x00                 # 표 7-13/7-15 Status
 
 HEADER_BYTES = 12                    # 96bit, 그림 7-1
-NP_BYTES = 8                         # 64bit, 표 7-13. REQ_SET_NODE_DEVICE_PROPERTY_ALL 의 고정부.
+NP_BYTES = 8                         # 64bit, 표 7-13 — F-198 이전에는 "이 파일에서는
+                                      # 미사용"이었다(REQ_SET_CONNECTION 은 페이로드가
+                                      # 없다). REQ_SET_NODE_DEVICE_PROPERTY_ALL 의 고정부로 쓴다.
 DMI_BYTES = 7                        # 56bit, 표 7-14
-DP_BYTES = 30                        # 240bit, 표 7-15
+DP_BYTES = 30                        # 240bit, 표 7-15 (F-198)
 RSC_BYTES = 1
 
 
@@ -176,7 +188,7 @@ def decode_dmi(data: bytes) -> WireDMI:
 
 
 # ═══════════════════════════════════════════════════════════════
-#  NODE_PROPERTY (표 7-13, 64bit) · DEVICE_PROPERTY (표 7-15, 240bit)
+#  NODE_PROPERTY (표 7-13, 64bit) · DEVICE_PROPERTY (표 7-15, 240bit) — F-198
 # ═══════════════════════════════════════════════════════════════
 @dataclass(frozen=True)
 class WireNP:
@@ -196,13 +208,13 @@ def encode_np(n: WireNP) -> bytes:
 
 @dataclass(frozen=True)
 class WireDP:
-    """USER DEPENDENT 5필드(lower/upper_value·lower/upper_limit·precision)는
-    main.value_type 을 따른다. 이 필드들은 이미 그 규칙대로 packing된 32bit raw
-    값을 받는다 — WireDMI.value 와 같은 관례(INT 는 2의 보수, FLOAT 는
-    `float_to_raw()` 결과를 호출부가 미리 넣는다)."""
+    """F-022 — USER DEPENDENT 5필드(lower/upper_value·lower/upper_limit·
+    precision)는 main.value_type 을 따른다. 이 필드들은 이미 그 규칙대로
+    packing된 32bit raw 값을 받는다 — WireDMI.value 와 같은 관례
+    (INT 는 2의 보수, FLOAT 는 `float_to_raw()` 결과를 호출부가 미리 넣는다)."""
     main: WireDMI
     transfer_mode: int      # 2bit — TM_PERIODIC/TM_EVENT/TM_BOTH
-    period: int              # 14bit — sec
+    period: int              # 14bit — sec (CLAUDE.md §3.5, F-033 과 같은 단위 결정)
     lower_value: int         # 32bit raw
     upper_value: int         # 32bit raw
     lower_limit: int         # 32bit raw
@@ -212,8 +224,8 @@ class WireDP:
 
 
 def encode_dp(d: WireDP) -> bytes:
-    """siap/codec.py::encode_dp() 와 같은 필드 순서·비트폭이지만 독립 구현이다
-    (인코더 버그 상쇄 방지, 이 파일 머리말 참고)."""
+    """siap/codec.py::encode_dp() 와 같은 필드 순서·비트폭이지만 독립
+    구현이다(§5.5 원칙 — 인코더 버그 상쇄 방지, 이 파일 머리말 참고)."""
     w = _Writer()
     w.put(d.main.device_id, 8).put(d.main.dev_type, 1).put(d.main.subtype, 8)
     w.put(d.main.value_type, 2).put(0, 5)               # Reserved — 송신 시 0
@@ -223,6 +235,36 @@ def encode_dp(d: WireDP) -> bytes:
     w.put(d.lower_limit & 0xFFFFFFFF, 32).put(d.upper_limit & 0xFFFFFFFF, 32)
     w.put(d.precision & 0xFFFFFFFF, 32).put(d.status, 8)
     return w.bytes()
+
+
+def decode_dp(data: bytes) -> WireDP:
+    """encode_dp() 의 역연산(F-241) — 게이트웨이가 보낸 REQ_SET_DEVICE_PROPERTY
+    의 DEVICE_PROPERTY 1개(240bit)를 읽는다. 필드 순서·비트폭은 encode_dp 와
+    대칭이다. USER DEPENDENT 5필드는 32bit raw 그대로 담는다(재해석은 호출부)."""
+    if len(data) < DP_BYTES:
+        raise ValueError(f"DEVICE_PROPERTY 는 {DP_BYTES}byte 필요, 실제 {len(data)}byte")
+    r = _Reader(data[:DP_BYTES])
+    device_id = r.get(8)
+    dev_type = r.get(1)
+    subtype = r.get(8)
+    value_type = r.get(2)
+    r.get(5)                                             # Reserved — 수신 시 무시
+    value = r.get(32)
+    transfer_mode = r.get(2)
+    period = r.get(14)
+    lower_value = r.get(32)
+    upper_value = r.get(32)
+    lower_limit = r.get(32)
+    upper_limit = r.get(32)
+    precision = r.get(32)
+    status = r.get(8)
+    return WireDP(
+        main=WireDMI(device_id, dev_type, subtype, value_type, value),
+        transfer_mode=transfer_mode, period=period,
+        lower_value=lower_value, upper_value=upper_value,
+        lower_limit=lower_limit, upper_limit=upper_limit,
+        precision=precision, status=status,
+    )
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -238,8 +280,9 @@ def build_req_set_connection(msg_id: int, gcg_id: int, node_id: int) -> bytes:
 def build_req_set_node_device_property_all(msg_id: int, gcg_id: int, node_id: int,
                                             node_property: WireNP, devices: list[WireDP]) -> bytes:
     """8.1.3.3 — 노드→GCG. 노드가 자신의 전체 디바이스 구성(NODE_PROPERTY +
-    DEVICE_PROPERTY×N)을 선언한다. `REQ_SET_CONNECTION`은 페이로드가 없어 이
-    역할을 할 수 없다 — 연결 성공 직후 세션마다 1회 이 메시지로 선언한다."""
+    DEVICE_PROPERTY×N)을 선언한다(F-198). `REQ_SET_CONNECTION`은 페이로드가
+    없어 이 역할을 할 수 없다 — CLAUDE.md §3.5 결정: 연결 성공 직후 세션마다
+    1회 이 메시지로 선언한다."""
     body = encode_np(node_property) + b"".join(encode_dp(d) for d in devices)
     h = WireHeader(version=0x12, msg_type=MT_REQ_SET_NODE_DEVICE_PROPERTY_ALL,
                    trans_type=TRANS_UNICAST, msg_id=msg_id, payload_len=len(body),
@@ -270,6 +313,16 @@ def build_res_set_device_control(msg_id: int, gcg_id: int, node_id: int, rsc: in
     return encode_header(h) + body
 
 
+def build_res_set_device_property(msg_id: int, gcg_id: int, node_id: int, rsc: int = RSC_SUCCESS) -> bytes:
+    """8.1.3.2 — 속성 설정 요청에 대한 응답(F-241). RSC 1byte 뿐. 게이트웨이의
+    응답 매칭(F-046)이 Node ID + Message Identifier + Message Type 셋을 보므로
+    REQ 의 msg_id 를 그대로 복사한다(build_res_set_device_control 과 같은 관례)."""
+    body = _Writer().put(rsc, 8).bytes()
+    h = WireHeader(version=0x12, msg_type=MT_RES_SET_DEVICE_PROPERTY, trans_type=TRANS_UNICAST,
+                   msg_id=msg_id, payload_len=len(body), gcg_id=gcg_id, node_id=node_id)
+    return encode_header(h) + body
+
+
 # ═══════════════════════════════════════════════════════════════
 #  가상 노드가 실제로 읽는 프레임 4종 — RES_SET_CONNECTION /
 #  RES_SET_NODE_DEVICE_PROPERTY_ALL / ACK / REQ_SET_DEVICE_CONTROL
@@ -283,8 +336,8 @@ def decode_res_set_connection(payload: bytes) -> int:
 
 
 def decode_res_set_node_device_property_all(payload: bytes) -> int:
-    """RSC 1byte 만 본다 — `decode_res_set_connection()`과 같은 이유로 그 이상을
-    재해석하지 않는다."""
+    """RSC 1byte 만 본다(F-198) — `decode_res_set_connection()`과 같은
+    이유로 그 이상을 재해석하지 않는다."""
     if not payload:
         raise ValueError("RES_SET_NODE_DEVICE_PROPERTY_ALL payload 가 비어 있음(RSC 최소 1byte 필요)")
     return payload[0]
@@ -296,3 +349,14 @@ def decode_req_set_device_control(payload: bytes) -> list[WireDMI]:
         raise ValueError(f"REQ_SET_DEVICE_CONTROL payload 길이({len(payload)})가 "
                           f"{DMI_BYTES}의 배수가 아님")
     return [decode_dmi(payload[i:i + DMI_BYTES]) for i in range(0, len(payload), DMI_BYTES)]
+
+
+def decode_req_set_device_property(payload: bytes) -> list[WireDP]:
+    """DEVICE_PROPERTY × N (N = payload_len // 30, F-241). 게이트웨이가
+    부분 패치도 완전한 DEVICE_PROPERTY 로 채워 보낸다(ems._build_device_property) —
+    노드는 transfer_mode·period·lower_value·upper_value 만 읽고, REQ 의
+    lower_limit·upper_limit·precision 은 0 이므로 무시한다."""
+    if len(payload) % DP_BYTES:
+        raise ValueError(f"REQ_SET_DEVICE_PROPERTY payload 길이({len(payload)})가 "
+                          f"{DP_BYTES}의 배수가 아님")
+    return [decode_dp(payload[i:i + DP_BYTES]) for i in range(0, len(payload), DP_BYTES)]

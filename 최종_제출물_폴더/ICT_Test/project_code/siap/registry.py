@@ -7,14 +7,14 @@ siap/registry.py — 노드 세션 (in-memory). TTAK.KO-10.0943 8.1.1 절차의 
 
 `backend/`의 `device_install*` 테이블(1369-P1 대응, 영구 저장)과는 별개다 —
 이건 "지금 이 프로세스가 이번 실행에서 본 노드"만 아는 프로토콜 계층 전용
-런타임 세션이다. `siap/`는 `backend/`를 import하지 않으므로, 이 파일은 그
-계층 규칙 안에서 성립하는 가장 얇은 조회 테이블이다.
+런타임 세션이다. `siap/`는 `backend/`를 import하지 않는다(CLAUDE.md §2.2) —
+이 파일은 그 규칙 안에서 성립하는 가장 얇은 조회 테이블이다.
 """
 from __future__ import annotations
 
 import threading
 
-try:                    # 패키지로 import될 때
+try:                    # F-025 — 패키지로 import될 때
     from contracts.frame import DeviceMainInfo, DeviceProperty, NodeProperty
 except ImportError:     # 스크립트로 직접 실행되거나 project_code 가 sys.path 밖일 때
     import pathlib
@@ -26,8 +26,8 @@ except ImportError:     # 스크립트로 직접 실행되거나 project_code �
 class NodeRegistry:
     """스레드 안전한 in-memory 노드 세션 테이블.
 
-    쓰기 주체는 SIAP I/O 스레드(link.py) 하나뿐이다 — "쓰기 소유권은 테이블
-    단위" 원칙을 이 좁은 테이블에도 그대로 적용한다.
+    쓰기 주체는 SIAP I/O 스레드(link.py) 하나뿐이다 — 아키텍처 설계서 §4.4의
+    "쓰기 소유권은 테이블 단위" 원칙을 이 좁은 테이블에도 그대로 적용한다.
     다른 스레드(API)는 registry()/devices() 로 조회만 한다."""
 
     def __init__(self) -> None:
@@ -37,9 +37,9 @@ class NodeRegistry:
         self._device_properties: dict[int, tuple[DeviceProperty, ...]] = {}
 
     def is_known(self, node_id: int) -> bool:
-        """codec.decode_frame() 의 node_known 콜백으로 주입된다(위반 2 판정).
-        codec 은 registry 를 직접 import 하지 않고 link.py 가 이 메서드를
-        콜백으로 넘긴다."""
+        """codec.decode_frame() 의 node_known 콜백으로 그대로 주입된다
+        (위반 2 판정, F-060 — codec 은 registry 를 직접 import 하지 않고
+        link.py 가 이 메서드를 콜백으로 넘긴다)."""
         with self._lock:
             return node_id in self._nodes
 
@@ -61,7 +61,7 @@ class NodeRegistry:
 
     def merge_device_properties(self, node_id: int, devices: tuple[DeviceProperty, ...],
                                  *, replace: bool) -> None:
-        """`REQ_SET_NODE_DEVICE_PROPERTY_ALL`(8.1.3.3, 노드→GCG)·
+        """F-198 — `REQ_SET_NODE_DEVICE_PROPERTY_ALL`(8.1.3.3, 노드→GCG)·
         `REQ_SET_DEVICE_PROPERTY`(8.1.3.2, 노드→GCG) 처리 완료 시 호출한다.
         `register()`는 `REQ_SET_CONNECTION`(8.1.1) 성공 시에만 노드 자체를
         등록할 뿐 — 그 프레임은 페이로드가 없어(`LAYOUT[REQ_SET_CONNECTION]
@@ -73,7 +73,7 @@ class NodeRegistry:
         기존 목록에 병합한다(표에 없는 기존 디바이스는 유지). 미등록 노드는
         조용히 무시한다 — `register()`와 같은 원칙, 그 판정은
         `codec.decode_frame()`의 `INVALID_NODE_ID` 위반이 이미 내렸어야
-        한다."""
+        한다(CLAUDE.md §3.4)."""
         with self._lock:
             if node_id not in self._nodes:
                 return
@@ -90,14 +90,15 @@ class NodeRegistry:
     def update_node(self, node: NodeProperty) -> None:
         """REQ_SET_NODE_PROPERTY(8.1.3.1 역방향) 등으로 등록된 노드의 속성만
         갱신한다. 미등록 노드는 조용히 무시한다 — 그 판정(INVALID_NODE_ID)은
-        codec.decode_frame() 이 이미 내렸어야 한다(표준 해석은 프로토콜 계층에만 둔다)."""
+        codec.decode_frame() 이 이미 내렸어야 한다(표준 해석은 프로토콜
+        계층에만, CLAUDE.md §3.4)."""
         with self._lock:
             if node.node_id in self._nodes:
                 self._nodes[node.node_id] = node
 
     def replace_node_and_device_properties(
             self, node: NodeProperty, devices: tuple[DeviceProperty, ...]) -> None:
-        """REQ_SET_NODE_DEVICE_PROPERTY_ALL 성공 효과를 한 잠금에서
+        """F-213 — REQ_SET_NODE_DEVICE_PROPERTY_ALL 성공 효과를 한 잠금에서
         반영한다. 노드 속성과 전체 디바이스 목록 사이의 부분 관측을 막는다."""
         with self._lock:
             if node.node_id not in self._nodes:

@@ -125,7 +125,7 @@ import { connectStream } from "./static/stream.js";
 import { announce, setConnStatus, setViewState } from "./static/a11y.js";
 import { formatDateTime, hex, escapeHtml } from "./static/fmt.js";
 
-const USER_ID = "demo-user-1"; // localhost 단일 사용자 데모 범위 (X-User-Id 헤더)
+const USER_ID = "demo-user-1"; // localhost 단일 사용자 데모 범위 (openapi.json UserIdHeader 설명)
 
 const state = { pending: [], approved: [], executions: [], deviceOptions: [], deviceLabels: new Map(), sourcesById: new Map() };
 
@@ -141,7 +141,7 @@ function actionSummary(a) {
   return `${a.value_type} ${a.value}${a.duration_sec != null ? ` (${a.duration_sec}초)` : ""}`;
 }
 
-// 아래 세 카드 함수는 서버가 돌려준 자유 텍스트(draft_text·
+// F-199 — 아래 세 카드 함수는 서버가 돌려준 자유 텍스트(draft_text·
 // condition_expr·reject_reason 등)를 innerHTML 템플릿에 그대로 꽂았다 —
 // 저장형 DOM 주입이 가능했다. 텍스트 노드·속성값 어느 쪽에 들어가는
 // 필드든 신뢰할 수 없는 문자열은 escapeHtml() 을 거친다. id 류(rule.id·
@@ -367,7 +367,7 @@ document.getElementById("draft-form").addEventListener("submit", async (ev) => {
   try {
     const created = await api.createRuleDraft(body);
     // getRule(ruleId) — 생성 응답을 그대로 믿지 않고 저장된 값을 다시 읽어
-    // 확인한다(읽고-쓰기 확인).
+    // 확인한다(읽고-쓰기 확인, 화면_설계서.md §2.1 rules.html 읽기 칸).
     const rule = await api.getRule(created.id);
     statusEl.textContent = `초안이 생성되었습니다 (${rule.generation ?? rule.origin}).`;
     announce("규칙 초안이 생성되었습니다. 사람 검토가 필요합니다.");

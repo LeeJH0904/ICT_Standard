@@ -1,16 +1,28 @@
 -- =============================================================================
---  데모 시드 데이터 — 농장 1 / 온실 1 / 사용자 1 (고정값). 기동 시 1회 적재된다.
+--  데모 시드 데이터 — 농장 1 / 온실 1 / 사용자 1 (고정값)
+--  DB 스키마 설계서 §7.4, 아키텍처 설계서 §4.4-a "① 시드 로더 — 기동 시 1회"
 --
---  이 파일이 쓰는 테이블(farm_info·greenhouse_info·user_info·greenhouse_own·
---  greenhouse_manage·control_model·public_data_source)은 이후 어느 스레드도
---  쓰지 않는다. `device_manage`·`config_change_log`는 시드에 두지 않는다 —
---  install_id/device_info_id가 가리킬 행이 시드 시점에는 아직 없고(장치는
---  런타임에 등록된다), 대신 `backend/ingest.py`가 장치 등록 시점에 채운다
---  (관리자는 그 장치가 설치된 온실의 관리자를 그대로 쓴다).
+--  이 파일이 쓰는 7개 테이블(farm_info·greenhouse_info·user_info·
+--  greenhouse_own·greenhouse_manage·control_model·public_data_source)은
+--  이후 어느 스레드도 쓰지 않는다(CLAUDE.md §2.2, 아키텍처 설계서
+--  §4.4-a①). `device_manage`(F-176)와 `config_change_log`(F-182)는 원래
+--  여기 있었지만 ②(SIAP I/O 스레드)로 옮겼다 — 둘 다 install_id/
+--  device_info_id가 가리킬 행이 시드 시점에는 아직 없고(장치는
+--  REQ_SET_CONNECTION으로 런타임에 등록된다), 그렇다고 시드에서 0행으로만
+--  두면 1369-P1 7.2.2.10/7.1(7)(장치 관리자) 또는 6.2.1(변경 이력)이 정상
+--  Plug & Play 경로에서 영구히 성립하지 않는다.
+--  `device_manage`는 `device_install_info`·`device_install`과 같은 트리거로
+--  `backend/ingest.py::_handle_device_property()`가 채운다(관리자는 그 장치가
+--  설치된 온실의 관리자를 그대로 쓴다). `config_change_log`는 그 함수가
+--  실제로 부르는 `backend/repository.py::get_or_create_device_info`·
+--  `upsert_device_install_info`가 CREATE/UPDATE 시점에 직접 남긴다.
+--  `control_model`·`public_data_source`도 같은 이유로 이 단계(backend/
+--  저장 계층)에서는 0행이다 — MMS·DMS 등록 API는 단계 6의 몫이다.
 --
---  식별자는 UUID 대신 사람이 읽을 수 있는 고정 문자열을 쓴다(재현성 — 심사자가
---  매 실행 같은 id로 조회·재현할 수 있어야 한다). ITU-T X.667 형식 강제는
---  런타임 발번(UUID4)의 책임이다(1369-P1 6.1).
+--  식별자는 UUID 대신 사람이 읽을 수 있는 고정 문자열을 쓴다(재현성 —
+--  심사자가 매 실행 같은 id로 조회·재현할 수 있어야 한다). ITU-T X.667
+--  형식 강제는 스키마가 아니라 런타임 발번(backend/repository.py의 UUID4)의
+--  책임이다(1369-P1 6.1).
 -- =============================================================================
 
 INSERT INTO user_info (id, created_at, updated_at, deleted_at, name, group_id, group_role)
@@ -57,15 +69,16 @@ VALUES ('demo-log-2', '2026-08-01T09:00:00+09:00', 'greenhouse_info', 'demo-gh-1
         '{"seed":"fixtures/seed.sql"}', 'demo-user-1', 1);
 
 -- =============================================================================
---  public_data_source · control_model (시드 전용, 조회 전용 참조).
---  0937 6.2-3/6.3-1 — 이 참조 구현은 등록을 시드로 하고 런타임 등록 API는 두지
---  않는다. backend/services/dms.py·mms.py가 이 두 시드를 조회한다.
+--  단계 6 추가 — public_data_source · control_model (아키텍처 §4.4-a① 시드 전용)
+--  0937 6.2-3/6.3-1 대조표: "등록은 fixtures/seed.sql" — 런타임 등록 API는
+--  없다(§5-2 후속 과제). backend/services/dms.py·mms.py는 이 두 시드를
+--  조회 전용으로 참조한다.
 -- =============================================================================
 
 -- F-1. 공공데이터 출처 — 0937 6.2 DMS "명칭·제공기관·등록일·갱신일 등 메타정보"
 --      기상청 단기예보 조회서비스(VilageFcstInfoService_2.0). API 키
 --      (환경변수 KMA_API_KEY) 부재 시 dms.py 가 fixtures/kma_forecast_mock.json
---      으로 자동 폴백한다.
+--      으로 자동 폴백한다(CLAUDE.md §7).
 INSERT INTO public_data_source (id, name, provider, registered_at, updated_at, source_url, license, scope)
 VALUES ('demo-pds-kma', '단기예보 조회서비스', '기상청',
         '2026-08-01T09:00:00+09:00', NULL,
@@ -75,10 +88,12 @@ VALUES ('demo-pds-kma', '단기예보 조회서비스', '기상청',
 -- F-3. 제어 모델 메타정보 — 0937 6.3 MMS "모델 명칭·입력값·출력값·실행방법·개발자".
 --      threshold: 내장 규칙(외부 호출 없음, 오프라인 기본 경로).
 --      llm_draft: 생성형 AI 초안 — 제공자 부재 시 mms.run_model() 이 threshold 로
---      자동 폴백한다(THRESHOLD_FALLBACK).
---      output_spec.recommend_action 이 권장 조치 문구의 정본이고(0937 6.3-2 "출력값"),
---      input_spec.crop_tmax_c 가 임계값의 정본이다(6.3-3 "입력값") — 작물·장치가
---      다른 모델을 추가할 때 이 두 값만 바뀌고 backend/ 코드는 바뀌지 않는다.
+--      자동 폴백한다(THRESHOLD_FALLBACK, F-083).
+-- F-190: output_spec.recommend_action 이 권장 조치 문구의 정본이다(6.3-2
+--        "출력값" 메타정보) — mms.py 소스에는 "관수"라는 글자가 없다.
+--        input_spec.crop_tmax_c 가 임계값의 정본이다(6.3-3 "입력값") —
+--        작물·장치가 다른 모델을 추가할 때 이 두 값만 바뀌고 backend/ 는
+--        한 줄도 바뀌지 않는다(CLAUDE.md §0 주장 3).
 INSERT INTO control_model (id, created_at, name, input_spec, output_spec, exec_method,
                             protocol, data_format, period_sec, developer)
 VALUES ('demo-model-threshold-tmax', '2026-08-01T09:00:00+09:00',

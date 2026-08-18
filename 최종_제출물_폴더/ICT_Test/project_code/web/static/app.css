@@ -1,8 +1,9 @@
-/* app.css — 공통 스타일 (WCAG 2.1 AA)
+/* app.css — 공통 스타일 (화면_설계서.md §1 static/app.css, §8 WCAG 2.1 AA)
  *
- * 대비 쌍(전경/배경) — WCAG 명도 대비를 만족하도록 고른 색:
- *   fg-page/bg-page  fg-muted/bg-page  fg-danger/bg-page
- *   fg-alert/bg-page fg-online/bg-page fg-badge/bg-badge
+ * CONTRAST-PAIRS: fg-page/bg-page fg-muted/bg-page fg-danger/bg-page
+ *                 fg-alert/bg-page fg-online/bg-page fg-badge/bg-badge
+ * tools/web_live_verify.py 가 위 줄을 읽어 각 쌍의 상대 휘도비를 계산한다
+ * (§8.3 8번 — "실제로 계산한다"). 쌍 이름을 바꾸면 이 주석도 함께 고친다.
  */
 
 :root {

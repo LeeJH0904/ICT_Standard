@@ -151,3 +151,72 @@ def test_control_list_is_atomic_when_later_device_is_invalid_f217():
     invalid = wire.WireDMI(99, wire.DEV_ACTUATOR, actuator.subtype, actuator.value_type, 1)
     assert _control(server, node.node_id, 4, [valid, invalid]) == wire.RSC_INVALID_DEVICE_ID
     assert actuator.value == before
+
+
+# ── F-241 — REQ_SET_DEVICE_PROPERTY(8.1.3.2) 수신 처리 ─────────────────────
+# 이 경로는 FakeLink 가 아니라 실제 virtual_node 를 대상으로 검증한다 —
+# settings 화면이 유일한 실행 모드(simulate)에서 동작하려면 게이트웨이가
+# 보낸 속성 설정에 노드가 실제로 RES 로 회신해야 하기 때문이다(F-241).
+def _dp_for(dev: "SimDevice", *, transfer_mode: int = wire.TM_EVENT,
+            period: int = 7, lower: int = 5, upper: int = 40) -> "wire.WireDP":
+    """게이트웨이(ems._build_device_property)가 보내는 REQ 형태를 흉내낸다 —
+    노드가 읽을 transfer_mode·period·lower/upper_value 만 채우고
+    lower_limit·upper_limit·precision 은 0(게이트웨이도 0으로 보낸다)."""
+    main = wire.WireDMI(dev.device_id, dev.dev_type, dev.subtype, dev.value_type, dev.value)
+    return wire.WireDP(
+        main=main, transfer_mode=transfer_mode, period=period,
+        lower_value=lower & 0xFFFFFFFF, upper_value=upper & 0xFFFFFFFF,
+        lower_limit=0, upper_limit=0, precision=0, status=wire.STATUS_NORMAL,
+    )
+
+
+def _set_property(server: VirtualNodeServer, node_id: int, msg_id: int,
+                  dps: list["wire.WireDP"]) -> tuple[int, int]:
+    conn = _CaptureSocket()
+    payload = b"".join(wire.encode_dp(d) for d in dps)
+    header = wire.WireHeader(
+        version=0x12, msg_type=wire.MT_REQ_SET_DEVICE_PROPERTY,
+        trans_type=wire.TRANS_UNICAST, msg_id=msg_id,
+        payload_len=len(payload), gcg_id=1, node_id=node_id,
+    )
+    server._handle(conn, header, payload)
+    assert conn.sent, "속성 설정 응답이 없다"
+    resp = wire.decode_header(conn.sent[0])
+    return resp.msg_type, conn.sent[0][wire.HEADER_BYTES]
+
+
+def test_device_property_applied_and_acked_f241():
+    server = VirtualNodeServer(port=0, control_port=None)
+    node = next(n for n in server._nodes if n.node_id == 3)
+    sensor = node.devices[0]
+    assert sensor.set_period is None            # 설정 전에는 미설정
+    msg_type, rsc = _set_property(server, 3, 1, [_dp_for(sensor)])
+    assert msg_type == wire.MT_RES_SET_DEVICE_PROPERTY    # 실제로 회신했다
+    assert rsc == wire.RSC_SUCCESS
+    # 노드가 설정을 실제로 받아들였다
+    assert sensor.set_transfer_mode == wire.TM_EVENT
+    assert sensor.set_period == 7
+    assert sensor.set_lower_value == 5
+    assert sensor.set_upper_value == 40
+
+
+def test_device_property_unregistered_node_rejected_f241():
+    server = VirtualNodeServer(port=0, control_port=None)
+    node = next(n for n in server._nodes if n.node_id == 3)
+    sensor = node.devices[0]
+    msg_type, rsc = _set_property(server, 0xABCDE, 1, [_dp_for(sensor)])
+    assert msg_type == wire.MT_RES_SET_DEVICE_PROPERTY
+    assert rsc == wire.RSC_INVALID_NODE_ID
+    assert sensor.set_period is None            # 미등록 노드 요청은 아무것도 바꾸지 않는다
+
+
+def test_device_property_list_is_atomic_when_device_missing_f241():
+    server = VirtualNodeServer(port=0, control_port=None)
+    node = next(n for n in server._nodes if n.node_id == 102)
+    real = node.devices[0]
+    missing = SimDevice(99, wire.DEV_SENSOR, real.subtype, real.value_type, 0)
+    msg_type, rsc = _set_property(server, 102, 1, [_dp_for(real), _dp_for(missing)])
+    assert msg_type == wire.MT_RES_SET_DEVICE_PROPERTY
+    assert rsc == wire.RSC_INVALID_DEVICE_ID
+    # 앞의 유효한 디바이스도 적용되지 않는다 — 전량 검증 후에만 반영(원자성)
+    assert real.set_period is None
