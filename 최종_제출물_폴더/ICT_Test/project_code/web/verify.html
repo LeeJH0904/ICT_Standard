@@ -100,6 +100,7 @@ const state = {
   frames: [],
   byId: new Map(),
   alertsByFrame: new Map(),
+  vectorByFrame: new Map(),   // 주입한 프레임 id → 골든 벡터 id(X0x) — 목록 라벨용
   selectedId: null,
   selectedFieldIdx: null,
   recoverySince: undefined,
@@ -115,9 +116,15 @@ function judgementMeta(j) {
 function frameListItemHtml(f) {
   const m = judgementMeta(f.judgement);
   const current = f.id === state.selectedId;
+  // 목록 라벨: 노드 번호 · (주입 골든벡터 X0x) · 프레임 종류. UUID 대신 사람이
+  // 읽을 수 있게 보여준다(원문 바이트는 클릭 시 hex 패널에서 확인).
+  const parts = [`Node ${f.header && f.header.node_id != null ? hex(f.header.node_id) : "?"}`];
+  const vec = state.vectorByFrame.get(f.id);
+  if (vec) parts.push(vec);
+  if (f.kind) parts.push(f.kind);
   return `<button type="button" class="frame-list-item status-line ${m.cls}" role="option"
       aria-selected="${current}" aria-current="${current}" data-id="${f.id}">
-    ${m.icon} ${f.id} — ${m.text} <span class="hint">(${formatDateTime(new Date(f.t * 1000).toISOString())})</span>
+    ${m.icon} ${parts.join(" · ")} — ${m.text} <span class="hint">(${formatDateTime(new Date(f.t * 1000).toISOString())})</span>
   </button>`;
 }
 
@@ -385,6 +392,7 @@ injectButtonsEl.querySelectorAll("button").forEach((btn) => {
     injectStatusEl.textContent = `${vectorId} 주입 중…`;
     try {
       const frame = await api.injectVector(vectorId, "demo-user-1");
+      state.vectorByFrame.set(frame.id, vectorId);   // 목록에 X0x 라벨을 달기 위해 기억한다
       upsertFrame(frame);
       selectFrame(frame.id);
       injectStatusEl.textContent = `${vectorId} 주입 완료 — ${judgementMeta(frame.judgement).text}`;

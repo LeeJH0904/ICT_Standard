@@ -181,6 +181,8 @@ h1, h2, h3 { line-height: 1.25; }
 .dev-spark { justify-self: end; display: inline-flex; align-items: center; }
 /* 구동기 상태·값 없음은 숫자 열을 왜곡하지 않게 값~그래프 열을 가로지른다. */
 .dev-value-span { grid-column: 2 / -1; justify-self: start; font-weight: 700; }
+/* 구동기 상태의 유효범위 괄호 부분은 굵기 해제(값과 구분). */
+.dev-range { font-weight: 400; }
 
 /* 스파크라인은 넘칠 때만 칸 폭에 맞춰 축소된다(viewBox 라 비율 유지). 평소엔 120px. */
 .spark { display: block; max-width: 100%; height: auto; }

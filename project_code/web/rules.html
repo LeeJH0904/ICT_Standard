@@ -127,7 +127,7 @@ import { formatDateTime, hex, escapeHtml } from "./static/fmt.js";
 
 const USER_ID = "demo-user-1"; // localhost 단일 사용자 데모 범위 (openapi.json UserIdHeader 설명)
 
-const state = { pending: [], approved: [], executions: [], deviceOptions: [], sourcesById: new Map() };
+const state = { pending: [], approved: [], executions: [], deviceOptions: [], deviceLabels: new Map(), sourcesById: new Map() };
 
 // listPublicDataSources — ①공공데이터 표가 source_id 대신 사람이 읽는
 // 이름·제공기관을 보이도록 출처 메타정보를 한 번 적재한다(0937 6.2).
@@ -206,7 +206,7 @@ function approvedCardHtml(rule) {
     <p class="badge normal">승인됨</p>
     <p class="hint">generation=${escapeHtml(rule.generation ?? "—")} · 승인자 ${escapeHtml(rule.approved_by ?? "—")} · ${formatDateTime(rule.approved_at)}</p>
     <p class="readonly-text">${escapeHtml(rule.draft_text)}</p>
-    <p>조건: ${escapeHtml(rule.condition_expr ?? "—")} / 명령: ${escapeHtml(actionSummary(rule.action))} / 대상: ${escapeHtml(rule.target_install_id)}</p>
+    <p>조건: ${escapeHtml(rule.condition_expr ?? "—")} / 명령: ${escapeHtml(actionSummary(rule.action))} / 대상: ${escapeHtml(installLabel(rule.target_install_id))}</p>
     <button type="button" class="primary run-rule" data-rule="${id}">실행</button>
     <p class="hint run-status" data-rule-status="${id}"></p>
   </article>`;
@@ -271,7 +271,7 @@ function renderApproved() {
 function renderExecutions() {
   const tbody = document.querySelector("#exec-table tbody");
   tbody.innerHTML = state.executions.map((e) => `<tr>
-    <td>${escapeHtml(e.origin)}</td><td>${escapeHtml(e.install_id)}</td><td>${escapeHtml(actionSummary(e.command))}</td>
+    <td>${escapeHtml(e.origin)}</td><td>${escapeHtml(installLabel(e.install_id))}</td><td>${escapeHtml(actionSummary(e.command))}</td>
     <td>${formatDateTime(e.issued_at)}</td>
     <td>${e.result_rsc_name ? `${escapeHtml(e.result_rsc_name)} (${hex(e.result_rsc)})` : "대기 중"}</td>
   </tr>`).join("");
@@ -291,11 +291,13 @@ function renderPublicData(items) {
 async function loadDeviceOptions() {
   const nodePage = await api.listNodes({ limit: 500 });
   const opts = [];
+  const labels = new Map();   // 모든 장치 id → 라벨(대상 표시용, 센서 포함)
   for (const n of nodePage.items) {
     const devPage = await api.listNodeDevices(n.node_id);
     // 제어 대상은 구동기(ACTUATOR)뿐 — 센서를 고르면 노드가 INVALID_DEVICE_TYPE
     // 로 거부한다. 각 항목에 허용 범위·정밀도를 실어 힌트·검증에 쓴다.
     for (const d of devPage.items) {
+      labels.set(d.id, `${d.device_name} (${d.subtype ?? d.id})`);
       if (d.device_kind !== "ACTUATOR") continue;
       opts.push({ id: d.id, label: `${d.device_name} (${d.subtype ?? d.id})`,
                   lower: d.lower_limit, upper: d.upper_limit, precision: d.precision_val,
@@ -303,11 +305,14 @@ async function loadDeviceOptions() {
     }
   }
   state.deviceOptions = opts;
+  state.deviceLabels = labels;
   const sel = document.getElementById("manual-device");
   sel.innerHTML = opts.map((o) => `<option value="${escapeHtml(o.id)}">${escapeHtml(o.label)}</option>`).join("");
 }
 
 function deviceById(id) { return state.deviceOptions.find((d) => d.id === id); }
+// 대상 표시용 — install_id 를 사람이 읽는 장치 라벨(노드번호 포함)로. 없으면 짧은 id.
+function installLabel(id) { return (state.deviceLabels && state.deviceLabels.get(id)) || (id ? id.slice(0, 8) : "—"); }
 
 function rangeHintText(dev) {
   if (!dev) return "선택된 구동기가 없습니다.";

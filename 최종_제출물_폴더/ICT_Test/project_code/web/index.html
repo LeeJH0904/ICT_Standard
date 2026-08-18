@@ -104,10 +104,21 @@ function nodeCardHtml(node, devices) {
       cells = `<strong class="dev-value">${formatValue(latest.value, null)}</strong>`
             + `<span class="dev-unit">${unit ? `(${unit})` : ""}</span>`
             + `<span class="dev-spark">${sparkSvg(tel.map((p) => p.value), unit, dev.subtype || dev.device_name)}</span>`;
+    } else if (ds && ds.attributes) {
+      // 구동기 상태 — valid_range 는 괄호로 빼 굵기를 해제하고, 나머지 속성은
+      // 값처럼(굵게) 보인다. 예: open_level = 60 (valid range = 0.0 - 100.0)
+      const attrs = ds.attributes;
+      const fmtAttr = (v) => (v == null ? "—" : (typeof v === "number" ? String(+v) : v));
+      const main = Object.entries(attrs).filter(([k]) => k !== "valid_range")
+        .map(([k, v]) => `${k} = ${fmtAttr(v)}`).join(", ") || "—";
+      let range = "";
+      if (attrs.valid_range != null) {
+        const p = String(attrs.valid_range).split("-");
+        range = ` <span class="dev-range">(valid range = ${p.length === 2 ? p.join(" - ") : attrs.valid_range})</span>`;
+      }
+      cells = `<span class="dev-value dev-value-span">${main}${range}</span>`;
     } else {
-      // 구동기 상태(속성 문자열) 또는 값 없음 — 숫자 열을 왜곡하지 않게 나머지 열을 가로지른다.
-      const txt = ds ? (Object.entries(ds.attributes || {}).map(([k, v]) => `${k}=${v}`).join(", ") || "—") : "—";
-      cells = `<span class="dev-value dev-value-span">${txt}</span>`;
+      cells = `<span class="dev-value dev-value-span">—</span>`;
     }
     // 서버가 준 것만 쓴다 — subtype 은 레지스트리 이름, siap_subtype 은 표 7-14 원시 코드(§4.2)
     return `<div class="device-row">`
