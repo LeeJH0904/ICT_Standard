@@ -78,10 +78,10 @@
   </form>
 
   <section aria-labelledby="dev-h">
-    <h2 id="dev-h">장치 목록 <span class="hint">(물리 특성은 읽기만 — 설치 시 확정)</span></h2>
+    <h2 id="dev-h">전체 디바이스 목록 <span class="hint">(물리 특성은 읽기만 — 설치 시 확정)</span></h2>
     <p data-state-message></p>
     <table id="dev-table">
-      <thead><tr><th>장치</th><th>노드</th><th>Lower Limit</th><th>Upper Limit</th><th>Precision</th></tr></thead>
+      <thead><tr><th>장치</th><th>노드</th><th>종류</th><th>Lower Limit</th><th>Upper Limit</th><th>Precision</th></tr></thead>
       <tbody></tbody>
     </table>
   </section>
@@ -107,9 +107,11 @@ document.querySelectorAll('input[name="target-mode"]').forEach((r) => {
 });
 
 function deviceRowHtml(d) {
+  const kindLabel = d.device_kind === "ACTUATOR" ? "구동기" : d.device_kind === "SENSOR" ? "센서" : "—";
   return `<tr>
     <td>${d.device_name} <span class="hint">(${d.subtype ?? "—"})</span></td>
     <td>${hex(d.siap_node_id)}</td>
+    <td>${kindLabel}</td>
     <td>${d.lower_limit ?? "—"}</td>
     <td>${d.upper_limit ?? "—"}</td>
     <td>${d.precision_val ?? "—"}</td>
@@ -128,7 +130,10 @@ async function loadDevices() {
     }
     state.devices = all;
     const sel = document.getElementById("sel-install");
-    sel.innerHTML = all.map((d) => `<option value="${d.id}">${d.device_name} (${d.subtype ?? d.id})</option>`).join("");
+    // 수집·임계 설정은 센서 디바이스 대상이다 — 구동기(ACTUATOR)는 선택에서 제외한다
+    // (rules.html 승인 폼과 반대 방향의 같은 원칙). device_kind 미상은 남겨 둔다.
+    const selectable = all.filter((d) => d.device_kind !== "ACTUATOR");
+    sel.innerHTML = selectable.map((d) => `<option value="${d.id}">${d.device_name} (${d.subtype ?? d.id})</option>`).join("");
     const tbody = document.querySelector("#dev-table tbody");
     if (!all.length) {
       setViewState(section, "empty", "등록된 장치가 없습니다.");
