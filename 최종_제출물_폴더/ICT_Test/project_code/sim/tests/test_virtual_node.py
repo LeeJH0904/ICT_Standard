@@ -104,7 +104,9 @@ def _control(server: VirtualNodeServer, node_id: int, msg_id: int,
         payload_len=wire.DMI_BYTES * len(commands), gcg_id=1, node_id=node_id,
     )
     server._handle(conn, header, b"".join(wire.encode_dmi(c) for c in commands))
-    assert len(conn.sent) == 1
+    # 첫 프레임은 항상 RES_SET_DEVICE_CONTROL(RSC). 제어 성공 시 그 뒤에
+    # 즉시 상태 보고(NOTI_DEVICE_VALUE)가 한 건 더 붙을 수 있다.
+    assert conn.sent, "제어 응답이 없다"
     return conn.sent[0][wire.HEADER_BYTES]
 
 

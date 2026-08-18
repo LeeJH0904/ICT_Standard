@@ -137,7 +137,7 @@ def _make_inject_fn(control_port: int):
 
 def _ensure_public_data_baseline(db_path: Path) -> None:
     """rules 화면 ① 공공데이터 표가 첫 화면부터 비어 있지 않도록, 레코드가
-    하나도 없으면 시작 시 예보를 1건 수집해 둔다(KMA_API_KEY 없으면 목업 폴백).
+    하나도 없으면 시작 시 예보를 1건 수집해 둔다(인증키 환경변수가 없으면 목업 폴백).
     이미 있으면(재시작·기존 DB) 아무것도 하지 않아 재시작마다 쌓이지 않는다.
     스레드 기동 후 API 가 뜨기 직전 한 번만 실행되는 seed 성격의 쓰기다."""
     from backend import db as backend_db

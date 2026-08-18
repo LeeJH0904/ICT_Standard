@@ -39,7 +39,7 @@
       <div class="field">
         <label for="draft-origin">생성 방식</label>
         <select id="draft-origin" name="origin">
-          <option value="AI_DRAFT">AI_DRAFT — 생성형 AI가 초안을 만든다</option>
+          <option value="AI_DRAFT">AI_DRAFT — AI 초안 생성 방식</option>
           <option value="WIZARD">WIZARD — 위자드 선택 방식</option>
           <option value="SCRIPT">SCRIPT — 스크립트 직접 입력</option>
         </select>
@@ -172,6 +172,7 @@ function pendingCardHtml(rule) {
         <div class="field">
           <label for="value-${id}">명령 값</label>
           <input id="value-${id}" name="value" type="number" step="any" required>
+          <p class="hint range-hint"></p>
         </div>
         <div class="field">
           <label for="vtype-${id}">값 타입</label>
@@ -232,7 +233,25 @@ function renderPending() {
   }
   setViewState(section, "ready", "");
   el.innerHTML = active.map(pendingCardHtml).join("") + rejected.map(rejectedCardHtml).join("");
-  el.querySelectorAll(".approve-form").forEach((f) => f.addEventListener("submit", onApprove));
+  el.querySelectorAll(".approve-form").forEach((f) => {
+    f.addEventListener("submit", onApprove);
+    // 대상 구동기를 고르면 허용 범위·정밀도를 힌트로 보여주고 값 입력의
+    // min/max/step 을 그 장치 선언값으로 맞춘다(자기안내).
+    const target = f.querySelector('select[name="target_install_id"]');
+    const hintEl = f.querySelector(".range-hint");
+    const valueEl = f.querySelector('input[name="value"]');
+    const vtypeEl = f.querySelector('select[name="value_type"]');
+    const sync = () => {
+      const dev = deviceById(target.value);
+      hintEl.textContent = rangeHintText(dev);
+      if (dev && dev.lower != null) valueEl.min = dev.lower; else valueEl.removeAttribute("min");
+      if (dev && dev.upper != null) valueEl.max = dev.upper; else valueEl.removeAttribute("max");
+      valueEl.step = (dev && dev.precision != null && +dev.precision > 0) ? dev.precision : "any";
+      if (dev && dev.value_type) vtypeEl.value = dev.value_type;   // 장치가 선언한 값 타입 자동 선택
+    };
+    target.addEventListener("change", sync);
+    sync();
+  });
   el.querySelectorAll(".reject-form").forEach((f) => f.addEventListener("submit", onReject));
 }
 
@@ -274,11 +293,30 @@ async function loadDeviceOptions() {
   const opts = [];
   for (const n of nodePage.items) {
     const devPage = await api.listNodeDevices(n.node_id);
-    for (const d of devPage.items) opts.push({ id: d.id, label: `${d.device_name} (${d.subtype ?? d.id})` });
+    // 제어 대상은 구동기(ACTUATOR)뿐 — 센서를 고르면 노드가 INVALID_DEVICE_TYPE
+    // 로 거부한다. 각 항목에 허용 범위·정밀도를 실어 힌트·검증에 쓴다.
+    for (const d of devPage.items) {
+      if (d.device_kind !== "ACTUATOR") continue;
+      opts.push({ id: d.id, label: `${d.device_name} (${d.subtype ?? d.id})`,
+                  lower: d.lower_limit, upper: d.upper_limit, precision: d.precision_val,
+                  subtype: d.subtype, unit: d.unit, value_type: d.value_type });
+    }
   }
   state.deviceOptions = opts;
   const sel = document.getElementById("manual-device");
   sel.innerHTML = opts.map((o) => `<option value="${escapeHtml(o.id)}">${escapeHtml(o.label)}</option>`).join("");
+}
+
+function deviceById(id) { return state.deviceOptions.find((d) => d.id === id); }
+
+function rangeHintText(dev) {
+  if (!dev) return "선택된 구동기가 없습니다.";
+  const num = (n) => (n == null ? "—" : `${+n}`);
+  const bits = [`종류 ${dev.subtype ?? "—"}`];
+  if (dev.lower != null && dev.upper != null) bits.push(`허용 범위 ${num(dev.lower)} ~ ${num(dev.upper)}`);
+  if (dev.precision != null) bits.push(`정밀도 ${num(dev.precision)}`);
+  if (dev.unit) bits.push(`단위 ${dev.unit}`);
+  return bits.join(" · ");
 }
 
 async function loadAll() {
@@ -348,6 +386,13 @@ async function onApprove(ev) {
       duration_sec: fd.get("duration_sec") ? Number(fd.get("duration_sec")) : null,
     },
   };
+  // 값이 대상 구동기의 선언된 허용 범위를 벗어나면 승인 전에 막는다.
+  const dev = deviceById(body.target_install_id);
+  const v = body.action.value;
+  if (dev && dev.lower != null && dev.upper != null && (v < +dev.lower || v > +dev.upper)) {
+    alertInline(form, `명령 값 ${v}이(가) 허용 범위 ${+dev.lower} ~ ${+dev.upper}를 벗어났습니다.`);
+    return;
+  }
   try {
     await api.approveRule(ruleId, body, USER_ID);
     announce("규칙이 승인되었습니다.");

@@ -1512,6 +1512,19 @@
               "IRRIGATION_VALVE"
             ]
           },
+          "value_type": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "INT",
+              "UINT",
+              "FLOAT",
+              null
+            ],
+            "description": "0943 표 7-14 Value Type — 장치가 선언한 값 타입 이름(siap_value_type 유도)"
+          },
           "transfer_mode": {
             "type": [
               "string",

@@ -111,6 +111,7 @@ class DeviceInstallInfo:                           # A-4 — 6.2.5 / 7.2.2.5 (+0
     siap_node_id: int | None
     siap_device_id: int | None
     siap_subtype: int | None
+    siap_value_type: int | None
     transfer_mode: str | None
     period_sec: int | None
     unit: str | None
@@ -123,7 +124,9 @@ class DeviceInstallInfo:                           # A-4 — 6.2.5 / 7.2.2.5 (+0
         return cls(row["id"], row["created_at"], row["updated_at"], row["device_name"],
                     row["installed_at"], row["install_location"], row["install_loc_unit"],
                     row["device_info_id"], row["siap_node_id"], row["siap_device_id"],
-                    row["siap_subtype"], row["transfer_mode"], row["period_sec"],
+                    row["siap_subtype"],
+                    row["siap_value_type"] if "siap_value_type" in row.keys() else None,
+                    row["transfer_mode"], row["period_sec"],
                     row["unit"], row["lower_limit"], row["upper_limit"], row["precision_val"])
 
 

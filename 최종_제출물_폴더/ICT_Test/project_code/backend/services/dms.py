@@ -76,8 +76,7 @@ def _derive_region_item(payload: dict) -> tuple[str | None, str | None]:
 
 def _fetch_kma_live(kma_key: str, *, timeout: float = 3.0) -> dict:
     """실제 기상청 단기예보 조회서비스 호출. 오프라인 기본 경로가 아니므로
-    `KMA_API_KEY`가 있을 때만
-    시도되고, 실패하면 호출자가 목업으로 폴백한다."""
+    인증키 환경변수가 있을 때만 시도되고, 실패하면 호출자가 목업으로 폴백한다."""
     url = f"{_KMA_URL}?authKey={kma_key}&dataType=JSON&numOfRows=100&pageNo=1"
     req = urllib.request.Request(url, headers={"User-Agent": "siap-reference/1.0"})
     with urllib.request.urlopen(req, timeout=timeout) as resp:      # noqa: S310 — 고정 기상청 URL

@@ -241,6 +241,7 @@ def _handle_device_property(conn: sqlite3.Connection, frame: Frame) -> None:
             siap_node_id=node_id,
             siap_device_id=dmi.device_id,
             siap_subtype=dmi.subtype,
+            siap_value_type=int(dmi.value_type),
             transfer_mode=dp.transfer_mode.name,
             period_sec=dp.period,
             install_location=gh_location if is_new else None,

@@ -118,6 +118,7 @@ def find_device_install_by_siap(conn: sqlite3.Connection, siap_node_id: int,
 
 def upsert_device_install_info(conn: sqlite3.Connection, *, device_info_id: str, device_name: str,
                                 siap_node_id: int, siap_device_id: int, siap_subtype: int,
+                                siap_value_type: int | None = None,
                                 installed_at: str | None = None,
                                 install_location: str | None = None, install_loc_unit: str | None = None,
                                 transfer_mode: str | None = None, period_sec: int | None = None,
@@ -149,11 +150,11 @@ def upsert_device_install_info(conn: sqlite3.Connection, *, device_info_id: str,
         conn.execute(
             "UPDATE device_install_info SET updated_at=?, device_name=?, device_info_id=?, "
             "install_location=COALESCE(?, install_location), "
-            "install_loc_unit=COALESCE(?, install_loc_unit), siap_subtype=?, "
+            "install_loc_unit=COALESCE(?, install_loc_unit), siap_subtype=?, siap_value_type=?, "
             "transfer_mode=COALESCE(?, transfer_mode), period_sec=COALESCE(?, period_sec), "
             "unit=COALESCE(?, unit), lower_limit=?, upper_limit=?, precision_val=? "
             "WHERE id=?",
-            (now, device_name, device_info_id, install_location, install_loc_unit, siap_subtype,
+            (now, device_name, device_info_id, install_location, install_loc_unit, siap_subtype, siap_value_type,
              transfer_mode, period_sec, unit, lower_limit, upper_limit, precision_val, existing["id"]),
         )
         # 재연결도 6.2.1의 "수정" 이다 — 이 UPDATE가 무엇을 바꿨는지 남긴다.
@@ -166,10 +167,10 @@ def upsert_device_install_info(conn: sqlite3.Connection, *, device_info_id: str,
     conn.execute(
         "INSERT INTO device_install_info(id,created_at,updated_at,device_name,installed_at,"
         "install_location,install_loc_unit,device_info_id,siap_node_id,siap_device_id,siap_subtype,"
-        "transfer_mode,period_sec,unit,lower_limit,upper_limit,precision_val)"
-        " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "siap_value_type,transfer_mode,period_sec,unit,lower_limit,upper_limit,precision_val)"
+        " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (id_, now, now, device_name, installed_at or now, install_location, install_loc_unit,
-         device_info_id, siap_node_id, siap_device_id, siap_subtype, transfer_mode, period_sec,
+         device_info_id, siap_node_id, siap_device_id, siap_subtype, siap_value_type, transfer_mode, period_sec,
          unit, lower_limit,
          upper_limit, precision_val),
     )

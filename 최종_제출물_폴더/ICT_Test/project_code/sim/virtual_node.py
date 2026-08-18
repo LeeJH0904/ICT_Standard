@@ -50,6 +50,7 @@ GOLDEN_PATH = REPO_ROOT / "contracts" / "vectors" / "golden.jsonl"
 SUBTYPE_TEMPERATURE = 0x01        # 6.3.3.2
 SUBTYPE_HUMIDITY = 0x02           # 6.3.3.3
 SUBTYPE_IRRIGATION_VALVE = 0x85   # 6.3.4.6
+SUBTYPE_COOLING_HEATER = 0x86     # 6.3.4.7
 
 # DEVICE_PROPERTY(표 7-15) USER DEPENDENT 5필드 중 하한·상한(Lower/Upper
 # Limit·Value 는 같은 범위를 재사용한다) — 손으로 고른 물리적으로 합당한 설정
@@ -59,6 +60,7 @@ _PROPERTY_RANGES: dict[int, tuple[float, float, float]] = {
     SUBTYPE_TEMPERATURE: (-10.0, 60.0, 0.1),
     SUBTYPE_HUMIDITY: (0.0, 100.0, 1.0),
     SUBTYPE_IRRIGATION_VALVE: (0.0, 100.0, 1.0),
+    SUBTYPE_COOLING_HEATER: (10.0, 40.0, 1.0),   # 냉난방기 목표온도(℃) 설정 범위
 }
 
 # 노드가 자신의 디바이스 구성을 선언하는 REQ_SET_NODE_DEVICE_PROPERTY_ALL 은
@@ -189,6 +191,9 @@ def _default_nodes(pool: dict[int, tuple[int, int]]) -> list[SimNode]:
         SimNode(102, "arduino_actuator_node(Pro Mini) 흉내", [
             _dmi(pool, 1, wire.DEV_SENSOR, SUBTYPE_HUMIDITY, (wire.VT_FLOAT, 0)),
             _dmi(pool, 2, wire.DEV_ACTUATOR, SUBTYPE_IRRIGATION_VALVE, (wire.VT_UINT, 0)),
+            # 값 타입이 다른 두 번째 구동기 — 냉난방기는 목표온도를 INT(℃)로
+            # 다룬다(밸브 UINT 와 대비). 승인 폼의 값 타입 자동설정 시연용.
+            _dmi(pool, 3, wire.DEV_ACTUATOR, SUBTYPE_COOLING_HEATER, (wire.VT_INT, 20)),
         ]),
         SimNode(103, "esp32_node 흉내", [
             _dmi(pool, 1, wire.DEV_SENSOR, SUBTYPE_TEMPERATURE, (wire.VT_FLOAT, 0)),
@@ -435,6 +440,13 @@ class VirtualNodeServer:
                              h.node_id, dev.device_id, dev.value)
             self._send(conn, wire.build_res_set_device_control(
                 h.msg_id, h.gcg_id, h.node_id, rsc))
+            if rsc == wire.RSC_SUCCESS and node is not None:
+                # 제어 반영 직후 즉시 새 상태를 보고한다 — 주기 보고(2초)를
+                # 기다리지 않고 대시보드·장치상태가 바로 갱신되게 한다.
+                dmis_now = [wire.WireDMI(d.device_id, d.dev_type, d.subtype, d.value_type, d.value)
+                            for d in node.devices]
+                self._send(conn, wire.build_noti_device_value(
+                    node.next_msg_id(), 1, node.node_id, dmis_now))
         elif h.msg_type == wire.MT_RES_SET_DEVICE_CONTROL:
             log.debug("노드 %s 제어 응답 msg_id=%s", h.node_id, h.msg_id)
         else:

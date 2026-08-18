@@ -114,6 +114,7 @@ CREATE TABLE device_install_info (
     siap_node_id    INTEGER,                           -- 0943 Node ID (20bit)
     siap_device_id  INTEGER,                           -- 0943 Device ID (8bit)
     siap_subtype    INTEGER,                           -- 0943 Subtype (8bit)
+    siap_value_type INTEGER,                           -- 0943 표 7-14 Value Type (2bit)
     transfer_mode   TEXT,                              -- 0943 표 7-15 Transfer Mode 이름
     period_sec      INTEGER,                           -- 0943 표 7-15 Period (14bit, sec)
     -- ↓ 1369-P1 6.3.2 "단위·유효범위·오차범위가 관리되어야 한다"
@@ -126,6 +127,7 @@ CREATE TABLE device_install_info (
     CHECK (siap_node_id   IS NULL OR (siap_node_id   BETWEEN 0 AND 1048575)),
     CHECK (siap_device_id IS NULL OR (siap_device_id BETWEEN 0 AND 255)),
     CHECK (siap_subtype   IS NULL OR (siap_subtype   BETWEEN 0 AND 255)),
+    CHECK (siap_value_type IS NULL OR (siap_value_type BETWEEN 0 AND 2)),
     CHECK (transfer_mode IS NULL OR transfer_mode IN ('PERIODIC','EVENT','BOTH')),
     CHECK (period_sec IS NULL OR period_sec BETWEEN 0 AND 16383),
     CHECK (installed_at <> ''),

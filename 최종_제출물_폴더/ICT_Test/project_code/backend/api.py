@@ -351,6 +351,7 @@ def _device_dict(conn: sqlite3.Connection, install) -> dict:
         "device_info_id": install.device_info_id, "device_kind": device_kind,
         "siap_node_id": install.siap_node_id, "siap_device_id": install.siap_device_id,
         "siap_subtype": install.siap_subtype, "subtype": subtype_name,
+        "value_type": _enum_name(ValueType, install.siap_value_type) if install.siap_value_type is not None else None,
         "transfer_mode": install.transfer_mode, "period_sec": install.period_sec,
         "unit": install.unit, "lower_limit": install.lower_limit, "upper_limit": install.upper_limit,
         "precision_val": install.precision_val,

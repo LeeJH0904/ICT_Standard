@@ -213,7 +213,7 @@ t("schema.sql 로드", bool(COLS), f"테이블 {len(COLS)}개")
 
 # (스키마명, 대응 테이블, 표준·유도 필드로 인정할 예외)
 BINDING = {
-    "Device":           ("device_install_info", {"device_kind", "subtype"}),
+    "Device":           ("device_install_info", {"device_kind", "subtype", "value_type"}),
     "TelemetryPoint":   ("env_state_data|env_measurement", {"install_id"}),
     "DeviceState":      ("device_state_data", {"install_id", "attributes"}),
     "Alert":            ("alert", set()),
@@ -241,6 +241,9 @@ t("응답 필드가 전부 실재 컬럼 (또는 명시된 유도 필드)", not 
 RENAMED = {
     "control_execution": {"command_json": "command"},
     "control_rule":      {"action_json": "action"},
+    # siap_value_type(코드)은 value_type(이름)으로 개명 노출한다 — subtype 과
+    # 달리 raw 코드는 응답에 싣지 않고 enum 이름만 준다.
+    "device_install_info": {"siap_value_type": "value_type"},
 }
 # 내부 전용으로 의도해 노출하지 않는 컬럼 (사유를 여기 적는다)
 INTERNAL = {
