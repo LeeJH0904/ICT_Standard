@@ -6,7 +6,7 @@
 > **불변식**: `표준결함` 행 수 = `CLAUDE.md` §3.6 총계 = 명세서의 장애 지점 합계
 > **자동 검사**: `python fix_log/meta_verify.py` — 인덱스·상세·설계 문서 수치를 기계 대조한다 (F-043)
 
-**다음 ID: `F-250`**
+**다음 ID: `F-254`**
 
 ## 표준결함 (19건) — 고칠 수 없음. 기획서 자산
 
@@ -265,6 +265,10 @@
 | F-247 | 위험 | 코드버그 | 제출본 `siap/codec.py` · `siap/link.py` · `backend/ingest.py` | Device Type/Subtype 불일치 요청을 SUCCESS 승인한 뒤 백엔드에서 조용히 폐기 | 수정완료 | F-247_type_subtype_success_then_drop.md |
 | F-248 | 위험 | 문서불일치 | 제출본 `README.md` | 0937 선택 적용·후속 과제·FOS 제외 범위를 밝히지 않아 전체 준수 주장으로 오인 가능 | 수정완료 | F-248_readme_0937_scope_overstated.md |
 | F-249 | 위험 | 문서불일치 | 제출본 `backend/schema.sql` | 환경 측정 서브타입 CHECK는 10종인데 설명 주석은 9종으로 표기 | 수정완료 | F-249_environment_subtype_count_comment.md |
+| F-250 | 오류 | 요건위반 | 최종 제출본 `.omc`·캐시·`runtime.db` | 제외 대상 60개가 포함되고 도구 오류 상태에 Windows 개인 절대 경로가 노출 | 수정완료 | F-250_submission_contains_runtime_artifacts_and_personal_path.md |
+| F-251 | 오류 | 코드버그 | `project_docs/siap/tools/` · 검증 출구 문서 | `tools/` 이동 뒤 루트 계산·문서·import를 갱신하지 않아 `run_all.py`가 2/12만 통과 | 수정완료 | F-251_verification_tools_relocation_breaks_repo_root.md |
+| F-252 | 오류 | 코드버그 | `sim/virtual_node.py` · `mode_verify.py` | 냉난방기 초기값 `(0x86, INT, 20)`이 정상 골든 원본 밖이라 F-216 회귀 검사가 실패 | 수정완료 | F-252_cooling_heater_value_outside_golden_source.md |
+| F-253 | 오류 | 문서불일치 | `화면_설계서.md` · `verify.html` | `api.listNodes()` 호출이 §2.1 대응표에서 다시 누락되어 F-201 회귀 검사가 실패 | 수정완료 | F-253_verify_page_api_mapping_drift_recurrence.md |
 
 > **결번**: F-018 ~ F-021. 규약 §2에 따라 번호는 재사용하지 않는다.
 > 직전 라운드에서 Claude가 수신한 인덱스에는 해당 행이 존재하지 않았다 (F-023 처리 기록 참조).
@@ -275,11 +279,11 @@
 
 | 상태 | 건수 | | 분류 | 건수 |
 |---|---|---|---|---|
-| 신규 | 0 | | 요건위반 | 5 |
-| 확인 | 0 | | 코드버그 | 138 |
-| 수정완료 | 224 | | 문서불일치 | 83 |
+| 신규 | 0 | | 요건위반 | 6 |
+| 확인 | 0 | | 코드버그 | 140 |
+| 수정완료 | 228 | | 문서불일치 | 84 |
 | 기각 | 1 | | 표준결함 | 19 |
-| 보류 | 1 | | **합계** | **245** |
+| 보류 | 1 | | **합계** | **249** |
 | 이관 | 19 | | | |
 
 > F-052 는 요청받은 문서화를 마쳐 `수정완료`지만, 그 안에 **보류 결정 1건**(온실관리 기반 인가 제약)이
@@ -300,6 +304,7 @@
 
 | 일시 | 라운드 | 내용 |
 |---|---|---|
+| 2026-08-20 | 최종 수정 F-250~F-253 | 신규 4건 전량 재현 후 수정완료. F-250은 최종 제출본의 제외 대상 60개를 제거하고 `offline_verify.py`에 실제 staging의 캐시·DB·실행파일·개인 절대 경로 검사를 추가했다. F-251은 `project_docs/siap/tools/`를 루트 `tools/`로 복원하고 루트·검증기 발견 회귀 테스트 2건을 추가했다. F-252는 골든에 없는 냉난방기 fallback 장치를 제거하고 미등록 subtype 생성 시 즉시 실패하도록 개발본·제출본과 테스트를 동기화했다. F-253은 화면 설계서 §2.1 `verify.html` 읽기 목록에 `listNodes`를 복원했다. 검증: 개발 pytest 409/409 · 제출본 집중 12/12 · tools 테스트 55/55+F-251 2/2 · mode 12/12 · web_live 27/27 · web 75/75 · run_all 21/21 · meta 119/119. |
 | 2026-08-17 | 단계 8 GPT 재검증 F-236~F-240 | 5건 전량 처리(기각 0). 요건위반(F-236·F-240)→코드버그(F-237·F-238)→문서불일치(F-239) 순. **F-236(치명, 요건위반)**: 신고 시점엔 단계 8 산출물이 `Branch_2`에만 있고 제출 브랜치 `Branch_1`에 없었으나, 직전 세션의 브랜치 복구·push로 `1e69a1e`가 AVR 2종·`board_verify.py`·`session_01_uno_dht22.jsonl`·F-198 선언·DHT22 전량을 `Branch_1` HEAD에 포함(origin과 0 ahead/0 behind)—전제가 해소돼 수정완료. **F-237(오류, 코드버그)**: 두 AVR `uart_write()`가 `n = (avail>0 && avail<len) ? avail : len`이라 `availableForWrite()==0`일 때 `n=len`으로 떨어져 포화 버퍼에 `Serial.write(buf,len)`—공간이 빌 때까지 블로킹해 수신·ACK·타이머 지연(§5.8 위반). `if (avail<=0) return 0;` 가드 후 `n=min(avail,len)`으로 수정, `board_verify.py`에 정적 회귀 검사(가드 존재 확인) 신설—11/12 PASS. **F-238(오류, 코드버그)**: `where.py::_build_and_size`가 존재하지 않는 Makefile(설계상 보드는 Arduino IDE/arduino-cli 빌드, BUILD.md §2)을 요구해 항상 FAIL, 실제 게이트 `board_verify.py`(run_all이 glob으로 실행, 55% 실측)와 모순. 죽은 `_build_and_size`·40% 상수 제거, 물리 빌드는 MANUAL로 남기고 크기는 board_verify에 위임—`check_stage_8`이 MANUAL·board_verify OK·MANUAL로 정리. **F-239(오류, 문서불일치)—판정: 55% 전체-globals가 정본**(§1.5·§3.4·board_verify): `where.py`(40%)·`BUILD.md:74`·`펌웨어_설계서:1129`의 스테일 40%를 55% 전체-globals로 동기화, 40% 슬라이스는 `firmware_verify.py` 전용으로 분리 명기. **F-240(위험, 요건위반)**: `.gitignore *.db`·추적 DB 0개는 이미 반영됐으나, `offline_verify.py`가 gitignore를 무시한 폴더 walk로 온디스크 DB 6개(128MB)를 크기에 포함(138.9MB)하고 탐지도 못 했다—`git ls-files --others --ignored`로 무시 파일을 walk에서 제외(138.9→**16.5MB**, 실제 git-archive와 일치), `check_no_tracked_databases()` 신설(추적 DB 0 확인), `test_offline_verify.py` 회귀 2종 신설. 검증: `board_verify.py` 11/12(FAIL 0) · `test_where.py` 4/4 · `test_offline_verify.py` 2/2 · `where.check_stage_8` 정리 확인. |
 | 2026-08-14 | 신규 오류 F-233~F-235 | 3건 전량 수정완료. F-233은 최초 SSE 단절 커서를 폴링 표시 목록과 분리해 성공적인 전 페이지 복구 뒤에만 해제한다. F-234는 화살표 함수 헬퍼를 미승인 실행 경로 호출 그래프에 포함하고, F-235는 CSS 프로토콜 상대 외부 URL을 차단한다. 세 반례를 메모리에서 재주입해 모두 탐지됨을 확인했다. 검증: 집중 pytest 8/8 · 웹 설계 75/75 · 웹 실물 27/27 · tools 49/49 · dev 78/78 · tools/run_all.py 20/20. |
 | 2026-08-14 | 오류 수정 9단계 | F-207~F-209·F-223·F-224·F-229 문서불일치 6건 전량 수정완료. 골든 명세 수치를 실제 58건·판정 9/1/43으로 동기화하고 문서 선언 대조 3건을 추가했다. 사용자 승인 뒤 연결 실패 응답의 9byte 고정부 계약과 미규정 결정 기록 위치를 정정했으며 동작·타입은 바꾸지 않았다. 아키텍처 실행 결과 소유자와 디바이스 등록 트리거, repository 주석을 실제 경로에 맞췄다. 0937 대조표는 현재 `link`·`ingest`·서비스 진입점을 기록하고 검증기가 7개 Python 소스 AST를 독립 대조한다. 결함 6종 재주입 전부 exit 1/FAIL 확인 후 원복. 검증: 골든 34/34 · 서비스 44/44 · 계약 64/64 · F-208 집중 pytest 16/16 · SIAP·backend·sim 403/403 · tools 46/46 · dev 78/78 · `tools/run_all.py` 20/20. |

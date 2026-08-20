@@ -1,4 +1,4 @@
-"""F-240 회귀 테스트 — 런타임 SQLite DB 가 제출물에 섞이지 않는지 확인한다.
+"""F-240·F-250 회귀 — 런타임 산출물이 제출물에 섞이지 않는지 확인한다.
 
 배경: `.gitignore` 가 *.db 를 무시해도 (가) 과거처럼 실수로 커밋되면 무시가
 무력화되고 (나) `offline_verify.py` 의 폴더 walk 가 gitignore 를 모른 채 온디스크
@@ -14,6 +14,7 @@ DB 를 크기·실행파일 스캔에 포함해, 실제 제출물(git 추적 파
 from __future__ import annotations
 
 import sys
+import tempfile
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -38,6 +39,34 @@ def test_gitignored_db_excluded_from_packaging(tmp_db: Path) -> None:
         )
     finally:
         ov._gitignored_files.cache_clear()
+
+
+def test_final_submission_scanner_rejects_artifacts_and_personal_path(tmp_path: Path) -> None:
+    """F-250 — 실제 staging의 캐시·DB·개인 경로를 모두 실패로 잡는다."""
+    omc_file = tmp_path / ".omc" / "state" / "error.json"
+    omc_file.parent.mkdir(parents=True)
+    omc_file.write_text("{}", encoding="utf-8")
+    cache_file = tmp_path / "project_code" / "__pycache__" / "x.pyc"
+    cache_file.parent.mkdir(parents=True)
+    cache_file.write_bytes(b"cache")
+    db_file = tmp_path / "project_code" / "backend" / "runtime.db"
+    db_file.parent.mkdir(parents=True)
+    db_file.write_bytes(b"SQLite format 3\\x00")
+    trace = tmp_path / "trace.txt"
+    trace.write_text("C:\\\\Users\\\\contestant\\\\workspace\\\\error.log", encoding="utf-8")
+
+    forbidden = ov._find_forbidden_submission_paths(tmp_path)
+    personal = ov._find_personal_paths(tmp_path)
+    assert {p.name for p in forbidden} >= {".omc", "__pycache__", "runtime.db"}
+    assert personal == [trace]
+
+
+def test_final_submission_scanner_accepts_clean_tree(tmp_path: Path) -> None:
+    good = tmp_path / "project_code" / "README.md"
+    good.parent.mkdir(parents=True)
+    good.write_text("재현 가능한 소스", encoding="utf-8")
+    assert ov._find_forbidden_submission_paths(tmp_path) == []
+    assert ov._find_personal_paths(tmp_path) == []
 
 
 def _make_tmp_db() -> Path:
@@ -81,6 +110,23 @@ def main() -> int:
         print(f"[FAIL] {e}")
     finally:
         p.unlink(missing_ok=True)
+
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        try:
+            test_final_submission_scanner_rejects_artifacts_and_personal_path(root)
+            print("[PASS] 최종 제출 staging의 산출물·개인 경로 탐지")
+        except AssertionError as e:
+            failures += 1
+            print(f"[FAIL] {e}")
+
+    with tempfile.TemporaryDirectory() as td:
+        try:
+            test_final_submission_scanner_accepts_clean_tree(Path(td))
+            print("[PASS] 청결한 최종 제출 staging 허용")
+        except AssertionError as e:
+            failures += 1
+            print(f"[FAIL] {e}")
 
     print(f"\n{'전체 통과' if failures == 0 else f'실패 {failures}건'}")
     return 1 if failures else 0

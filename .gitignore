@@ -1,5 +1,6 @@
 # CLAUDE.md §2.1 — 제출물에서 제외하는 것. tools/offline_verify.py 가 이 목록과 대조한다.
 .omc/
+표준 문서 md 파일/
 __pycache__/
 *.pyc
 _to_delete/

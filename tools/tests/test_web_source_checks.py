@@ -94,7 +94,7 @@ def test_f231_inline_bit_unpack_and_numeric_mapping_are_detected():
 def test_f232_color_only_frame_status_is_detected():
     html = _read(WEB / "verify.html")
     assert status_cue_issues(html) == []
-    mutated = html.replace("${m.icon} ${f.id} — ${m.text}", "${f.id}")
+    mutated = html.replace("${m.icon}", "").replace("${m.text}", "")
     assert status_cue_issues(mutated) == [
         "frameListItemHtml:m.icon",
         "frameListItemHtml:m.text",
@@ -137,7 +137,7 @@ def test_verify_injection_controls_stay_above_scrollable_frame_list():
 def test_verify_violation_filter_applies_to_load_and_live_upsert():
     html = _read(WEB / "verify.html")
     bodies = function_bodies(html)
-    assert 'frame.judgement === "violation"' in bodies["frameMatchesCurrentFilter"]
+    assert 'frame.judgement !== "violation"' in bodies["frameMatchesCurrentFilter"]
     assert ".filter(frameMatchesCurrentFilter)" in bodies["loadFrames"]
     assert "loadRevision !== state.loadRevision" in bodies["loadFrames"]
     assert "if (!frameMatchesCurrentFilter(frame))" in bodies["upsertFrame"]

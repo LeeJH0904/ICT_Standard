@@ -169,9 +169,11 @@ class SimNode:
         return v
 
 
-def _dmi(pool: dict[int, tuple[int, int]], device_id: int, dev_type: int, subtype: int,
-         fallback: tuple[int, int]) -> SimDevice:
-    vt, val = pool.get(subtype, fallback)
+def _dmi(pool: dict[int, tuple[int, int]], device_id: int, dev_type: int, subtype: int) -> SimDevice:
+    """감사된 골든 원본에 없는 subtype은 데모 값으로 만들지 않는다(F-252)."""
+    if subtype not in pool:
+        raise ValueError(f"golden.jsonl에 subtype 0x{subtype:02X} 정상 값이 없다(F-252)")
+    vt, val = pool[subtype]
     return SimDevice(device_id, dev_type, subtype, vt, val)
 
 
@@ -218,17 +220,16 @@ def _default_nodes(pool: dict[int, tuple[int, int]]) -> list[SimNode]:
     가려진다."""
     return [
         SimNode(3, "arduino_sensor_node(Uno) 흉내", [
-            _dmi(pool, 1, wire.DEV_SENSOR, SUBTYPE_TEMPERATURE, (wire.VT_FLOAT, 0)),
+            _dmi(pool, 1, wire.DEV_SENSOR, SUBTYPE_TEMPERATURE),
         ]),
         SimNode(102, "arduino_actuator_node(Pro Mini) 흉내", [
-            _dmi(pool, 1, wire.DEV_SENSOR, SUBTYPE_HUMIDITY, (wire.VT_FLOAT, 0)),
-            _dmi(pool, 2, wire.DEV_ACTUATOR, SUBTYPE_IRRIGATION_VALVE, (wire.VT_UINT, 0)),
-            # 값 타입이 다른 두 번째 구동기 — 냉난방기는 목표온도를 INT(℃)로
-            # 다룬다(밸브 UINT 와 대비). 승인 폼의 값 타입 자동설정 시연용.
-            _dmi(pool, 3, wire.DEV_ACTUATOR, SUBTYPE_COOLING_HEATER, (wire.VT_INT, 20)),
+            _dmi(pool, 1, wire.DEV_SENSOR, SUBTYPE_HUMIDITY),
+            _dmi(pool, 2, wire.DEV_ACTUATOR, SUBTYPE_IRRIGATION_VALVE),
+            # 골든에 없는 subtype은 데모 기본 장치로 만들지 않는다(F-252).
+            # 냉난방기는 실측 또는 감사된 정상 골든 값이 확보된 뒤 추가한다.
         ]),
         SimNode(103, "esp32_node 흉내", [
-            _dmi(pool, 1, wire.DEV_SENSOR, SUBTYPE_TEMPERATURE, (wire.VT_FLOAT, 0)),
+            _dmi(pool, 1, wire.DEV_SENSOR, SUBTYPE_TEMPERATURE),
         ]),
     ]
 
@@ -236,7 +237,7 @@ def _default_nodes(pool: dict[int, tuple[int, int]]) -> list[SimNode]:
 def _late_node(pool: dict[int, tuple[int, int]]) -> SimNode:
     """§5.5 "실행 중 노드 1개 추가 접속" — 기능 1 Plug & Play 시연용."""
     return SimNode(104, "실행 중 추가 접속 노드", [
-        _dmi(pool, 1, wire.DEV_SENSOR, SUBTYPE_TEMPERATURE, (wire.VT_FLOAT, 0)),
+        _dmi(pool, 1, wire.DEV_SENSOR, SUBTYPE_TEMPERATURE),
     ])
 
 

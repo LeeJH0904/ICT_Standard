@@ -10,7 +10,7 @@ from pathlib import Path
 from sim import _wire as wire
 from sim.virtual_node import (
     SUBTYPE_HUMIDITY, SUBTYPE_TEMPERATURE, SimNode, SimDevice,
-    GOLDEN_PATH, VirtualNodeServer, _default_nodes, _late_node, _load_value_pool,
+    GOLDEN_PATH, VirtualNodeServer, _default_nodes, _dmi, _late_node, _load_value_pool,
 )
 
 
@@ -32,13 +32,20 @@ def test_default_nodes_reuse_pool_values_not_synthetic():
     # 벡터가 (X02 반례를 빼면) 전부 Node ID=3 을 쓰므로, live 주입이 실제로
     # 등록된 노드를 맞혀야 목표 판정이 INVALID_NODE_ID 에 가려지지 않는다.
     assert {n.node_id for n in nodes} == {3, 102, 103}
-    # 모든 디바이스 값이 골든 풀에서 왔는지(또는 풀에 없으면 명시적 fallback
-    # 0)만 확인한다 — 무작위 생성기나 사인파 함수를 쓰지 않는다는 것은 이
-    # 함수가 애초에 그런 호출을 하지 않는다는 소스 자체가 근거다
+    # 모든 기본 디바이스는 subtype·타입·값 전부 골든 풀에서 온다(F-252).
     for n in nodes:
         for dev in n.devices:
-            if dev.subtype in pool:
-                assert dev.value == pool[dev.subtype][1]
+            assert (dev.value_type, dev.value) == pool[dev.subtype]
+
+
+def test_missing_golden_subtype_fails_closed_f252():
+    """골든에 없는 subtype을 fallback 값으로 조용히 만들지 않는다."""
+    try:
+        _dmi({}, 1, wire.DEV_ACTUATOR, 0x86)
+    except ValueError as exc:
+        assert "golden.jsonl" in str(exc)
+    else:
+        raise AssertionError("골든에 없는 subtype이 데모 장치로 생성됐다")
 
 
 def test_late_node_has_distinct_id_and_reuses_pool():

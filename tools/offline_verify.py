@@ -8,6 +8,7 @@
   4) CLAUDE.md §2.1 제외 대상(표준 문서 md 파일/ · .omc/ · __pycache__/ · _to_delete/)이
      .gitignore 와 패키징에서 빠지는가
   5) 런타임/디버그 SQLite DB(*.db 등)가 git 에 추적되지 않는가 (F-240·F-160)
+  6) 실제 최종 제출 폴더에 캐시·런타임 DB·개인 절대 경로가 0개인가 (F-250)
 
 크기·실행파일 스캔은 git 이 무시하는 파일(런타임 DB 등)을 제외하고 계산해 실제
 제출물(git 추적 파일)과 일치시킨다 (F-240).
@@ -49,6 +50,13 @@ EXCLUDE_GLOB_PATTERNS = ["_stage*"]  # _stage*/ — 접두어 매칭
 EXCLUDE_DIRS = GITIGNORE_TARGET_DIRS + [".git"]
 
 FORBIDDEN_EXT = {".hex", ".bin", ".elf", ".exe", ".apk"}
+
+# F-250 — git 기준 예상치뿐 아니라 사람이 실제로 ZIP할 최종 staging 자체를 검사한다.
+FINAL_SUBMISSION_ROOT = REPO_ROOT / "최종_제출물_폴더" / "ICT_Test"
+FORBIDDEN_SUBMISSION_DIRS = {".omc", ".pytest_cache", "__pycache__", ".git", "node_modules", "build"}
+FORBIDDEN_SUBMISSION_SUFFIXES = FORBIDDEN_EXT | {".pyc", ".db", ".db-wal", ".db-shm", ".db-journal"}
+TEXT_SUBMISSION_SUFFIXES = {".py", ".c", ".h", ".ino", ".sql", ".md", ".html", ".js", ".css", ".json", ".jsonl", ".txt", ".example"}
+_PERSONAL_PATH_RE = re.compile(rb"(?i)[a-z]:[\\\\/]+users[\\\\/]+[^\\\\/\s]+[\\\\/]")
 
 # CLAUDE.md §4.3: "Python 3.11+". 심사자 환경(OS·파이썬 버전)을 모르므로
 # 3.11~3.13 × win/linux 6조합을 전부 오프라인 설치로 확인한다 (아키텍처 설계서
@@ -360,6 +368,50 @@ def check_gitignore_excludes() -> tuple[bool, str]:
     return True, f"제외 대상 {n}종이 git check-ignore 로 실제 확인됨 (.git/ 은 gitignore 대상 아님 - 패키징 스캔에서만 제외)"
 
 
+def _find_forbidden_submission_paths(root: Path) -> list[Path]:
+    """실제 제출 staging에서 산출물 디렉터리와 금지 확장자를 전수 탐색한다."""
+    hits: list[Path] = []
+    for p in root.rglob("*"):
+        if p.is_dir():
+            if p.name in FORBIDDEN_SUBMISSION_DIRS:
+                hits.append(p)
+            continue
+        if any(part in FORBIDDEN_SUBMISSION_DIRS for part in p.relative_to(root).parts):
+            continue
+        name = p.name.lower()
+        if any(name.endswith(suffix) for suffix in FORBIDDEN_SUBMISSION_SUFFIXES):
+            hits.append(p)
+    return sorted(hits)
+
+
+def _find_personal_paths(root: Path) -> list[Path]:
+    """텍스트 제출물에 남은 Windows 사용자 홈 절대 경로를 찾는다(F-250)."""
+    hits: list[Path] = []
+    for p in root.rglob("*"):
+        if not p.is_file() or p.suffix.lower() not in TEXT_SUBMISSION_SUFFIXES:
+            continue
+        try:
+            data = p.read_bytes()
+        except OSError:
+            continue
+        if _PERSONAL_PATH_RE.search(data):
+            hits.append(p)
+    return sorted(hits)
+
+
+def check_final_submission_clean() -> tuple[bool, str]:
+    """F-250 — 실제 ZIP 대상 폴더의 청결성을 gitignore와 독립 검증한다."""
+    if not FINAL_SUBMISSION_ROOT.is_dir():
+        return False, f"최종 제출 폴더 없음: {FINAL_SUBMISSION_ROOT}"
+    forbidden = _find_forbidden_submission_paths(FINAL_SUBMISSION_ROOT)
+    personal = _find_personal_paths(FINAL_SUBMISSION_ROOT)
+    if forbidden or personal:
+        samples = [str(p.relative_to(FINAL_SUBMISSION_ROOT)) for p in (forbidden + personal)[:10]]
+        return False, (f"금지 산출물 {len(forbidden)}개, 개인 절대 경로 파일 {len(personal)}개: "
+                       f"{samples}")
+    return True, "실제 최종 제출 폴더의 금지 산출물·개인 절대 경로 0개"
+
+
 def check_no_tracked_databases() -> tuple[bool, str]:
     """런타임/디버그 SQLite DB 가 git 에 추적되면 전체 소스 ZIP 에 실행 데이터가
     섞인다(F-240·F-160, 공고문 "빌드 산출물·실행파일 제외"). .gitignore 가 *.db 를
@@ -392,6 +444,7 @@ CHECKS = [
     ("실행파일(.hex/.bin/.elf/.exe/.apk) 0개", check_no_binaries),
     ("§2.1 제외 대상이 .gitignore 에 반영", check_gitignore_excludes),
     ("런타임 DB(*.db 등)가 git 에 추적되지 않음 (F-240)", check_no_tracked_databases),
+    ("실제 최종 제출 폴더 청결성 (F-250)", check_final_submission_clean),
 ]
 
 
