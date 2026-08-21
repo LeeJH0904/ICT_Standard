@@ -32,8 +32,7 @@ AI가 만든 결과를 그대로 제어 명령으로 사용하지 않는 것이 
 
 ## 3. 앱 기능으로서의 OpenAI 규칙 초안
 
-`project_code/backend/services/mms.py`는 `control_model.exec_method='llm_draft'`인
-모델에 한해 OpenAI Responses API를 한 번 호출한다.
+`project_code/backend/services/mms.py`는 `control_model.exec_method='llm_draft'`인 모델에 한해 OpenAI Responses API를 한 번 호출한다.
 
 | 항목 | 구현 |
 |---|---|

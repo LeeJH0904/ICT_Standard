@@ -22,6 +22,7 @@
 
 <main id="main">
   <h1>노드·디바이스 실시간 대시보드</h1>
+  <h3>노드·디바이스 실시간 상태 및 알림 조회 기능 데모</h3>
   <p class="hint">TTAK.KO-10.0937 6.1 · 6.4 · TTAK.KO-10.0943 8.1.1 — 등록된 노드 및 최근 수신값 조회</p>
 
   <div class="summary-bar" id="summary" aria-live="off">
@@ -120,7 +121,7 @@ function nodeCardHtml(node, devices) {
     } else {
       cells = `<span class="dev-value dev-value-span">—</span>`;
     }
-    // 서버가 준 것만 쓴다 — subtype 은 레지스트리 이름, siap_subtype 은 표 7-14 원시 코드(§4.2)
+    // 서버가 준 것만 쓴다 — subtype 은 레지스트리 이름, siap_subtype 은 표 7-14 원시 코드
     return `<div class="device-row">`
       + `<span class="dev-name">${dev.subtype ?? dev.device_name} <span class="hint">(${hex(dev.siap_subtype)})</span></span>`
       + cells

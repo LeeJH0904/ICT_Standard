@@ -35,9 +35,8 @@ python project_code/run.py --mode simulate --serve
 python project_code/run.py --mode simulate --serve
 ```
 
-같은 방식으로 초안을 만들면 규칙 카드에 `생성 경로: THRESHOLD_FALLBACK`과
-폴백 안내가 표시돼야
-한다. 초안 생성·사람 승인·실행 게이트는 계속 동작해야 한다.
+같은 방식으로 초안을 만들면 규칙 카드에 `생성 경로: THRESHOLD_FALLBACK`과 폴백 안내가 표시돼야 한다. 
+초안 생성·사람 승인·실행 게이트는 계속 동작해야 한다.
 
 ## 4. 실패 진단
 
@@ -48,5 +47,4 @@ python project_code/run.py --mode simulate --serve
 | 모델 오류/404 폴백 | `OPENAI_MODEL`이 계정에서 사용 가능한 정확한 모델 ID인지 확인 |
 | 타임아웃 폴백 | 네트워크 상태와 `OPENAI_TIMEOUT_SEC` 1~30초 범위 |
 
-실패 상세나 응답 원문 대신 서버는 상태 종류만 기록한다. API 키는 어떤 로그에도
-출력하지 않는다.
+실패 상세나 응답 원문 대신 서버는 상태 종류만 기록한다. API 키는 어떤 로그에도 출력하지 않는다.
