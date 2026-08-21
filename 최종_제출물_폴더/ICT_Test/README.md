@@ -101,6 +101,11 @@ python project_code/run.py --mode hardware --port COM6 --serve
 
 공공데이터가 **표시**에 그치지 않고 표준 서비스의 **제어 판단을 위한 규칙 생성의 보조 기준**으로 활용된다.
 
+
+### API 신청 항목
+기상청 API 허브 -> 에특보 -> 단기예보 -> 4.3 단기예보조회 -> API 활용 신청
+
+
 ```
 기상청 단기예보 API    ──▶    public_data_record (1369-P1 데이터모델)
 (키 부재 시 목업 폴백)                │
@@ -136,7 +141,7 @@ python project_code/run.py --mode simulate --serve
 
 `.env`에는 다음 다섯 항목만 입력할 수 있다.
 
-- `KMA_API_KEY`: 기상청 실데이터 호출용이다. 비워 두면 고정 목업으로 폴백한다.
+- `KMA_API_KEY`: 기상청 실데이터 호출용. `https://apihub.kma.go.kr`에서 키 발급 후 입력.
 - `OPENAI_API_KEY`와 `OPENAI_MODEL`: 실제 OpenAI 호출 시 필수다.
 - `OPENAI_BASE_URL`: 기본값은 `https://api.openai.com/v1`이며 HTTPS만 허용한다.
 - `OPENAI_TIMEOUT_SEC`: 기본값은 8초이고 1~30초 범위만 사용한다.

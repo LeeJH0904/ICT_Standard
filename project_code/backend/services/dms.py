@@ -155,16 +155,75 @@ def _extract_forecast(payload: dict) -> tuple[str | None, float | None]:
     return None, None
 
 
-def _fetch_kma_live(kma_key: str, *, nx: int, ny: int, base_date: str, base_time: str,
-                     timeout: float = 3.0) -> dict:
-    """실제 기상청 단기예보 조회서비스 호출(F-258). 오프라인 기본 경로가
-    아니므로(CLAUDE.md §7 "네트워크 필수 의존 금지") `KMA_API_KEY`가 있고
-    온실 격자가 저장돼 있을 때만 시도되며, 실패·검증불통과면 호출자가
-    목업으로 폴백한다. 필수 요청값 8개를 `urlencode`로 구성한다."""
-    url = _kma_request_url(kma_key, nx=nx, ny=ny, base_date=base_date, base_time=base_time)
+#: 단기예보 한 페이지 요청 건수(F-260). 기상청 공식 요청 예시가 numOfRows=1000
+#: 이며, 한 회차 항목은 첫 100건에 TMX(최고기온)가 없을 수 있다(2026-08-21
+#: 실측: totalCount=798, 첫 100건에 TMX 부재). 큰 페이지로 요청하되, 자료량이
+#: 이보다 많아지면 아래 totalCount 순회가 나머지 페이지를 마저 수집한다.
+_VILAGE_PAGE_ROWS = 1000
+
+#: 페이지 순회 안전 상한 — totalCount 나 응답이 비정상일 때 무한 루프를 막는다.
+_VILAGE_MAX_PAGES = 20
+
+
+def _payload_items(payload: dict) -> list:
+    """응답 payload 의 `items.item` 리스트를 안전하게 꺼낸다 — 구조가 다르거나
+    단일 객체면 빈 리스트를 돌린다(F-260 페이지 병합용)."""
+    try:
+        items = payload["response"]["body"]["items"]["item"]
+    except (KeyError, TypeError):
+        return []
+    return items if isinstance(items, list) else []
+
+
+def _payload_total_count(payload: dict) -> int | None:
+    """응답 payload 의 `totalCount`(전체 자료 건수). 없거나 숫자가 아니면 None —
+    호출자는 페이지 순회를 중단한다(F-260)."""
+    try:
+        return int(payload["response"]["body"]["totalCount"])
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def _fetch_kma_page(kma_key: str, *, nx: int, ny: int, base_date: str, base_time: str,
+                     page_no: int, timeout: float = 3.0) -> dict:
+    """단기예보 한 페이지 조회(F-260). `_fetch_kma_live` 가 totalCount 만큼
+    순회하며 호출한다. 필수 요청값 8개를 `urlencode` 로 구성한다."""
+    url = _kma_request_url(kma_key, nx=nx, ny=ny, base_date=base_date, base_time=base_time,
+                           num_of_rows=_VILAGE_PAGE_ROWS, page_no=page_no)
     req = urllib.request.Request(url, headers={"User-Agent": "siap-reference/1.0"})
     with urllib.request.urlopen(req, timeout=timeout) as resp:      # noqa: S310 — 고정 기상청 URL
         return json.loads(resp.read().decode("utf-8"))
+
+
+def _fetch_kma_live(kma_key: str, *, nx: int, ny: int, base_date: str, base_time: str,
+                     timeout: float = 3.0) -> dict:
+    """실제 기상청 단기예보 조회서비스 호출(F-258·F-260). 오프라인 기본 경로가
+    아니므로(CLAUDE.md §7 "네트워크 필수 의존 금지") `KMA_API_KEY`가 있고
+    온실 격자가 저장돼 있을 때만 시도되며, 실패·검증불통과면 호출자가
+    목업으로 폴백한다.
+
+    F-260 — 단기예보 한 회차는 수백 건이고 TMX(최고기온)가 첫 페이지 뒤에
+    올 수 있다. `numOfRows` 한 페이지만 받으면 정상 응답인데도 TMX 를 찾지
+    못해 FALLBACK 으로 오판정했다. `totalCount` 만큼 페이지를 순회해 전체
+    item 을 첫 페이지 구조에 합쳐 돌려준다."""
+    first = _fetch_kma_page(kma_key, nx=nx, ny=ny, base_date=base_date,
+                            base_time=base_time, page_no=1, timeout=timeout)
+    items = list(_payload_items(first))
+    total = _payload_total_count(first)
+    page_no = 1
+    while total is not None and len(items) < total and page_no < _VILAGE_MAX_PAGES:
+        page_no += 1
+        nxt = _fetch_kma_page(kma_key, nx=nx, ny=ny, base_date=base_date,
+                              base_time=base_time, page_no=page_no, timeout=timeout)
+        more = _payload_items(nxt)
+        if not more:                    # 더 줄 게 없으면(빈 페이지) 중단 — 상한과 무관
+            break
+        items.extend(more)
+    try:                                # 합친 item 을 첫 페이지 구조에 다시 싣는다
+        first["response"]["body"]["items"]["item"] = items
+    except (KeyError, TypeError):
+        pass
+    return first
 
 
 def _validate_kma_response(payload: dict, *, nx: int, ny: int) -> bool:

@@ -164,8 +164,8 @@ function fcstDateLabel(d) {
   return (typeof d === "string" && /^\d{8}$/.test(d)) ? `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}` : (d ?? "—");
 }
 // F-259 — 온실의 등록 위경도·격자 라벨(설정 화면에서 저장한 값). 미저장이면 "—".
-function ghLatLon(gh) { return (gh && gh.latitude != null && gh.longitude != null) ? `${gh.latitude}, ${gh.longitude}` : "—"; }
-function ghGrid(gh) { return (gh && gh.kma_nx != null && gh.kma_ny != null) ? `${gh.kma_nx},${gh.kma_ny}` : "—"; }
+function ghLatLon(gh) { return (gh && gh.latitude != null && gh.longitude != null) ? `(${gh.latitude}, ${gh.longitude})` : "—"; }
+function ghGrid(gh) { return (gh && gh.kma_nx != null && gh.kma_ny != null) ? `(${gh.kma_nx}, ${gh.kma_ny})` : "—"; }
 function forecastCell(forecast_date, forecast_tmax_c) {
   const d = forecast_date ? fcstDateLabel(forecast_date) : "—";
   const t = forecast_tmax_c != null ? `${forecast_tmax_c}°C` : "—";

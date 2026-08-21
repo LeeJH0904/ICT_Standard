@@ -227,3 +227,68 @@ def test_live_stores_forecast_and_request_grid_f259(conn, monkeypatch):
     assert record.data_origin == "LIVE" and fallback is False
     assert record.forecast_tmax_c == 34.0 and record.forecast_date == "20260822"
     assert (record.nx, record.ny) == (60, 127)               # 요청 격자도 함께 기록
+
+
+# --- F-260 페이지 순회: TMX 가 첫 페이지 뒤에 있어도 전량 수집 -----------------
+def _paged_envelope(items: list, total: int, *, result: str = "00") -> dict:
+    """단기예보 한 페이지 응답 구조. `totalCount` 를 포함한다(실 API 스키마)."""
+    return {"response": {"header": {"resultCode": result, "resultMsg": "x"},
+                         "body": {"totalCount": total, "pageNo": 1,
+                                  "items": {"item": items}}}}
+
+
+def test_fetch_kma_live_merges_pages_until_total_f260(monkeypatch):
+    """TMX 가 첫 100건 뒤(2페이지)에 있어도 totalCount 만큼 순회해 합친다(F-260).
+    numOfRows 한 페이지 제한으로 정상 응답을 절단하던 회귀를 막는다."""
+    page1 = [{"category": "TMP", "fcstDate": "20260822", "fcstValue": "30",
+              "nx": 60, "ny": 127} for _ in range(100)]
+    page2 = [{"category": "TMX", "fcstDate": "20260822", "fcstValue": "34",
+              "nx": 60, "ny": 127},
+             {"category": "REH", "fcstDate": "20260822", "fcstValue": "55",
+              "nx": 60, "ny": 127}]
+    pages = {1: _paged_envelope(page1, 102), 2: _paged_envelope(page2, 102)}
+    seen: list[int] = []
+
+    def fake_page(kma_key, *, nx, ny, base_date, base_time, page_no, timeout=3.0):
+        seen.append(page_no)
+        return pages[page_no]
+
+    monkeypatch.setattr(dms, "_fetch_kma_page", fake_page)
+    merged = dms._fetch_kma_live("K", nx=60, ny=127, base_date="20260821", base_time="1400")
+    items = merged["response"]["body"]["items"]["item"]
+    assert seen == [1, 2]                                    # 첫 페이지에 TMX 없어 2페이지까지
+    assert len(items) == 102                                 # 전량 병합
+    assert dms._validate_kma_response(merged, nx=60, ny=127) is True   # 이제 LIVE 판정
+    assert dms._extract_forecast(merged) == ("20260822", 34.0)        # 뒤쪽 TMX 를 실제로 추출
+
+
+def test_fetch_kma_live_single_page_no_extra_request_f260(monkeypatch):
+    """totalCount 가 한 페이지에 다 담기면 추가 요청을 하지 않는다(F-260)."""
+    items = [{"category": "TMX", "fcstDate": "20260822", "fcstValue": "31",
+              "nx": 60, "ny": 127}]
+    seen: list[int] = []
+
+    def fake_page(kma_key, *, nx, ny, base_date, base_time, page_no, timeout=3.0):
+        seen.append(page_no)
+        return _paged_envelope(items, 1)
+
+    monkeypatch.setattr(dms, "_fetch_kma_page", fake_page)
+    dms._fetch_kma_live("K", nx=60, ny=127, base_date="20260821", base_time="1400")
+    assert seen == [1]                                       # 한 페이지로 충분
+
+
+def test_paginated_normal_response_is_live_not_fallback_f260(conn, monkeypatch):
+    """end-to-end: TMX 가 2페이지에 있는 정상 응답을 LIVE 로 기록하고 실제 TMX 를
+    저장한다(F-260). 이전에는 첫 100건에 TMX 가 없어 FALLBACK 으로 오판정했다."""
+    page1 = [{"category": "TMP", "fcstDate": "20260822", "fcstValue": "30",
+              "nx": 60, "ny": 127} for _ in range(100)]
+    page2 = [{"category": "TMX", "fcstDate": "20260822", "fcstValue": "34",
+              "nx": 60, "ny": 127}]
+    pages = {1: _paged_envelope(page1, 101), 2: _paged_envelope(page2, 101)}
+    monkeypatch.setenv(dms.API_KEY_ENV, "K")
+    monkeypatch.setattr(dms, "_fetch_kma_page",
+                        lambda kma_key, *, nx, ny, base_date, base_time, page_no, timeout=3.0: pages[page_no])
+    record, fallback = dms.fetch_public_data(conn, greenhouse_id="demo-gh-1")
+    assert record.data_origin == "LIVE" and fallback is False
+    assert record.forecast_tmax_c == 34.0                    # 목업 고정값이 아니라 실예보 TMX
+    assert (record.nx, record.ny) == (60, 127)
