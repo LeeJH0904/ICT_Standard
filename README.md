@@ -122,6 +122,7 @@ python project_code/run.py --mode hardware --port COM6 --serve
 
 
 > 목업 값은 무작위·주기함수로 생성하지 않고 손으로 고정한 실제 응답 구조다 (합성 데이터 금지 원칙 준수).
+
 ### 4.1 생성형 AI 규칙 초안 — 선택적 OpenAI 연동
 
 `demo-model-llm-irrigation`은 OpenAI Responses API

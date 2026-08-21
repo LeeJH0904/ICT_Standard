@@ -122,11 +122,11 @@ python project_code/run.py --mode hardware --port COM6 --serve
 
 
 > 목업 값은 무작위·주기함수로 생성하지 않고 손으로 고정한 실제 응답 구조다 (합성 데이터 금지 원칙 준수).
+
 ### 4.1 생성형 AI 규칙 초안 — 선택적 OpenAI 연동
 
-`demo-model-llm-irrigation`은 OpenAI Responses API
-`POST https://api.openai.com/v1/responses`를 사용한다. 실제 AI 호출은 선택 사항이며,
-키·모델 부재나 통신·응답 검증 실패 시 기존 임계값 초안으로 자동 전환한다.
+AI 기능은 OpenAI Responses API 를 사용한다. 
+실제 AI 호출은 선택 사항이며, 키·모델 부재나 통신·응답 검증 실패 시 기존 임계값 초안으로 자동 전환한다.
 
 ```powershell
 Copy-Item project_code/.env.example project_code/.env
@@ -142,19 +142,9 @@ python project_code/run.py --mode simulate --serve
 - `OPENAI_TIMEOUT_SEC`: 기본값은 8초이고 1~30초 범위만 사용한다.
 - `run.py`는 현재 작업 디렉터리와 무관하게 `project_code/.env`를 자동으로 읽는다.
   같은 이름의 프로세스 환경변수가 있으면 그 값을 우선하며, 빈 값은 미설정으로 본다.
-- 실제 키가 들어가는 `project_code/.env`는 Git 무시 대상이다.
-  `project_code/.env.example`에는 실제 키를 기록하지 않는다.
-- 결과 카드는 실제 AI 생성 경로만 `생성 경로: AI` 또는
-  `생성 경로: THRESHOLD_FALLBACK`으로 표시한다. API의 `generation` 값도 동일하다.
-- 화면의 모델 ID 입력란은 없으며 `AI_DRAFT` 요청에는
-  `demo-model-llm-irrigation`을 내부 고정값으로 전송한다.
-- AI 출력은 미승인 `draft_text`일 뿐이다. 사람이 조건·명령·대상을 승인하기 전에는
-  구동기로 전달되지 않는다.
 
-상세 검증 방식은 `docs/ai-usage.md`, 실제/오프라인 시연 순서는
-`docs/AI_규칙_초안_시연.md`를 따른다. 모델 ID와 지원 기능은
-[OpenAI 공식 모델 문서](https://developers.openai.com/api/docs/models/gpt-5.4-mini)를
-기준으로 작성했다.
+
+상세 검증 방식은 `docs/ai-usage.md`, 실제/오프라인 시연 순서는 `docs/AI_규칙_초안_시연.md`를 따른다.
 
 ---
 
@@ -171,8 +161,7 @@ cd project_code/firmware/tests && make && ./test_bitpack && ./test_siap_frame \
     && ./test_status_codes && ./test_golden && ./test_node_state
 ```
 
-C 구현과 Python 구현은 동일한 골든 벡터(`contracts/vectors/golden.jsonl`)로
-검증되며, 이 일치 자체가 상호운용성의 증거다.
+C 구현과 Python 구현은 동일한 골든 벡터(`contracts/vectors/golden.jsonl`)로 검증되며, 이 일치 자체가 상호운용성의 증거다.
 
 ---
 
@@ -182,11 +171,14 @@ C 구현과 Python 구현은 동일한 골든 벡터(`contracts/vectors/golden.j
 
 ```
 소스코드/
-├── README.md                      ← 실행·구조 안내 (이 문서)
-├── docs/                          ← AI 활용·검증 및 시연 절차
+├── README.md                          ← 실행·구조 안내 (이 문서)
+├── docs/                              ← AI 활용·검증 및 시연 절차
+│   ├── index_페이지_활용_가이드.md
+│   ├── rules_페이지_활용_가이드.md
+│   ├── settings_페이지_활용_가이드.md
+│   ├── verify_페이지_활용_가이드.md
 │   ├── ai-usage.md
-│   ├── AI_규칙_초안_시연.md
-│   └── F-189_수정_기록.md
+│   └── AI_규칙_초안_시연.md
 │
 └── project_code/                  ■ 구현 (구동에 필요한 전부)
     ├── .env.example                  OpenAI·기상청 환경변수 예시(실제 키 없음)
