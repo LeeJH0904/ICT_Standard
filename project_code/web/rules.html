@@ -286,9 +286,10 @@ function renderPublicData(items) {
   const tbody = document.querySelector("#pd-table tbody");
   tbody.innerHTML = items.map((r) => {
     const src = state.sourcesById.get(r.source_id);
+    const dummySuffix = r.payload?._meta?.note?.includes("폴백 목업") ? " (더미데이터)" : "";
     const srcLabel = src ? `${src.name} (${src.provider})` : r.source_id;
     return `<tr>
-      <td>${escapeHtml(srcLabel)}</td><td>${formatDateTime(r.fetched_at)}</td><td>${escapeHtml(r.region ?? "—")}</td><td>${escapeHtml(r.item ?? "—")}</td>
+      <td>${escapeHtml(srcLabel + dummySuffix)}</td><td>${formatDateTime(r.fetched_at)}</td><td>${escapeHtml(r.region ?? "—")}</td><td>${escapeHtml(r.item ?? "—")}</td>
     </tr>`;
   }).join("");
 }

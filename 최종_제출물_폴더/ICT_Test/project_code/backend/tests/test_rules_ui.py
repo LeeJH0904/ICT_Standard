@@ -39,3 +39,6 @@ def test_ai_draft_uses_dms_forecast_and_only_accepts_crop_threshold_f256():
     assert "JSON.parse(raw)" not in source
     assert "body.inputs = { crop_tmax_c: cropTmax };" in source
     assert "예보 최고기온은 서버가 DMS 공공데이터의 최신 레코드에서 가져옵니다." in source
+    assert 'r.payload?._meta?.note?.includes("폴백 목업")' in source
+    assert '" (더미데이터)"' in source
+    assert "escapeHtml(srcLabel + dummySuffix)" in source
