@@ -1,9 +1,9 @@
-// api.js — fetch 래퍼 · 오류 정규화
+// api.js — fetch 래퍼 · 오류 정규화 (화면_설계서.md §1 static/api.js)
 //
 // 서버는 같은 오리진(uvicorn 이 web/ 을 함께 서빙한다, run.py --serve)에서
 // 뜬다 — 상대 경로만 쓰고 CORS 를 가정하지 않는다.
 // 이 모듈은 오퍼레이션 이름 -> HTTP 호출만 감싼다. 표준 해석·판정 로직은
-// 없다 — 화면은 서버가 준 값을 그대로 옮긴다.
+// 없다 (CLAUDE.md §3.4) — 화면은 서버가 준 값을 그대로 옮긴다.
 
 const BASE = "/api/v1";
 
@@ -57,7 +57,7 @@ async function request(method, path, { params, body, userId, signal } = {}) {
 // 동일한 필터의 페이지를 응답 total까지 모두 소비한다.
 //
 // SSE 재연결 누락 복구는 100건을 넘을 수 있으므로 첫 페이지만 가져와서는
-// 안 된다. fetchPage는 listFrames 또는 listViolations처럼 Page를
+// 안 된다(F-205). fetchPage는 listFrames 또는 listViolations처럼 Page를
 // 반환하는 함수이고, params에는 복구 구간의 since/until 스냅샷이 들어간다.
 export async function collectAllPages(fetchPage, params = {}, limit = 100) {
   const items = [];
@@ -76,13 +76,18 @@ export async function collectAllPages(fetchPage, params = {}, limit = 100) {
 
 export const api = {
   // ── ems (기능 1 · 설정) ──
-  // 화면별 읽기·쓰기 오퍼레이션만 감싼다 — getHealth·getNode 는 API 에는 있지만
-  // 어느 화면의 읽기 칸에도 없어(스스로 좁힌 범위) 두지 않는다. 쓰지 않는 래퍼를
-  // 두면 "화면이 쓰는 오퍼레이션만 있다"는 대조가 항상 거짓 여지를 남긴다.
+  // 화면_설계서.md §2.1 이 선언한 화면별 읽기·쓰기만 감싼다 — getHealth·getNode
+  // 는 openapi.json 에는 있지만 어느 화면의 읽기 칸에도 없다(설계서가 스스로
+  // 좁힌 범위). 쓰지 않는 래퍼를 두면 tools/web_live_verify.py 의 "화면이 쓰는
+  // 오퍼레이션만 있다" 대조가 항상 거짓 여지를 남긴다.
   listNodes: (params) => request("GET", "/nodes", { params }),
   listNodeDevices: (nodeId) => request("GET", `/nodes/${nodeId}/devices`),
   setDeviceProperty: (selector, property, userId) =>
     request("PATCH", "/device-property", { body: { selector, property }, userId }),
+  // F-258 — 온실 목록(위경도·격자)과 위경도 저장. 격자는 서버가 계산한다.
+  listGreenhouses: () => request("GET", "/greenhouses"),
+  setGreenhouseLocation: (greenhouseId, bodyReq, userId) =>
+    request("PUT", `/greenhouses/${greenhouseId}/location`, { body: bodyReq, userId }),
 
   // ── fms (기능 1) ──
   listTelemetry: (params) => request("GET", "/telemetry", { params }),

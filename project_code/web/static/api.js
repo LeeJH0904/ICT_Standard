@@ -84,6 +84,10 @@ export const api = {
   listNodeDevices: (nodeId) => request("GET", `/nodes/${nodeId}/devices`),
   setDeviceProperty: (selector, property, userId) =>
     request("PATCH", "/device-property", { body: { selector, property }, userId }),
+  // F-258 — 온실 목록(위경도·격자)과 위경도 저장. 격자는 서버가 계산한다.
+  listGreenhouses: () => request("GET", "/greenhouses"),
+  setGreenhouseLocation: (greenhouseId, bodyReq, userId) =>
+    request("PUT", `/greenhouses/${greenhouseId}/location`, { body: bodyReq, userId }),
 
   // ── fms (기능 1) ──
   listTelemetry: (params) => request("GET", "/telemetry", { params }),

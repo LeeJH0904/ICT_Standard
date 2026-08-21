@@ -30,7 +30,8 @@ OPENAPI_PATH = REPO_ROOT / "project_docs" / "api" / "openapi.json"
 
 sys.path.insert(0, str(PROJECT_CODE))
 
-#: API 명세서 §3 — 쓰기 7건. 개수가 아니라 이 집합과 정확히 일치해야 한다(F-056).
+#: API 명세서 §3 — 쓰기 8건. 개수가 아니라 이 집합과 정확히 일치해야 한다(F-056).
+#: F-258 로 온실 위경도 저장(PUT)이 8번째 쓰기로 추가됐다.
 EXPECTED_WRITE_PATHS: frozenset[tuple[str, str]] = frozenset({
     ("POST", "/api/v1/rules"),
     ("POST", "/api/v1/rules/{ruleId}/approve"),
@@ -39,6 +40,7 @@ EXPECTED_WRITE_PATHS: frozenset[tuple[str, str]] = frozenset({
     ("POST", "/api/v1/control"),
     ("PATCH", "/api/v1/device-property"),
     ("POST", "/api/v1/sim/inject"),
+    ("PUT", "/api/v1/greenhouses/{greenhouseId}/location"),
 })
 
 #: FastAPI가 자동으로 붙이는 문서 라우트 — openapi.json 오퍼레이션 대상이 아니다.
@@ -93,18 +95,18 @@ def main() -> int:
     if not missing and not extra:
         print(f"[OK] 라우트 집합 일치 - {len(spec_ops)}건")
 
-    # 검사 2 — 오퍼레이션 개수 23종 (경로 22)
-    if len(spec_ops) != 23:
-        failures.append(f"openapi.json 오퍼레이션 수가 23이 아니다: {len(spec_ops)}")
+    # 검사 2 — 오퍼레이션 개수 25종 (경로 24) — F-258 로 온실 조회·위치저장 2종 추가
+    if len(spec_ops) != 25:
+        failures.append(f"openapi.json 오퍼레이션 수가 25가 아니다: {len(spec_ops)}")
     else:
-        print("[OK] openapi.json 오퍼레이션 23건")
+        print("[OK] openapi.json 오퍼레이션 25건")
     n_paths = len({p for _, p in spec_ops})
-    if n_paths != 22:
-        failures.append(f"openapi.json 경로 수가 22가 아니다: {n_paths}")
+    if n_paths != 24:
+        failures.append(f"openapi.json 경로 수가 24가 아니다: {n_paths}")
     else:
-        print("[OK] openapi.json 경로 22건")
+        print("[OK] openapi.json 경로 24건")
 
-    # 검사 3 — 쓰기 7건이 허용 집합과 정확히 일치 (F-056, 개수만 세지 않는다)
+    # 검사 3 — 쓰기 8건이 허용 집합과 정확히 일치 (F-056, 개수만 세지 않는다)
     write_routes = {(m, p) for m, p in impl_routes if m != "GET"}
     if write_routes != EXPECTED_WRITE_PATHS:
         failures.append(

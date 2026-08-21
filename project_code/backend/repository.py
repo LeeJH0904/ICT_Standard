@@ -512,17 +512,90 @@ def get_public_data_source(conn: sqlite3.Connection, source_id: str) -> models.P
 def insert_public_data_record(conn: sqlite3.Connection, *, source_id: str, payload: dict,
                                fetched_at: str | None = None, period_from: str | None = None,
                                period_to: str | None = None, region: str | None = None,
-                               item: str | None = None) -> str:
+                               item: str | None = None, greenhouse_id: str | None = None,
+                               base_date: str | None = None, base_time: str | None = None,
+                               nx: int | None = None, ny: int | None = None,
+                               data_origin: str = "FALLBACK",
+                               forecast_date: str | None = None,
+                               forecast_tmax_c: float | None = None) -> str:
     """0937 6.2 DMS 부속서 A 2.3 수집 이력. API 스레드 소유(아키텍처 §4.4-a③)
-    — 외부 HTTP 호출이 SIAP I/O 스레드를 막으면 안 된다."""
+    — 외부 HTTP 호출이 SIAP I/O 스레드를 막으면 안 된다.
+
+    F-258 — 어느 온실·격자·발표회차의 예보이며 실데이터(`LIVE`)인지
+    폴백(`FALLBACK`·`DEMO_FIXTURE`)인지를 payload 파싱이 아니라 컬럼으로
+    명시 추적한다. 조회 API 가 이 값을 그대로 노출한다."""
     id_ = new_id()
     conn.execute(
-        "INSERT INTO public_data_record(id,source_id,fetched_at,period_from,period_to,region,item,payload)"
-        " VALUES(?,?,?,?,?,?,?,?)",
+        "INSERT INTO public_data_record(id,source_id,fetched_at,period_from,period_to,region,item,payload,"
+        "greenhouse_id,base_date,base_time,nx,ny,data_origin,forecast_date,forecast_tmax_c)"
+        " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (id_, source_id, fetched_at or now_iso(), period_from, period_to, region, item,
-         json.dumps(payload, ensure_ascii=False)),
+         json.dumps(payload, ensure_ascii=False),
+         greenhouse_id, base_date, base_time, nx, ny, data_origin,
+         forecast_date, forecast_tmax_c),
     )
     return id_
+
+
+def list_greenhouses(conn: sqlite3.Connection) -> list[models.GreenhouseInfo]:
+    """F-258 — 설정·규칙 화면의 온실 선택에 쓰는 전체 온실 목록(위경도·격자
+    포함). 노드 종류를 하드코딩하지 않듯 온실도 DB 에서 읽는다."""
+    rows = conn.execute("SELECT * FROM greenhouse_info ORDER BY created_at ASC").fetchall()
+    return [models.GreenhouseInfo.from_row(r) for r in rows]
+
+
+def get_greenhouse(conn: sqlite3.Connection, greenhouse_id: str) -> models.GreenhouseInfo | None:
+    row = conn.execute("SELECT * FROM greenhouse_info WHERE id = ?", (greenhouse_id,)).fetchone()
+    return models.GreenhouseInfo.from_row(row) if row is not None else None
+
+
+def get_greenhouse_grid(conn: sqlite3.Connection, greenhouse_id: str) -> tuple[int, int] | None:
+    """F-258 — 온실에 저장된 기상청 격자(kma_nx, kma_ny). 저장된 유효 위치가
+    없으면 None — 임의 좌표를 만들지 않는다(제안 §2). 호출자(dms)는 None 이면
+    실 API 요청을 성립시키지 않고 목업으로 폴백한다."""
+    row = conn.execute(
+        "SELECT kma_nx, kma_ny FROM greenhouse_info WHERE id = ?", (greenhouse_id,)
+    ).fetchone()
+    if row is None or row["kma_nx"] is None or row["kma_ny"] is None:
+        return None
+    return int(row["kma_nx"]), int(row["kma_ny"])
+
+
+def set_greenhouse_location(conn: sqlite3.Connection, greenhouse_id: str, *,
+                            latitude: float, longitude: float, kma_nx: int, kma_ny: int,
+                            source: str = "MANUAL", user_id: str | None = None) -> bool:
+    """F-258 제안 §3 — 온실 위경도·격자를 한 UPDATE 로 원자적으로 갱신한다.
+    위경도·격자·출처·변경시각이 함께 확정된다(스키마 CHECK 가 부분 저장을
+    거부). 호출자가 이 UPDATE 와 이력 INSERT 를 함께 commit 하므로 둘 중
+    하나만 영속되는 상태가 없다. 온실이 없으면 False.
+
+    격자(kma_nx·kma_ny)는 호출자(api/dms 서비스)가 `kma_grid.latlon_to_kma_grid()`
+    로 재계산해 넘긴다 — 위경도만 바꾸고 옛 격자를 재사용하지 않는다. 계산이
+    실패하면 호출 자체가 오지 않아 기존 저장값이 보존된다."""
+    row = conn.execute(
+        "SELECT latitude, longitude, kma_nx, kma_ny FROM greenhouse_info WHERE id = ?",
+        (greenhouse_id,),
+    ).fetchone()
+    if row is None:
+        return False
+    changed_at = now_iso()
+    conn.execute(
+        "UPDATE greenhouse_info SET latitude=?, longitude=?, kma_nx=?, kma_ny=?, "
+        "coordinate_source=?, coordinates_updated_at=?, updated_at=? WHERE id=?",
+        (latitude, longitude, kma_nx, kma_ny, source, changed_at, changed_at, greenhouse_id),
+    )
+    record_config_change(
+        conn, table_name="greenhouse_info", row_id=greenhouse_id, operation="UPDATE",
+        changes={
+            "latitude": {"from": row["latitude"], "to": latitude},
+            "longitude": {"from": row["longitude"], "to": longitude},
+            "kma_nx": {"from": row["kma_nx"], "to": kma_nx},
+            "kma_ny": {"from": row["kma_ny"], "to": kma_ny},
+            "coordinate_source": {"to": source},
+        },
+        user_id=user_id, changed_at=changed_at,
+    )
+    return True
 
 
 def list_public_data_records(conn: sqlite3.Connection, *, source_id: str | None = None,
@@ -555,14 +628,16 @@ def get_control_model(conn: sqlite3.Connection, model_id: str) -> models.Control
 
 def insert_control_rule(conn: sqlite3.Connection, *, origin: str, draft_text: str,
                          model_id: str | None = None, generation: str | None = None,
-                         condition_expr: str | None = None, created_at: str | None = None) -> str:
+                         condition_expr: str | None = None, created_at: str | None = None,
+                         public_data_record_id: str | None = None) -> str:
     id_ = new_id()
     conn.execute(
         "INSERT INTO control_rule(id,model_id,created_at,origin,generation,draft_text,"
         "condition_expr,action_json,target_install_id,approved_at,approved_by,"
-        "rejected_at,rejected_by,reject_reason)"
-        " VALUES(?,?,?,?,?,?,?,NULL,NULL,NULL,NULL,NULL,NULL,NULL)",
-        (id_, model_id, created_at or now_iso(), origin, generation, draft_text, condition_expr),
+        "rejected_at,rejected_by,reject_reason,public_data_record_id)"
+        " VALUES(?,?,?,?,?,?,?,NULL,NULL,NULL,NULL,NULL,NULL,NULL,?)",
+        (id_, model_id, created_at or now_iso(), origin, generation, draft_text, condition_expr,
+         public_data_record_id),
     )
     return id_
 

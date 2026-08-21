@@ -1,15 +1,15 @@
 """
-backend/models.py — 읽기 전용 dataclass. ORM을 쓰지 않는다.
+backend/models.py — 읽기 전용 dataclass. ORM을 쓰지 않는다(CLAUDE.md §4.3).
 
 `schema.sql`이 정본이다. 이 파일은 그 행을 담는 그릇일 뿐 제약을 다시
-정의하지 않는다 — 표준 해석은 프로토콜 계층에만 있고,
+정의하지 않는다 — 표준 해석은 프로토콜 계층에만 있고(CLAUDE.md §3.4),
 스키마 무결성은 DB 제약에만 있다. 모든 dataclass는 `frozen=True`.
 
 각 클래스는 `from_row(row: sqlite3.Row) -> Self`를 갖는다. `sqlite3.Row`는
 컬럼명으로 접근한다(db.py의 `row_factory=sqlite3.Row`) — 위치 인덱스로
-읽으면 컬럼 추가 시 조용히 깨진다(류).
+읽으면 컬럼 추가 시 조용히 깨진다(F-024/F-049류).
 
-테이블 31개 = A5 + B4 + C10 + D3 + E1 + F6 + G2. 순서를
+테이블 31개 = A5 + B4 + C10 + D3 + E1 + F6 + G2. DB 스키마 설계서 §2 순서를
 그대로 따른다.
 """
 from __future__ import annotations
@@ -65,9 +65,15 @@ class GreenhouseInfo:                              # A-2 — 6.2.3 / 7.2.2.3
     medium_type: str | None
     irrigation_type: str | None
     heating_type: str | None
-    crop: str | None                                # 생육작물 (6.2.3 본문 회귀)
+    crop: str | None                                # 생육작물 (6.2.3 본문, F-032 회귀)
     crop_season: str | None
     usage_state: str | None
+    latitude: float | None                          # WGS84 위도 (F-258)
+    longitude: float | None                         # WGS84 경도 (F-258)
+    kma_nx: int | None                              # 기상청 격자 X (F-258)
+    kma_ny: int | None                              # 기상청 격자 Y (F-258)
+    coordinate_source: str | None                   # 좌표 출처 (F-258)
+    coordinates_updated_at: str | None              # 좌표 변경 시각 (F-258)
 
     @classmethod
     def from_row(cls, row: sqlite3.Row) -> "GreenhouseInfo":
@@ -77,7 +83,9 @@ class GreenhouseInfo:                              # A-2 — 6.2.3 / 7.2.2.3
                     row["height_value"], row["height_error"], row["height_unit"],
                     row["length_value"], row["length_error"], row["length_unit"],
                     row["gh_type"], row["medium_type"], row["irrigation_type"], row["heating_type"],
-                    row["crop"], row["crop_season"], row["usage_state"])
+                    row["crop"], row["crop_season"], row["usage_state"],
+                    row["latitude"], row["longitude"], row["kma_nx"], row["kma_ny"],
+                    row["coordinate_source"], row["coordinates_updated_at"])
 
 
 @dataclass(frozen=True)
@@ -89,7 +97,7 @@ class DeviceInfo:                                  # A-3 — 6.2.4 / 7.2.2.4
     device_kind: str
     model_name: str                                 # 불변, 전역 식별
     manufacturer: str | None
-    device_characteristics: str | None              # 장치특성
+    device_characteristics: str | None              # 장치특성 (F-185)
 
     @classmethod
     def from_row(cls, row: sqlite3.Row) -> "DeviceInfo":
@@ -104,7 +112,7 @@ class DeviceInstallInfo:                           # A-4 — 6.2.5 / 7.2.2.5 (+0
     created_at: str
     updated_at: str
     device_name: str
-    installed_at: str                                 # 설치일자 (6.2.5)
+    installed_at: str                                 # 설치일자 (6.2.5, F-158)
     install_location: str | None
     install_loc_unit: str | None
     device_info_id: str
@@ -377,7 +385,7 @@ class ConfigChangeLog:                             # E-1
 # ═══════════════════════════════════════════════════════════════
 
 @dataclass(frozen=True)
-class PublicDataSource:                            # 0937 6.2 DMS
+class PublicDataSource:                            # F-1 — 0937 6.2 DMS
     id: str
     name: str
     provider: str
@@ -394,7 +402,7 @@ class PublicDataSource:                            # 0937 6.2 DMS
 
 
 @dataclass(frozen=True)
-class PublicDataRecord:                            # 0937 부속서 A 2.3
+class PublicDataRecord:                            # F-2 — 0937 부속서 A 2.3
     id: str
     source_id: str
     fetched_at: str
@@ -403,15 +411,26 @@ class PublicDataRecord:                            # 0937 부속서 A 2.3
     region: str | None
     item: str | None
     payload: str
+    greenhouse_id: str | None                       # 대상 온실 (F-258)
+    base_date: str | None                           # 실제 요청 발표일자 (F-258)
+    base_time: str | None                           # 실제 요청 발표시각 (F-258)
+    nx: int | None                                  # 실제 요청 격자 X (F-258)
+    ny: int | None                                  # 실제 요청 격자 Y (F-258)
+    data_origin: str                                # LIVE·FALLBACK·DEMO_FIXTURE (F-258)
+    forecast_date: str | None                       # 예보 대상일 YYYYMMDD (F-259)
+    forecast_tmax_c: float | None                   # 예보 최고기온 TMX °C (F-259)
 
     @classmethod
     def from_row(cls, row: sqlite3.Row) -> "PublicDataRecord":
         return cls(row["id"], row["source_id"], row["fetched_at"], row["period_from"],
-                    row["period_to"], row["region"], row["item"], row["payload"])
+                    row["period_to"], row["region"], row["item"], row["payload"],
+                    row["greenhouse_id"], row["base_date"], row["base_time"],
+                    row["nx"], row["ny"], row["data_origin"],
+                    row["forecast_date"], row["forecast_tmax_c"])
 
 
 @dataclass(frozen=True)
-class ControlModel:                                # 0937 6.3 MMS
+class ControlModel:                                # F-3 — 0937 6.3 MMS
     id: str
     created_at: str
     name: str
@@ -431,28 +450,30 @@ class ControlModel:                                # 0937 6.3 MMS
 
 
 @dataclass(frozen=True)
-class ControlRule:                                 # 0937 6.3 / 부속서 A 3.3
+class ControlRule:                                 # F-4 — 0937 6.3 / 부속서 A 3.3
     id: str
     model_id: str | None
     created_at: str
     origin: str                                      # AI_DRAFT / WIZARD / SCRIPT
-    generation: str | None                           # AI / THRESHOLD_FALLBACK / WIZARD / SCRIPT
+    generation: str | None                           # AI / THRESHOLD_FALLBACK / WIZARD / SCRIPT (F-083)
     draft_text: str
     condition_expr: str | None
     action_json: str | None
-    target_install_id: str | None
+    target_install_id: str | None                    # F-049
     approved_at: str | None
     approved_by: str | None
-    rejected_at: str | None
+    rejected_at: str | None                          # F-083
     rejected_by: str | None
     reject_reason: str | None
+    public_data_record_id: str | None                # 초안 근거 예보 레코드 (F-259)
 
     @classmethod
     def from_row(cls, row: sqlite3.Row) -> "ControlRule":
         return cls(row["id"], row["model_id"], row["created_at"], row["origin"], row["generation"],
                     row["draft_text"], row["condition_expr"], row["action_json"],
                     row["target_install_id"], row["approved_at"], row["approved_by"],
-                    row["rejected_at"], row["rejected_by"], row["reject_reason"])
+                    row["rejected_at"], row["rejected_by"], row["reject_reason"],
+                    row["public_data_record_id"])
 
     @property
     def is_approved(self) -> bool:
@@ -464,7 +485,7 @@ class ControlRule:                                 # 0937 6.3 / 부속서 A 3.3
 
 
 @dataclass(frozen=True)
-class ControlExecution:                            # 0937 6.5 FCS / 부속서 A 3.3
+class ControlExecution:                            # F-5 — 0937 6.5 FCS / 부속서 A 3.3
     id: str
     origin: str                                      # RULE / MANUAL
     rule_id: str | None
@@ -484,7 +505,7 @@ class ControlExecution:                            # 0937 6.5 FCS / 부속서 A 
 
 
 @dataclass(frozen=True)
-class Alert:                                       # 0937 6.4 FMS / 6.5 FCS
+class Alert:                                       # F-6 — 0937 6.4 FMS / 6.5 FCS
     id: str
     raised_at: str
     kind: str                                        # NO_DATA/NODE_ERROR/DISCONNECT/THRESHOLD/CONTROL_TIMEOUT
@@ -493,7 +514,7 @@ class Alert:                                       # 0937 6.4 FMS / 6.5 FCS
     siap_nec: int | None
     message: str
     ack_at: str | None
-    frame_id: str | None                              # NEC 알림 결속
+    frame_id: str | None                              # F-085 — NEC 알림 결속
 
     @classmethod
     def from_row(cls, row: sqlite3.Row) -> "Alert":
@@ -519,7 +540,7 @@ class FrameLog:                                    # G-1
     gcg_id: int | None
     node_id: int | None
     is_valid: bool
-    elements_json: str | None = None   # device_main_infos/device_properties 그대로
+    elements_json: str | None = None   # F-187 — device_main_infos/device_properties 그대로
 
     @classmethod
     def from_row(cls, row: sqlite3.Row) -> "FrameLog":
@@ -544,8 +565,8 @@ class FrameViolation:                              # G-2 — 화면에 조항 �
                     row["clause"], row["detail"])
 
 
-# 31개 = A5 + B4 + C10 + D3 + E1 + F6 + G2 — 검증기가
-# schema.sql의 테이블 목록과 이 표를 대조한다(디렉터리 전수, 이름 고정 금지 원칙은
+# 31개 = A5 + B4 + C10 + D3 + E1 + F6 + G2 — fix_log/meta_verify.py, tools/db_live_verify.py
+# 가 schema.sql 의 테이블 목록과 이 표를 대조한다(디렉터리 전수, 이름 고정 금지 원칙은
 # 검증기 쪽 책임이고 여기는 목록 자체가 정본이 아니라 매핑일 뿐이다).
 TABLE_MODEL: dict[str, type] = {
     "farm_info": FarmInfo,

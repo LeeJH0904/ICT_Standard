@@ -897,9 +897,14 @@ ALLOW = {
     ('kma_forecast_mock.json', 'KMA_API_KEY 환경변수'),
     ('seed.sql', '환경변수 KMA_API_KEY'),
     ('dms.py', 'API_KEY_ENV = "KMA_API_KEY"'),
-    ('dms.py', '네트워크 필수 의존 금지") `KMA_API_KEY`가 있을 때만'),
+    ('dms.py', '네트워크 필수 의존 금지") `KMA_API_KEY`가 있고'),
     ('dms.py', 'kma_key = os.environ.get(API_KEY_ENV)'),
     ('test_api.py', 'KMA_API_KEY 미설정'),
+    # F-258 — 온실별 예보 수집 회귀 테스트. 아래 줄들은 환경변수 이름 상수
+    # (dms.API_KEY_ENV)만 언급하거나 값 아닌 가짜 문자열을 쓴다 — 실제 키
+    # 값을 담은 줄이 아니다. "API_KEY_ENV" 상수명이 "api[_-]?key" 패턴에
+    # 그대로 걸려 생기는 오탐이다.
+    ('test_services_dms.py', 'monkeypatch.setenv(dms.API_KEY_ENV,'),
     # F-255 — 애플리케이션이 허용하는 환경변수 이름 선언과 런타임 조회다.
     # 실제 값 대입까지 허용하지 않도록 줄 문맥을 좁게 고정한다.
     ('config.py', '"KMA_API_KEY",'),
@@ -935,6 +940,17 @@ ALLOW = {
 def allowed(fname: str, line: str) -> bool:
     return any(f == fname and frag in line for f, frag in ALLOW)
 
+# SYNTH 오탐 허용 목록 — 반드시 사유를 적는다. §1-1 금지는 "무작위·주기함수로
+# 만든 가짜 센서값"(사인파 온도)이다. 좌표계 투영 수식의 삼각함수는 이에
+# 해당하지 않는다 — 결정론적 변환이며 센서값을 지어내지 않는다.
+SYNTH_ALLOW = {
+    # F-258 — WGS84 위경도 → 기상청 동네예보 격자 Lambert Conformal Conic
+    # 변환식. math.sin 은 투영 좌표 계산이지 센서값 생성이 아니다.
+    ('kma_grid.py', 'math.sin(theta)'),
+}
+def synth_allowed(fname: str, line: str) -> bool:
+    return any(f == fname and frag in line for f, frag in SYNTH_ALLOW)
+
 hits_secret, hits_synth = [], []
 for q in ROOT.rglob("*"):
     if _skip(q) or not q.is_file(): continue
@@ -945,7 +961,7 @@ for q in ROOT.rglob("*"):
     for i, line in enumerate(text.splitlines(), 1):
         if q.suffix != ".md" and SECRET.search(line) and not allowed(q.name, line):
             hits_secret.append(f"{q.name}:{i}")
-        if q.suffix in (".py", ".c", ".h", ".ino") and SYNTH.search(line):
+        if q.suffix in (".py", ".c", ".h", ".ino") and SYNTH.search(line) and not synth_allowed(q.name, line):
             hits_synth.append(f"{q.name}:{i}")
 _secret_assignment_faults = (
     ("config.py", 'OPENAI_API_KEY = "live-value"'),

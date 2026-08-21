@@ -29,7 +29,7 @@
     <h2 id="pd-h">① 공공데이터 (기상청 예보)</h2>
     <p data-state-message></p>
     <table id="pd-table">
-      <thead><tr><th>출처</th><th>수집시각</th><th>구역</th><th>항목</th></tr></thead>
+      <thead><tr><th>출처</th><th>온실</th><th>위경도(WGS84)</th><th>온실 격자(등록)</th><th>발표회차</th><th>예보(대상일·최고기온)</th><th>수집시각</th><th>실데이터 여부</th></tr></thead>
       <tbody></tbody>
     </table>
   </section>
@@ -46,9 +46,12 @@
         </select>
       </div>
       <div class="field" id="ai-fields">
+        <label for="draft-greenhouse">대상 온실</label>
+        <select id="draft-greenhouse" name="greenhouse_id"></select>
+        <p class="hint">선택한 온실의 위경도 격자로 그 위치의 기상청 예보를 수집합니다. 온실 위경도는 설정 화면에서 저장합니다.</p>
         <label for="draft-crop-tmax">작물 고온 임계값(°C)</label>
         <input id="draft-crop-tmax" name="crop_tmax_c" type="number" step="any" value="33" required>
-        <p class="hint">예보 최고기온은 서버가 DMS 공공데이터의 최신 레코드에서 가져옵니다. 사용자는 작물 기준값만 입력합니다.</p>
+        <p class="hint">예보 최고기온은 서버가 선택한 온실의 DMS 공공데이터에서 가져옵니다. 사용자는 작물 기준값만 입력합니다.</p>
       </div>
       <div class="field" id="manual-fields" hidden>
         <label for="draft-text">초안 문장</label>
@@ -123,7 +126,7 @@ import { formatDateTime, hex, escapeHtml } from "./static/fmt.js";
 const USER_ID = "demo-user-1"; // localhost 단일 사용자 데모 범위
 const AI_DRAFT_MODEL_ID = "demo-model-llm-irrigation"; // AI_DRAFT 내부 고정 모델
 
-const state = { pending: [], approved: [], executions: [], deviceOptions: [], deviceLabels: new Map(), sourcesById: new Map() };
+const state = { pending: [], approved: [], executions: [], deviceOptions: [], deviceLabels: new Map(), sourcesById: new Map(), greenhousesById: new Map() };
 
 // listPublicDataSources — ①공공데이터 표가 source_id 대신 사람이 읽는
 // 이름·제공기관을 보이도록 출처 메타정보를 한 번 적재한다(0937 6.2).
@@ -132,9 +135,53 @@ async function loadPublicDataSources() {
   state.sourcesById = new Map(page.items.map((s) => [s.id, s]));
 }
 
+// F-258 — 초안 대상 온실 선택지와 공공데이터 표의 온실명 표시를 위해 온실
+// 목록을 한 번 적재한다. 온실 위경도는 설정 화면에서 저장한다.
+async function loadGreenhouses() {
+  const page = await api.listGreenhouses();
+  state.greenhousesById = new Map(page.items.map((g) => [g.id, g]));
+  const sel = document.getElementById("draft-greenhouse");
+  sel.innerHTML = page.items.map((g) => `<option value="${escapeHtml(g.id)}">${escapeHtml(g.name)} (${escapeHtml(g.id)})</option>`).join("");
+}
+
+// F-258 §7 — 실데이터(LIVE)와 폴백(DEMO_FIXTURE·FALLBACK)을 절대 같은 상태로
+// 표시하지 않는다. 무표시 자동 폴백은 금지 — 항상 배지를 붙인다.
+function originBadge(origin) {
+  // 색만이 아니라 텍스트로도 구분한다(색 의존 금지). 기존에 명도대비가
+  // 검증된 badge 클래스를 재사용한다.
+  if (origin === "LIVE") return '<span class="badge online">실데이터(LIVE)</span>';
+  if (origin === "FALLBACK") return '<span class="badge alert">폴백(FALLBACK)</span>';
+  return '<span class="badge stale">데모 고정값(DEMO_FIXTURE)</span>';
+}
+
 function actionSummary(a) {
   if (!a) return "—";
   return `${a.value_type} ${a.value}${a.duration_sec != null ? ` (${a.duration_sec}초)` : ""}`;
+}
+
+// F-259 — 기상청 YYYYMMDD 를 사람이 읽는 YYYY-MM-DD 로. 8자리 숫자가 아니면 원문 유지.
+function fcstDateLabel(d) {
+  return (typeof d === "string" && /^\d{8}$/.test(d)) ? `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}` : (d ?? "—");
+}
+// F-259 — 온실의 등록 위경도·격자 라벨(설정 화면에서 저장한 값). 미저장이면 "—".
+function ghLatLon(gh) { return (gh && gh.latitude != null && gh.longitude != null) ? `${gh.latitude}, ${gh.longitude}` : "—"; }
+function ghGrid(gh) { return (gh && gh.kma_nx != null && gh.kma_ny != null) ? `${gh.kma_nx},${gh.kma_ny}` : "—"; }
+function forecastCell(forecast_date, forecast_tmax_c) {
+  const d = forecast_date ? fcstDateLabel(forecast_date) : "—";
+  const t = forecast_tmax_c != null ? `${forecast_tmax_c}°C` : "—";
+  return `${d} · ${t}`;
+}
+
+// F-259 — 초안 카드가 ①공공데이터 표와 같은 근거(온실·위경도·등록격자·발표회차·
+// 예보대상일·TMX·출처)를 보이게 한다. 서버가 rule.forecast 로 결속 레코드
+// 스냅샷을 실어준다 — 없으면(WIZARD·SCRIPT 등) 빈 문자열.
+function forecastLineHtml(rule) {
+  const f = rule.forecast;
+  if (!f) return "";
+  const gh = f.greenhouse_id ? state.greenhousesById.get(f.greenhouse_id) : null;
+  const ghLabel = gh ? gh.name : (f.greenhouse_id ?? "—");
+  const base = (f.base_date && f.base_time) ? `${f.base_date} ${f.base_time}` : "—";
+  return `<p class="hint">근거 예보 — 온실 ${escapeHtml(ghLabel)} · 위경도 ${escapeHtml(ghLatLon(gh))} · 등록격자 ${escapeHtml(ghGrid(gh))} · 발표회차 ${escapeHtml(base)} · 예보대상일 ${escapeHtml(fcstDateLabel(f.forecast_date))} · 최고기온 ${escapeHtml(f.forecast_tmax_c != null ? `${f.forecast_tmax_c}°C` : "—")} ${originBadge(f.data_origin)}</p>`;
 }
 
 // 아래 세 카드 함수는 서버가 돌려준 자유 텍스트(draft_text·
@@ -159,6 +206,7 @@ function pendingCardHtml(rule) {
     <p class="badge unapproved">미승인</p>
     <p class="hint">사람 검토 필요</p>
     ${generationPathHtml(rule)}
+    ${forecastLineHtml(rule)}
     <p class="readonly-text">${escapeHtml(rule.draft_text)}</p>
     <details>
       <summary>승인하기</summary>
@@ -209,6 +257,7 @@ function approvedCardHtml(rule) {
   return `<article class="card">
     <p class="badge normal">승인됨</p>
     ${generationPathHtml(rule)}
+    ${forecastLineHtml(rule)}
     <p class="hint">승인자 ${escapeHtml(rule.approved_by ?? "—")} · ${formatDateTime(rule.approved_at)}</p>
     <p class="readonly-text">${escapeHtml(rule.draft_text)}</p>
     <p>실행 판단 조건: ${escapeHtml(rule.condition_expr ?? "—")} / 명령: ${escapeHtml(actionSummary(rule.action))} / 대상: ${escapeHtml(installLabel(rule.target_install_id))}</p>
@@ -221,6 +270,7 @@ function rejectedCardHtml(rule) {
   return `<article class="card">
     <p class="badge violation">거부됨</p>
     ${generationPathHtml(rule)}
+    ${forecastLineHtml(rule)}
     <p class="hint">거부자 ${escapeHtml(rule.rejected_by ?? "—")} · ${formatDateTime(rule.rejected_at)}</p>
     <p class="readonly-text">${escapeHtml(rule.draft_text)}</p>
     <p>거부 사유: ${escapeHtml(rule.reject_reason)}</p>
@@ -287,10 +337,18 @@ function renderPublicData(items) {
   const tbody = document.querySelector("#pd-table tbody");
   tbody.innerHTML = items.map((r) => {
     const src = state.sourcesById.get(r.source_id);
-    const dummySuffix = r.payload?._meta?.note?.includes("폴백 목업") ? " (더미데이터)" : "";
     const srcLabel = src ? `${src.name} (${src.provider})` : r.source_id;
+    const gh = r.greenhouse_id ? state.greenhousesById.get(r.greenhouse_id) : null;
+    const ghLabel = gh ? gh.name : (r.greenhouse_id ? r.greenhouse_id : "—");
+    // F-259 — 격자는 '온실에 등록된 위경도 격자'를 보인다(설정 화면 저장값). 발표회차·
+    // 실제 요청 격자(r.nx/ny)는 LIVE 요청이 성립했을 때만 있어 폴백에서 null 이지만,
+    // 등록 격자는 요청과 무관한 위치 정보라 데모에서도 보인다(제안 §2 라벨 분리).
+    const baseLabel = (r.base_date && r.base_time) ? `${r.base_date} ${r.base_time}` : "—";
     return `<tr>
-      <td>${escapeHtml(srcLabel + dummySuffix)}</td><td>${formatDateTime(r.fetched_at)}</td><td>${escapeHtml(r.region ?? "—")}</td><td>${escapeHtml(r.item ?? "—")}</td>
+      <td>${escapeHtml(srcLabel)}</td><td>${escapeHtml(ghLabel)}</td><td>${escapeHtml(ghLatLon(gh))}</td>
+      <td>${escapeHtml(ghGrid(gh))}</td><td>${escapeHtml(baseLabel)}</td>
+      <td>${escapeHtml(forecastCell(r.forecast_date, r.forecast_tmax_c))}</td>
+      <td>${formatDateTime(r.fetched_at)}</td><td>${originBadge(r.data_origin)}</td>
     </tr>`;
   }).join("");
 }
@@ -364,6 +422,8 @@ document.getElementById("draft-form").addEventListener("submit", async (ev) => {
   const body = { origin, condition_expr: document.getElementById("draft-cond").value || null };
   if (origin === "AI_DRAFT") {
     body.model_id = AI_DRAFT_MODEL_ID;
+    const gh = document.getElementById("draft-greenhouse").value;
+    if (gh) body.greenhouse_id = gh;   // F-258 — 선택 온실 위치의 예보를 수집
     const cropTmax = Number(document.getElementById("draft-crop-tmax").value);
     if (!Number.isFinite(cropTmax)) {
       statusEl.textContent = "작물 고온 임계값을 숫자로 입력하십시오.";
@@ -489,7 +549,7 @@ connectStream({
   onPollTick: loadAll,
 });
 
-Promise.all([loadDeviceOptions(), loadPublicDataSources()]).then(loadAll);
+Promise.all([loadDeviceOptions(), loadPublicDataSources(), loadGreenhouses()]).then(loadAll);
 </script>
 </body>
 </html>

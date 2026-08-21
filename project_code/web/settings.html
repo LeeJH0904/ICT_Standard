@@ -70,6 +70,30 @@
     <p id="prop-status" class="hint" role="status"></p>
   </form>
 
+  <section aria-labelledby="geo-h">
+    <h2 id="geo-h">기상 위치 (온실별 WGS84 위경도)</h2>
+    <p class="hint">TTAK.KO-10.1369-P1 6.2.3 온실 설치위치 · TTAK.KO-10.0937 6.1 — 기상청 단기예보는 위경도가 아니라 동네예보 격자를 요구합니다. 온실 위경도를 입력하면 서버가 격자를 계산해 그 위치의 예보를 수집합니다.</p>
+    <p data-state-message data-geo-state></p>
+    <form id="geo-form">
+      <div class="field">
+        <label for="geo-greenhouse">온실</label>
+        <select id="geo-greenhouse" name="greenhouse_id"></select>
+      </div>
+      <div class="field">
+        <label for="geo-lat">WGS84 위도 <span class="hint">(-90 ~ 90, 예: 37.5665)</span></label>
+        <input id="geo-lat" name="latitude" type="number" step="any" min="-90" max="90" required>
+      </div>
+      <div class="field">
+        <label for="geo-lon">WGS84 경도 <span class="hint">(-180 ~ 180, 예: 126.9780)</span></label>
+        <input id="geo-lon" name="longitude" type="number" step="any" min="-180" max="180" required>
+      </div>
+      <p class="hint" id="geo-current" role="status"></p>
+      <button type="submit" class="primary">위치 저장</button>
+      <p id="geo-status" class="hint" role="status"></p>
+    </form>
+    <p class="hint">기상청 격자(nx·ny)는 위경도에서 서버가 계산하는 파생값이라 직접 입력·수정하지 않습니다.</p>
+  </section>
+
   <section aria-labelledby="dev-h">
     <h2 id="dev-h">전체 디바이스 목록</h2>
     <p data-state-message></p>
@@ -187,6 +211,71 @@ document.getElementById("prop-form").addEventListener("submit", async (ev) => {
   }
 });
 
+// ── 기상 위치 (F-258) ──────────────────────────────────────────
+const geoState = { greenhouses: [] };
+
+function originLabel(src) {
+  return src === "MANUAL" ? "직접 입력(MANUAL)"
+       : src === "DEMO_FIXTURE" ? "데모 고정값(DEMO_FIXTURE)"
+       : "미설정";
+}
+
+function showCurrentGreenhouse() {
+  const sel = document.getElementById("geo-greenhouse");
+  const gh = geoState.greenhouses.find((g) => g.id === sel.value);
+  const el = document.getElementById("geo-current");
+  if (!gh) { el.textContent = ""; return; }
+  if (gh.latitude == null) {
+    el.textContent = "현재: 위치 미설정 — 위경도를 입력해 저장하십시오.";
+  } else {
+    document.getElementById("geo-lat").value = gh.latitude;
+    document.getElementById("geo-lon").value = gh.longitude;
+    el.textContent = `현재: 위경도 ${gh.latitude}, ${gh.longitude} · 기상청 격자 ${gh.kma_nx},${gh.kma_ny}`
+      + ` · 출처 ${originLabel(gh.coordinate_source)}`
+      + (gh.coordinates_updated_at ? ` · 변경 ${gh.coordinates_updated_at}` : "");
+  }
+}
+
+async function loadGreenhouses() {
+  const section = document.querySelector("#geo-h").closest("section");
+  setViewState(section, "loading", "불러오는 중입니다…");
+  try {
+    const page = await api.listGreenhouses();
+    geoState.greenhouses = page.items;
+    const sel = document.getElementById("geo-greenhouse");
+    sel.innerHTML = page.items.map((g) => `<option value="${g.id}">${g.name} (${g.id})</option>`).join("");
+    if (!page.items.length) {
+      setViewState(section, "empty", "등록된 온실이 없습니다.");
+    } else {
+      setViewState(section, "ready", "");
+      showCurrentGreenhouse();
+    }
+  } catch (err) {
+    setViewState(section, "error", err instanceof ApiError ? err.message : String(err));
+  }
+}
+
+document.getElementById("geo-greenhouse").addEventListener("change", showCurrentGreenhouse);
+
+document.getElementById("geo-form").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const statusEl = document.getElementById("geo-status");
+  const ghId = document.getElementById("geo-greenhouse").value;
+  const lat = document.getElementById("geo-lat").value;
+  const lon = document.getElementById("geo-lon").value;
+  if (!ghId) { statusEl.textContent = "온실을 선택하세요."; return; }
+  if (lat === "" || lon === "") { statusEl.textContent = "위도·경도를 입력하세요."; return; }
+  statusEl.textContent = "저장 중…";
+  try {
+    const gh = await api.setGreenhouseLocation(ghId, { latitude: Number(lat), longitude: Number(lon) }, USER_ID);
+    statusEl.textContent = `저장됨 — 기상청 격자 ${gh.kma_nx},${gh.kma_ny} 로 계산되었습니다.`;
+    announce(statusEl.textContent);
+    await loadGreenhouses();
+  } catch (err) {
+    statusEl.textContent = err instanceof ApiError ? describeProblem(err.problem) : String(err);
+  }
+});
+
 connectStream({
   events: ["node_up", "node_down"],
   onStatus: setConnStatus,
@@ -195,6 +284,7 @@ connectStream({
 });
 
 loadDevices();
+loadGreenhouses();
 </script>
 </body>
 </html>

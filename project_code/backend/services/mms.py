@@ -356,7 +356,8 @@ def run_model(conn: sqlite3.Connection, model_id: str, inputs: dict) -> tuple[st
 
 def draft_rule(conn: sqlite3.Connection, *, origin: str, model_id: str | None = None,
                inputs: dict | None = None, draft_text: str | None = None,
-               condition_expr: str | None = None):
+               condition_expr: str | None = None,
+               public_data_record_id: str | None = None):
     """`POST /api/v1/rules` — 0937 6.3 "제어 명령을 위자드 선택 방식, 스크립트
     입력 방식 등으로 직접 만들어서 등록"(A.3-5). `origin='AI_DRAFT'`면
     서버가 `run_model()`로 모델을 돌려 `draft_text`를 만든다 —
@@ -372,9 +373,13 @@ def draft_rule(conn: sqlite3.Connection, *, origin: str, model_id: str | None = 
         # WIZARD/SCRIPT — schema.sql CHECK: origin='AI_DRAFT' 가 아니면
         # generation 은 NULL 이거나 origin 과 같아야 한다.
         text, generation = draft_text, origin
+    # F-259 — 초안이 어느 예보 레코드를 근거로 만들어졌는지 결속한다. AI_DRAFT 로
+    # DMS 예보를 쓴 경우에만 채워지고 WIZARD·SCRIPT 는 None 이다. 승인 게이트와
+    # 무관한 출처 추적이라 승인/거부 로직은 이 값을 읽지 않는다.
     rule_id = repository.insert_control_rule(
         conn, origin=origin, draft_text=text or "", model_id=model_id,
         generation=generation, condition_expr=condition_expr,
+        public_data_record_id=public_data_record_id,
     )
     conn.commit()
     return repository.get_control_rule(conn, rule_id)

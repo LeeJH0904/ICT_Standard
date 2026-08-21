@@ -36,21 +36,28 @@ VALUES ('demo-farm-1', '2026-08-01T09:00:00+09:00', '2026-08-01T09:00:00+09:00',
         '데모 농장', 'demo-user-1',
         '37.4,127.1', 'GPS', 'deg', 1000, 1, 'm2');
 
+-- F-258: 오프라인 데모 온실에 위경도·격자를 고정 fixture 로 제공한다(제안 §2).
+--        좌표는 목업 예보 격자(60,127 = 서울)와 정합하며 출처를 DEMO_FIXTURE 로
+--        명시한다 — LIVE 데이터와 절대 같은 상태로 표시되지 않는다(제안 §7).
 INSERT INTO greenhouse_info (id, created_at, updated_at, name,
                               location, location_type, location_unit,
                               width_value, width_error, width_unit,
                               height_value, height_error, height_unit,
                               length_value, length_error, length_unit,
                               gh_type, medium_type, irrigation_type, heating_type,
-                              crop, crop_season, usage_state)
+                              crop, crop_season, usage_state,
+                              latitude, longitude, kma_nx, kma_ny,
+                              coordinate_source, coordinates_updated_at)
 VALUES ('demo-gh-1', '2026-08-01T09:00:00+09:00', '2026-08-01T09:00:00+09:00',
         '1호 온실',
-        '37.4,127.1', 'GPS', 'deg',
+        '37.5665,126.9780', 'GPS', 'WGS84',
         6, 0.1, 'm',
         3, 0.1, 'm',
         30, 0.1, 'm',
         '단동', '토경', '점적', '온풍',
-        '토마토', '2026춘작', '사용중');
+        '토마토', '2026춘작', '사용중',
+        37.5665, 126.9780, 60, 127,
+        'DEMO_FIXTURE', '2026-08-01T09:00:00+09:00');
 
 -- 7.1(1) 온실은 정확히 1개 농장에 속한다 — greenhouse_own UNIQUE(greenhouse_id)
 INSERT INTO greenhouse_own (farm_id, greenhouse_id)

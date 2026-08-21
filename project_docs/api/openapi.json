@@ -1025,6 +1025,79 @@
           }
         ]
       }
+    },
+    "/api/v1/greenhouses": {
+      "get": {
+        "tags": [
+          "ems"
+        ],
+        "operationId": "listGreenhouses",
+        "summary": "온실 목록 (위경도·격자 포함)",
+        "description": "TTAK.KO-10.1369-P1 7.2.2.3 온실정보 · TTAK.KO-10.0937 6.1 EMS - 설정·규칙 화면의 온실 선택 목록(위경도·격자 포함). 온실 종류를 하드코딩하지 않고 DB 에서 읽는다(F-258).",
+        "responses": {
+          "200": {
+            "description": "성공",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GreenhousePage"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/greenhouses/{greenhouseId}/location": {
+      "put": {
+        "tags": [
+          "ems"
+        ],
+        "operationId": "setGreenhouseLocation",
+        "summary": "온실 WGS84 위경도 저장",
+        "description": "TTAK.KO-10.1369-P1 6.2.3 온실 설치위치 · TTAK.KO-10.0937 6.1 EMS - 서버가 값·범위를 검증하고 기상청 격자를 재계산해 위경도·격자·출처·시각을 한 트랜잭션에 원자적으로 갱신한다. 브라우저 입력을 그대로 신뢰하지 않는다(F-258).",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/greenhouseId"
+          },
+          {
+            "$ref": "#/components/parameters/userId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GreenhouseLocationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "저장됨",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Greenhouse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        },
+        "security": [
+          {
+            "UserIdHeader": []
+          }
+        ]
+      }
     }
   },
   "components": {
@@ -1116,6 +1189,15 @@
         "schema": {
           "type": "string"
         }
+      },
+      "greenhouseId": {
+        "name": "greenhouseId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        },
+        "description": "온실 id"
       }
     },
     "responses": {
@@ -2129,7 +2211,8 @@
         "required": [
           "id",
           "source_id",
-          "fetched_at"
+          "fetched_at",
+          "data_origin"
         ],
         "properties": {
           "id": {
@@ -2175,6 +2258,64 @@
             ],
             "additionalProperties": true,
             "description": "출처 응답 원문. 구조를 강제하지 않는다"
+          },
+          "greenhouse_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "F-258 - 대상 온실"
+          },
+          "base_date": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "F-258 - 실제 요청 발표일자 YYYYMMDD"
+          },
+          "base_time": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "F-258 - 실제 요청 발표시각 HHMM"
+          },
+          "nx": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "F-258 - 실제 요청 격자 X"
+          },
+          "ny": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "F-258 - 실제 요청 격자 Y"
+          },
+          "data_origin": {
+            "type": "string",
+            "enum": [
+              "LIVE",
+              "FALLBACK",
+              "DEMO_FIXTURE"
+            ],
+            "description": "F-258 - 실데이터(LIVE)인지 폴백(FALLBACK/DEMO_FIXTURE)인지. 키 부재로 추정하지 않는다"
+          },
+          "forecast_date": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "F-259 - 예보 대상일 YYYYMMDD (TMX 항목). 화면이 payload 를 재파싱하지 않도록 서비스 계층이 뽑아 명시. origin 무관하게 존재"
+          },
+          "forecast_tmax_c": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "F-259 - 예보 최고기온 TMX(°C). 실제 초안에 쓰인 예보값이라 DEMO_FIXTURE/FALLBACK 도 채워진다"
           }
         }
       },
@@ -2315,7 +2456,9 @@
           "approved_by",
           "rejected_at",
           "rejected_by",
-          "reject_reason"
+          "reject_reason",
+          "public_data_record_id",
+          "forecast"
         ],
         "properties": {
           "id": {
@@ -2415,6 +2558,91 @@
             "type": [
               "string",
               "null"
+            ]
+          },
+          "public_data_record_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "F-259 - 이 초안이 근거로 쓴 공공데이터 레코드. AI_DRAFT 로 DMS 예보를 쓴 경우에만 존재하고 WIZARD/SCRIPT 는 null. 승인 게이트와 무관한 출처 추적"
+          },
+          "forecast": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "description": "F-259 - 초안 근거 예보 스냅샷. 서버가 public_data_record_id 결속 레코드에서 뽑아 실어 카드가 공공데이터 표와 같은 메타데이터를 보이게 한다",
+                "required": [
+                  "public_data_record_id",
+                  "greenhouse_id",
+                  "base_date",
+                  "base_time",
+                  "nx",
+                  "ny",
+                  "forecast_date",
+                  "forecast_tmax_c",
+                  "data_origin"
+                ],
+                "properties": {
+                  "public_data_record_id": {
+                    "type": "string"
+                  },
+                  "greenhouse_id": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "base_date": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "base_time": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "nx": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "ny": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "forecast_date": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "forecast_tmax_c": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "data_origin": {
+                    "type": "string",
+                    "enum": [
+                      "LIVE",
+                      "FALLBACK",
+                      "DEMO_FIXTURE"
+                    ]
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
             ]
           }
         },
@@ -2534,6 +2762,13 @@
               "string",
               "null"
             ]
+          },
+          "greenhouse_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "F-258 - 예보를 수집할 대상 온실. 미지정이면 서버가 기본 온실을 쓴다. 온실별 격자로 그 위치의 예보를 수집한다."
           }
         },
         "allOf": [
@@ -2967,6 +3202,116 @@
               "X07",
               "X08"
             ]
+          }
+        }
+      },
+      "Greenhouse": {
+        "type": "object",
+        "description": "F-258 - 온실 정보(위경도·기상청 격자 포함). 설정·규칙 화면의 온실 선택에 쓴다.",
+        "required": [
+          "id",
+          "name"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "latitude": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "WGS84 위도"
+          },
+          "longitude": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "WGS84 경도"
+          },
+          "kma_nx": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "기상청 격자 X(위경도 파생)"
+          },
+          "kma_ny": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "기상청 격자 Y(위경도 파생)"
+          },
+          "coordinate_source": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "MANUAL",
+              "DEMO_FIXTURE",
+              null
+            ],
+            "description": "좌표 출처"
+          },
+          "coordinates_updated_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "좌표 변경 시각"
+          }
+        }
+      },
+      "GreenhousePage": {
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Greenhouse"
+            }
+          },
+          "total": {
+            "type": "integer"
+          },
+          "limit": {
+            "type": "integer"
+          },
+          "offset": {
+            "type": "integer"
+          }
+        }
+      },
+      "GreenhouseLocationRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "F-258 - 온실 WGS84 위경도. 서버가 범위를 검증하고 기상청 격자를 재계산한다. nx·ny 는 파생값이라 받지 않는다.",
+        "required": [
+          "latitude",
+          "longitude"
+        ],
+        "properties": {
+          "latitude": {
+            "type": "number",
+            "minimum": -90,
+            "maximum": 90
+          },
+          "longitude": {
+            "type": "number",
+            "minimum": -180,
+            "maximum": 180
           }
         }
       }

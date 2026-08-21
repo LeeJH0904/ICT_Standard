@@ -226,7 +226,9 @@ BINDING = {
     "FrameHeader":      ("frame_log", set()),
     "Violation":        ("frame_violation", set()),
     "Execution":        ("control_execution", {"command", "result_rsc_name"}),
-    "Rule":             ("control_rule", {"action", "approved"}),
+    # forecast 는 public_data_record_id 결속 레코드에서 뽑은 유도 스냅샷이다 (F-259).
+    # 저장하지 않는다 - 레코드가 정본이고 언제든 다시 만들 수 있다.
+    "Rule":             ("control_rule", {"action", "approved", "forecast"}),
 }
 stray = []
 for sname, (tables, allowed) in BINDING.items():
@@ -445,6 +447,7 @@ WRITE_ALLOWED = {
     ("PATCH", "/api/v1/device-property"),           # 0937 6.4-2 · A.1-3 · A.1-5 - 수집 설정
     ("POST", "/api/v1/rules/{ruleId}/reject"),      # 0937 부속서 A 3.2 - 거부 (F-083)
     ("POST", "/api/v1/sim/inject"),                 # 0943 7.3.1 - 위반 주입 (F-084)
+    ("PUT", "/api/v1/greenhouses/{greenhouseId}/location"),  # 1369-P1 6.2.3 · 0937 6.1 - 온실 위경도 저장 (F-258)
 }
 writes = {(m.upper(), p) for p, m, _ in ops() if m != "get"}
 extra   = sorted(f"{m} {p}" for m, p in writes - WRITE_ALLOWED)
@@ -621,7 +624,8 @@ NOW = "2026-08-07T00:00:00Z"
 _RULE_OK = {"id": "r", "created_at": NOW, "origin": "WIZARD", "draft_text": "x",
             "approved": False, "generation": "WIZARD",
             "approved_at": None, "approved_by": None,
-            "rejected_at": None, "rejected_by": None, "reject_reason": None}
+            "rejected_at": None, "rejected_by": None, "reject_reason": None,
+            "public_data_record_id": None, "forecast": None}   # F-259 nullable 필수
 _ALERT_OK = {"id": "a", "raised_at": NOW, "kind": "NODE_ERROR", "severity": "WARN",
              "message": "m", "install_id": None, "siap_nec": None,
              "frame_id": None, "ack_at": None}
@@ -650,6 +654,15 @@ MATRIX = [
   ("Rule", {**_RULE_OK, "rejected_at": NOW, "rejected_by": "u", "reject_reason": None}, False, "거부인데 사유 null"),
   ("Rule", {**_RULE_OK, "rejected_at": NOW, "rejected_by": "u", "reject_reason": ""},   False, "거부인데 사유 빈값"),
   ("Rule", {**_RULE_OK, "rejected_at": NOW, "rejected_by": "u", "reject_reason": "대상 상이"}, True, "거부 정상"),
+  # ── F-259 초안 근거 예보 결속 — nullable 이지만 필수(키 존재) ──
+  ("Rule", _minus(_RULE_OK, "public_data_record_id"),                       False, "근거 레코드 필드 생략 (F-259)"),
+  ("Rule", _minus(_RULE_OK, "forecast"),                                    False, "예보 스냅샷 필드 생략 (F-259)"),
+  ("Rule", {**_RULE_OK, "origin": "AI_DRAFT", "generation": "THRESHOLD_FALLBACK",
+            "public_data_record_id": "pdr1",
+            "forecast": {"public_data_record_id": "pdr1", "greenhouse_id": "demo-gh-1",
+                         "base_date": None, "base_time": None, "nx": None, "ny": None,
+                         "forecast_date": "20260812", "forecast_tmax_c": 34.0,
+                         "data_origin": "DEMO_FIXTURE"}},                    True,  "AI 초안 + 예보 결속 (F-259)"),
   ("RejectRequest", {"reason": "대상 장치가 다름"}, True,  "거부 요청 정상"),
   ("RejectRequest", {"reason": ""},                False, "거부 요청 + 빈 사유"),
   # ── F-092 알림 ────────────────────────────────────────────

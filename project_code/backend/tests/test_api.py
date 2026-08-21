@@ -320,6 +320,35 @@ def test_create_ai_draft_falls_back_to_threshold_f083(app):
     assert "33" in rule["draft_text"] or "예보" in rule["draft_text"]
 
 
+def test_ai_draft_binds_forecast_evidence_f259(app):
+    """F-259 — AI 초안이 근거로 쓴 공공데이터 레코드를 규칙에 결속하고, 응답이
+    카드 표시용 예보 스냅샷(온실·발표회차·예보대상일·TMX·출처)을 싣는다.
+    키 부재 데모라 data_origin=DEMO_FIXTURE, 목업 TMX=34·대상일 20260812."""
+    r = call(app, "POST", "/api/v1/rules",
+             json={"origin": "AI_DRAFT", "model_id": "demo-model-threshold-tmax",
+                   "inputs": {"crop_tmax_c": 33}})
+    assert r.status_code == 201
+    rule = r.json()
+    assert rule["public_data_record_id"]                     # 근거 레코드 결속됨
+    f = rule["forecast"]
+    assert f is not None
+    assert f["greenhouse_id"] == "demo-gh-1"
+    assert f["data_origin"] == "DEMO_FIXTURE"
+    assert f["forecast_tmax_c"] == 34.0 and f["forecast_date"] == "20260812"
+    # 재조회(GET)도 같은 스냅샷을 돌려준다.
+    g = call(app, "GET", f"/api/v1/rules/{rule['id']}").json()
+    assert g["forecast"]["forecast_tmax_c"] == 34.0
+
+
+def test_wizard_rule_has_no_forecast_binding_f259(app):
+    """WIZARD·SCRIPT 는 DMS 예보를 쓰지 않으므로 결속이 없다(NULL)."""
+    r = call(app, "POST", "/api/v1/rules",
+             json={"origin": "WIZARD", "draft_text": "고온이면 관수"})
+    rule = r.json()
+    assert rule["public_data_record_id"] is None
+    assert rule["forecast"] is None
+
+
 def test_create_ai_draft_without_crop_threshold_says_so_f190(app):
     """임계값은 서버 상수가 아니라 inputs.crop_tmax_c 로 온다.
     생략하면 추측하지 않고 그렇게 말한다."""

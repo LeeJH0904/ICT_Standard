@@ -6,7 +6,7 @@
 > **불변식**: `표준결함` 행 수 = `CLAUDE.md` §3.6 총계 = 명세서의 장애 지점 합계
 > **자동 검사**: `python fix_log/meta_verify.py` — 인덱스·상세·설계 문서 수치를 기계 대조한다 (F-043)
 
-**다음 ID: `F-258`**
+**다음 ID: `F-260`**
 
 ## 표준결함 (19건) — 고칠 수 없음. 기획서 자산
 
@@ -273,6 +273,8 @@
 | F-255 | 오류 | 코드버그 | `fix_log/meta_verify.py` · F-189 설정 코드 | 비밀값 검증기가 안전한 환경변수 이름·조회 코드를 실제 비밀정보로 오인해 117/119 실패 | 수정완료 | F-255_secret_scan_rejects_env_names.md |
 | F-256 | 오류 | 코드버그 | `web/rules.html` · `backend/api.py` | 화면이 입력받아 전송하는 `forecast_tmax_c`를 서버가 무시하고 별도 DMS 예보로 덮어씀 | 수정완료 | F-256_rules_forecast_input_ignored.md |
 | F-257 | 위험 | 문서불일치 | `docs/ai-usage.md` · F-189 개선 문서 | Responses API 공식 근거 링크가 폐기된 404 주소를 가리킴 | 수정완료 | F-257_openai_reference_link_404.md |
+| F-258 | 오류 | 코드버그 | `dms.py` · `rules.html` · `schema.sql` | 기상청 실예보 호출에 위경도 기반 위치·격자·발표시각 필수 입력 경로가 없음 | 수정완료 | F-258_kma_location_request_missing.md |
+| F-259 | 오류 | 코드버그 | `rules.html` · `backend/api.py` · `dms.py` | F-258의 온실·예보 메타데이터가 rules 표·초안 카드에 표출되지 않음 | 수정완료 | F-259_rules_forecast_metadata_not_rendered.md |
 
 > **결번**: F-018 ~ F-021. 규약 §2에 따라 번호는 재사용하지 않는다.
 > 직전 라운드에서 Claude가 수신한 인덱스에는 해당 행이 존재하지 않았다 (F-023 처리 기록 참조).
@@ -284,10 +286,10 @@
 | 상태 | 건수 | | 분류 | 건수 |
 |---|---|---|---|---|
 | 신규 | 0 | | 요건위반 | 6 |
-| 확인 | 0 | | 코드버그 | 143 |
-| 수정완료 | 232 | | 문서불일치 | 85 |
+| 확인 | 0 | | 코드버그 | 145 |
+| 수정완료 | 234 | | 문서불일치 | 85 |
 | 기각 | 1 | | 표준결함 | 19 |
-| 보류 | 1 | | **합계** | **253** |
+| 보류 | 1 | | **합계** | **255** |
 | 이관 | 19 | | | |
 
 > F-052 는 요청받은 문서화를 마쳐 `수정완료`지만, 그 안에 **보류 결정 1건**(온실관리 기반 인가 제약)이
@@ -308,6 +310,7 @@
 
 | 일시 | 라운드 | 내용 |
 |---|---|---|
+| 2026-08-21 | 검증 F-259 | 코드버그 1건 재현 후 수정완료. F-258이 온실·예보 메타데이터를 저장했으나 화면에 표출되지 않던 문제. **DB**: `public_data_record`에 `forecast_date`·`forecast_tmax_c`(예보 대상일·TMX 명시 컬럼, origin 무관 저장), `control_rule`에 `public_data_record_id`(초안 근거 결속) 추가—3 schema.sql(개발·정본·제출본) 바이트 동일. **서비스**: `dms._extract_forecast`가 payload에서 TMX 대상일·값을 뽑아 저장(화면이 기상청 스키마 재해석 안 함, §3.4). `mms.draft_rule`·`api`가 초안에 근거 레코드 결속. **API**: `_record_dict`에 예보 필드, `_rule_dict`에 `public_data_record_id`+`forecast` 스냅샷(결속 레코드에서 유도). **화면**: 공공데이터 표에 위경도·등록격자·예보(대상일·TMX) 컬럼 추가—데모(DEMO_FIXTURE)에서도 등록 격자·예보값이 보이되 실행 안 된 LIVE 요청은 꾸며내지 않음(제안 §2 라벨 분리). 미승인·승인·거부 카드에 근거 예보 결속 표시. **회귀**: dms 예보추출·저장 4건, API 초안결속 2건, rules.html 렌더배선 2건, F-256 회귀는 '전송 금지'를 정밀 검사로 갱신(표시 허용). 검증: 개발 pytest 459/459 · api_verify 71/71 · web 75/75 · web_live 27/27 · db_live · meta 통과 · run_all 21/21 · offline 통과. |
 | 2026-08-20 | 최종 수정 F-250~F-253 | 신규 4건 전량 재현 후 수정완료. F-250은 최종 제출본의 제외 대상 60개를 제거하고 `offline_verify.py`에 실제 staging의 캐시·DB·실행파일·개인 절대 경로 검사를 추가했다. F-251은 `project_docs/siap/tools/`를 루트 `tools/`로 복원하고 루트·검증기 발견 회귀 테스트 2건을 추가했다. F-252는 골든에 없는 냉난방기 fallback 장치를 제거하고 미등록 subtype 생성 시 즉시 실패하도록 개발본·제출본과 테스트를 동기화했다. F-253은 화면 설계서 §2.1 `verify.html` 읽기 목록에 `listNodes`를 복원했다. 검증: 개발 pytest 409/409 · 제출본 집중 12/12 · tools 테스트 55/55+F-251 2/2 · mode 12/12 · web_live 27/27 · web 75/75 · run_all 21/21 · meta 119/119. |
 | 2026-08-17 | 단계 8 GPT 재검증 F-236~F-240 | 5건 전량 처리(기각 0). 요건위반(F-236·F-240)→코드버그(F-237·F-238)→문서불일치(F-239) 순. **F-236(치명, 요건위반)**: 신고 시점엔 단계 8 산출물이 `Branch_2`에만 있고 제출 브랜치 `Branch_1`에 없었으나, 직전 세션의 브랜치 복구·push로 `1e69a1e`가 AVR 2종·`board_verify.py`·`session_01_uno_dht22.jsonl`·F-198 선언·DHT22 전량을 `Branch_1` HEAD에 포함(origin과 0 ahead/0 behind)—전제가 해소돼 수정완료. **F-237(오류, 코드버그)**: 두 AVR `uart_write()`가 `n = (avail>0 && avail<len) ? avail : len`이라 `availableForWrite()==0`일 때 `n=len`으로 떨어져 포화 버퍼에 `Serial.write(buf,len)`—공간이 빌 때까지 블로킹해 수신·ACK·타이머 지연(§5.8 위반). `if (avail<=0) return 0;` 가드 후 `n=min(avail,len)`으로 수정, `board_verify.py`에 정적 회귀 검사(가드 존재 확인) 신설—11/12 PASS. **F-238(오류, 코드버그)**: `where.py::_build_and_size`가 존재하지 않는 Makefile(설계상 보드는 Arduino IDE/arduino-cli 빌드, BUILD.md §2)을 요구해 항상 FAIL, 실제 게이트 `board_verify.py`(run_all이 glob으로 실행, 55% 실측)와 모순. 죽은 `_build_and_size`·40% 상수 제거, 물리 빌드는 MANUAL로 남기고 크기는 board_verify에 위임—`check_stage_8`이 MANUAL·board_verify OK·MANUAL로 정리. **F-239(오류, 문서불일치)—판정: 55% 전체-globals가 정본**(§1.5·§3.4·board_verify): `where.py`(40%)·`BUILD.md:74`·`펌웨어_설계서:1129`의 스테일 40%를 55% 전체-globals로 동기화, 40% 슬라이스는 `firmware_verify.py` 전용으로 분리 명기. **F-240(위험, 요건위반)**: `.gitignore *.db`·추적 DB 0개는 이미 반영됐으나, `offline_verify.py`가 gitignore를 무시한 폴더 walk로 온디스크 DB 6개(128MB)를 크기에 포함(138.9MB)하고 탐지도 못 했다—`git ls-files --others --ignored`로 무시 파일을 walk에서 제외(138.9→**16.5MB**, 실제 git-archive와 일치), `check_no_tracked_databases()` 신설(추적 DB 0 확인), `test_offline_verify.py` 회귀 2종 신설. 검증: `board_verify.py` 11/12(FAIL 0) · `test_where.py` 4/4 · `test_offline_verify.py` 2/2 · `where.check_stage_8` 정리 확인. |
 | 2026-08-14 | 신규 오류 F-233~F-235 | 3건 전량 수정완료. F-233은 최초 SSE 단절 커서를 폴링 표시 목록과 분리해 성공적인 전 페이지 복구 뒤에만 해제한다. F-234는 화살표 함수 헬퍼를 미승인 실행 경로 호출 그래프에 포함하고, F-235는 CSS 프로토콜 상대 외부 URL을 차단한다. 세 반례를 메모리에서 재주입해 모두 탐지됨을 확인했다. 검증: 집중 pytest 8/8 · 웹 설계 75/75 · 웹 실물 27/27 · tools 49/49 · dev 78/78 · tools/run_all.py 20/20. |

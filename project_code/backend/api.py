@@ -32,14 +32,14 @@ from fastapi.staticfiles import StaticFiles
 try:                    # 와 같은 원칙
     from backend import repository
     from backend import db as backend_db
-    from backend.services import dms, ems, fcs, fms, mms
+    from backend.services import dms, ems, fcs, fms, kma_grid, mms
 except ImportError:
     import pathlib
     import sys
     sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
     from backend import repository
     from backend import db as backend_db
-    from backend.services import dms, ems, fcs, fms, mms
+    from backend.services import dms, ems, fcs, fms, kma_grid, mms
 
 try:
     from contracts.frame import (
@@ -397,10 +397,39 @@ def _source_dict(s) -> dict:
 def _record_dict(r) -> dict:
     return {"id": r.id, "source_id": r.source_id, "fetched_at": r.fetched_at,
             "period_from": r.period_from, "period_to": r.period_to, "region": r.region,
-            "item": r.item, "payload": json.loads(r.payload) if r.payload else None}
+            "item": r.item, "payload": json.loads(r.payload) if r.payload else None,
+            # F-258 — 어느 온실·격자·발표회차의 예보이며 실데이터인지 폴백인지.
+            "greenhouse_id": r.greenhouse_id, "base_date": r.base_date, "base_time": r.base_time,
+            "nx": r.nx, "ny": r.ny, "data_origin": r.data_origin,
+            # F-259 — 예보 대상일·최고기온(TMX). 화면이 payload 를 다시 파싱하지 않는다.
+            "forecast_date": r.forecast_date, "forecast_tmax_c": r.forecast_tmax_c}
 
 
-def _rule_dict(r) -> dict:
+def _greenhouse_dict(g) -> dict:
+    return {"id": g.id, "name": g.name,
+            "latitude": g.latitude, "longitude": g.longitude,
+            "kma_nx": g.kma_nx, "kma_ny": g.kma_ny,
+            "coordinate_source": g.coordinate_source,
+            "coordinates_updated_at": g.coordinates_updated_at}
+
+
+def _rule_forecast_dict(conn, record_id: str) -> dict | None:
+    """F-259 — 초안이 근거로 쓴 공공데이터 레코드의 예보 메타데이터 스냅샷.
+    초안 카드가 ①공공데이터 표와 같은 온실·격자·발표회차·예보값·출처를
+    보이도록 서버가 결속 레코드에서 뽑아 실어준다. 화면은 이 값을 렌더만
+    한다(표준·외부 스키마 재해석 없음). 레코드가 없으면 None."""
+    rec = repository.get_by_id(conn, "public_data_record", record_id)
+    if rec is None:
+        return None
+    return {
+        "public_data_record_id": rec.id, "greenhouse_id": rec.greenhouse_id,
+        "base_date": rec.base_date, "base_time": rec.base_time, "nx": rec.nx, "ny": rec.ny,
+        "forecast_date": rec.forecast_date, "forecast_tmax_c": rec.forecast_tmax_c,
+        "data_origin": rec.data_origin,
+    }
+
+
+def _rule_dict(r, conn=None) -> dict:
     return {
         "id": r.id, "model_id": r.model_id, "created_at": r.created_at, "origin": r.origin,
         "draft_text": r.draft_text, "condition_expr": r.condition_expr,
@@ -408,6 +437,10 @@ def _rule_dict(r) -> dict:
         "target_install_id": r.target_install_id, "approved": r.is_approved,
         "approved_at": r.approved_at, "approved_by": r.approved_by, "generation": r.generation,
         "rejected_at": r.rejected_at, "rejected_by": r.rejected_by, "reject_reason": r.reject_reason,
+        # F-259 — 초안 근거 예보 결속. 카드가 표와 같은 메타데이터를 보이게 한다.
+        "public_data_record_id": r.public_data_record_id,
+        "forecast": (_rule_forecast_dict(conn, r.public_data_record_id)
+                     if conn is not None and r.public_data_record_id else None),
     }
 
 
@@ -505,12 +538,27 @@ def create_app(*, db_path: str | Path, link: SiapLink, builder: FrameBuilder,
     def get_health():
         stats = link.stats()
         alive = stats.get("uptime", 0) > 0
+        # F-258 §7 — 목업 사용 여부를 '키 부재'로 추정하지 않고 마지막 수집
+        #            결과(data_origin)에 근거해 표시한다. 수집 이력이 없으면
+        #            키 부재 여부로 폴백(수집 전 초기 상태).
+        conn = get_conn()
+        try:
+            recs, _ = dms.list_records(conn, limit=1, offset=0)
+        finally:
+            conn.close()
+        if recs:
+            fallback = recs[0].data_origin != "LIVE"
+            last_origin = recs[0].data_origin
+        else:
+            fallback = os.environ.get(dms.API_KEY_ENV) is None
+            last_origin = None
         return {
             "status": "ok" if alive else "degraded",
             "run_mode": run_mode,
             "proto_mode": proto_mode,
             "io_thread_alive": alive,
-            "public_data_fallback": os.environ.get(dms.API_KEY_ENV) is None,
+            "public_data_fallback": fallback,
+            "public_data_origin": last_origin,
             "link": stats,
         }
 
@@ -740,6 +788,51 @@ def create_app(*, db_path: str | Path, link: SiapLink, builder: FrameBuilder,
             conn.close()
         return _page(items, total, limit, offset)
 
+    # ── greenhouse location (F-258) ─────────────────────────────
+    @app.get("/api/v1/greenhouses")
+    def list_greenhouses():
+        """설정·규칙 화면의 온실 선택 목록 — 위경도·격자·좌표 출처 포함.
+        온실 종류를 하드코딩하지 않고 DB 에서 읽는다(CLAUDE.md §1-6)."""
+        conn = get_conn()
+        try:
+            items = [_greenhouse_dict(g) for g in repository.list_greenhouses(conn)]
+        finally:
+            conn.close()
+        return _page(items, len(items), len(items), 0)
+
+    @app.put("/api/v1/greenhouses/{greenhouseId}/location")
+    def set_greenhouse_location(greenhouseId: str, body: dict = Body(...),
+                                 x_user_id: str = Header(..., alias="X-User-Id")):
+        """온실 WGS84 위경도를 저장한다(F-258 제안 §2·§3). 서버가 값·범위를
+        검증하고 기상청 격자를 재계산해 위경도·격자·출처·시각을 한 트랜잭션에
+        원자적으로 갱신한다. 브라우저 입력을 그대로 신뢰하지 않는다."""
+        if set(body) != {"latitude", "longitude"}:
+            raise ApiProblem(400, "잘못된 요청 형식",
+                              detail=f"latitude·longitude 두 필드만 허용된다. 받은 필드: {sorted(body)}")
+        try:
+            latitude = float(body["latitude"])
+            longitude = float(body["longitude"])
+        except (TypeError, ValueError):
+            raise ApiProblem(400, "잘못된 요청 형식", detail="latitude·longitude 는 숫자여야 한다")
+        try:
+            kma_grid.validate_latlon(latitude, longitude)
+            nx, ny = kma_grid.latlon_to_kma_grid(latitude, longitude)
+        except ValueError as e:
+            raise ApiProblem(400, "잘못된 요청 형식", detail=str(e)) from e
+        conn = get_conn()
+        try:
+            _require_user(x_user_id, conn)
+            ok = repository.set_greenhouse_location(
+                conn, greenhouseId, latitude=latitude, longitude=longitude,
+                kma_nx=nx, kma_ny=ny, source="MANUAL", user_id=x_user_id)
+            if not ok:
+                raise _not_found(f"greenhouse_id={greenhouseId}")
+            conn.commit()
+            gh = repository.get_greenhouse(conn, greenhouseId)
+        finally:
+            conn.close()
+        return _greenhouse_dict(gh)
+
     # ── mms ─────────────────────────────────────────────────────
     @app.get("/api/v1/rules")
     def list_rules(approved: bool | None = None, limit: int = Query(100, ge=1, le=500),
@@ -747,7 +840,7 @@ def create_app(*, db_path: str | Path, link: SiapLink, builder: FrameBuilder,
         conn = get_conn()
         try:
             rules, total = repository.list_control_rules(conn, approved=approved, limit=limit, offset=offset)
-            items = [_rule_dict(r) for r in rules]
+            items = [_rule_dict(r, conn) for r in rules]
         finally:
             conn.close()
         return _page(items, total, limit, offset)
@@ -757,7 +850,7 @@ def create_app(*, db_path: str | Path, link: SiapLink, builder: FrameBuilder,
         origin = body.get("origin")
         if origin not in ("AI_DRAFT", "WIZARD", "SCRIPT"):
             raise ApiProblem(400, "잘못된 요청 형식", detail="origin 은 AI_DRAFT/WIZARD/SCRIPT 중 하나여야 한다")
-        extra = set(body) - {"origin", "model_id", "inputs", "draft_text", "condition_expr"}
+        extra = set(body) - {"origin", "model_id", "inputs", "draft_text", "condition_expr", "greenhouse_id"}
         if extra:
             raise ApiProblem(400, "잘못된 요청 형식", detail=f"허용되지 않는 필드: {sorted(extra)}")
         conn = get_conn()
@@ -778,16 +871,22 @@ def create_app(*, db_path: str | Path, link: SiapLink, builder: FrameBuilder,
                                 "DMS 공공데이터 레코드의 예보값을 사용한다"),
                     )
                 # 0937 6.3-3/6.3-4 — DMS 가 사전 획득한 공공데이터를 입력으로 쓴다.
+                # F-258 — 대상 온실 격자로 그 온실 위치의 예보를 수집한다.
+                #         온실 미지정이면 데모 단일 온실을 기본으로 쓴다(전역
+                #         최신 레코드를 위치 무관하게 쓰지 않는다).
+                gh_id = body.get("greenhouse_id") or repository.get_default_greenhouse_id(conn)
                 record_id = inputs.get("public_data_record_id")
                 if record_id:
                     rec = repository.get_by_id(conn, "public_data_record", record_id)
                 else:
-                    rec, fallback = dms.fetch_public_data(conn)
+                    rec, fallback = dms.fetch_public_data(conn, greenhouse_id=gh_id)
                 if rec is not None:
                     inputs["forecast_payload"] = json.loads(rec.payload)
                 try:
+                    # F-259 — 초안이 근거로 쓴 예보 레코드를 규칙에 결속한다.
                     rule = mms.draft_rule(conn, origin=origin, model_id=model_id, inputs=inputs,
-                                           condition_expr=body.get("condition_expr"))
+                                           condition_expr=body.get("condition_expr"),
+                                           public_data_record_id=(rec.id if rec is not None else None))
                 except mms.RuleNotFound as e:
                     raise _not_found(str(e)) from e
             else:
@@ -796,7 +895,7 @@ def create_app(*, db_path: str | Path, link: SiapLink, builder: FrameBuilder,
                     raise ApiProblem(400, "잘못된 요청 형식", detail=f"origin={origin} 는 draft_text 가 필수다")
                 rule = mms.draft_rule(conn, origin=origin, draft_text=draft_text,
                                        condition_expr=body.get("condition_expr"))
-            return JSONResponse(status_code=201, content=_rule_dict(rule))
+            return JSONResponse(status_code=201, content=_rule_dict(rule, conn))
         finally:
             conn.close()
 
@@ -805,11 +904,11 @@ def create_app(*, db_path: str | Path, link: SiapLink, builder: FrameBuilder,
         conn = get_conn()
         try:
             rule = repository.get_control_rule(conn, ruleId)
+            if rule is None:
+                raise _not_found(f"rule_id={ruleId}")
+            return _rule_dict(rule, conn)
         finally:
             conn.close()
-        if rule is None:
-            raise _not_found(f"rule_id={ruleId}")
-        return _rule_dict(rule)
 
     @app.post("/api/v1/rules/{ruleId}/approve")
     def approve_rule(ruleId: str, body: dict = Body(...), x_user_id: str = Header(..., alias="X-User-Id")):
@@ -830,7 +929,7 @@ def create_app(*, db_path: str | Path, link: SiapLink, builder: FrameBuilder,
             except mms.RuleGateError as e:
                 raise ApiProblem(409, "이미 승인된 규칙", detail=str(e), clause="0937 A.3.2",
                                   constraint=e.constraint) from e
-            return _rule_dict(rule)
+            return _rule_dict(rule, conn)
         finally:
             conn.close()
 
@@ -849,7 +948,7 @@ def create_app(*, db_path: str | Path, link: SiapLink, builder: FrameBuilder,
             except mms.RuleGateError as e:
                 raise ApiProblem(409, "이미 승인되었거나 거부된 규칙", detail=str(e), clause="0937 A.3.2",
                                   constraint=e.constraint) from e
-            return _rule_dict(rule)
+            return _rule_dict(rule, conn)
         finally:
             conn.close()
 

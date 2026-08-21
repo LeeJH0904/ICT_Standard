@@ -68,6 +68,12 @@ class GreenhouseInfo:                              # A-2 — 6.2.3 / 7.2.2.3
     crop: str | None                                # 생육작물 (6.2.3 본문, F-032 회귀)
     crop_season: str | None
     usage_state: str | None
+    latitude: float | None                          # WGS84 위도 (F-258)
+    longitude: float | None                         # WGS84 경도 (F-258)
+    kma_nx: int | None                              # 기상청 격자 X (F-258)
+    kma_ny: int | None                              # 기상청 격자 Y (F-258)
+    coordinate_source: str | None                   # 좌표 출처 (F-258)
+    coordinates_updated_at: str | None              # 좌표 변경 시각 (F-258)
 
     @classmethod
     def from_row(cls, row: sqlite3.Row) -> "GreenhouseInfo":
@@ -77,7 +83,9 @@ class GreenhouseInfo:                              # A-2 — 6.2.3 / 7.2.2.3
                     row["height_value"], row["height_error"], row["height_unit"],
                     row["length_value"], row["length_error"], row["length_unit"],
                     row["gh_type"], row["medium_type"], row["irrigation_type"], row["heating_type"],
-                    row["crop"], row["crop_season"], row["usage_state"])
+                    row["crop"], row["crop_season"], row["usage_state"],
+                    row["latitude"], row["longitude"], row["kma_nx"], row["kma_ny"],
+                    row["coordinate_source"], row["coordinates_updated_at"])
 
 
 @dataclass(frozen=True)
@@ -403,11 +411,22 @@ class PublicDataRecord:                            # F-2 — 0937 부속서 A 2.
     region: str | None
     item: str | None
     payload: str
+    greenhouse_id: str | None                       # 대상 온실 (F-258)
+    base_date: str | None                           # 실제 요청 발표일자 (F-258)
+    base_time: str | None                           # 실제 요청 발표시각 (F-258)
+    nx: int | None                                  # 실제 요청 격자 X (F-258)
+    ny: int | None                                  # 실제 요청 격자 Y (F-258)
+    data_origin: str                                # LIVE·FALLBACK·DEMO_FIXTURE (F-258)
+    forecast_date: str | None                       # 예보 대상일 YYYYMMDD (F-259)
+    forecast_tmax_c: float | None                   # 예보 최고기온 TMX °C (F-259)
 
     @classmethod
     def from_row(cls, row: sqlite3.Row) -> "PublicDataRecord":
         return cls(row["id"], row["source_id"], row["fetched_at"], row["period_from"],
-                    row["period_to"], row["region"], row["item"], row["payload"])
+                    row["period_to"], row["region"], row["item"], row["payload"],
+                    row["greenhouse_id"], row["base_date"], row["base_time"],
+                    row["nx"], row["ny"], row["data_origin"],
+                    row["forecast_date"], row["forecast_tmax_c"])
 
 
 @dataclass(frozen=True)
@@ -446,13 +465,15 @@ class ControlRule:                                 # F-4 — 0937 6.3 / 부속�
     rejected_at: str | None                          # F-083
     rejected_by: str | None
     reject_reason: str | None
+    public_data_record_id: str | None                # 초안 근거 예보 레코드 (F-259)
 
     @classmethod
     def from_row(cls, row: sqlite3.Row) -> "ControlRule":
         return cls(row["id"], row["model_id"], row["created_at"], row["origin"], row["generation"],
                     row["draft_text"], row["condition_expr"], row["action_json"],
                     row["target_install_id"], row["approved_at"], row["approved_by"],
-                    row["rejected_at"], row["rejected_by"], row["reject_reason"])
+                    row["rejected_at"], row["rejected_by"], row["reject_reason"],
+                    row["public_data_record_id"])
 
     @property
     def is_approved(self) -> bool:

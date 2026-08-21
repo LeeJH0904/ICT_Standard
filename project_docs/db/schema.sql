@@ -65,8 +65,30 @@ CREATE TABLE greenhouse_info (
     crop           TEXT,                                          -- 생육작물 (6.2.3 본문)
     crop_season    TEXT,                                          -- 작기정보
     usage_state    TEXT,                                          -- 활용상태
+    -- F-258: 기상청 단기예보(getVilageFcst) 는 일반 위경도가 아니라 동네예보
+    --        격자(nx,ny)를 요구한다. 온실별 WGS84 위경도와 그로부터 계산한
+    --        격자를 저장해 온실마다 자기 위치의 예보를 수집한다. 전역 최신
+    --        레코드를 위치 무관하게 쓰던 문제를 닫는다.
+    latitude       REAL,                                          -- WGS84 위도
+    longitude      REAL,                                          -- WGS84 경도
+    kma_nx         INTEGER,                                       -- 기상청 격자 X (위경도 파생, 내부값)
+    kma_ny         INTEGER,                                       -- 기상청 격자 Y (위경도 파생, 내부값)
+    coordinate_source TEXT,                                       -- 좌표 출처 (MANUAL·DEMO_FIXTURE)
+    coordinates_updated_at TEXT,                                  -- 좌표 확정·변경 시각
     CHECK (created_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]*'),   -- F-184
-    CHECK (updated_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]*')    -- F-184
+    CHECK (updated_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]*'),   -- F-184
+    -- F-258: 위경도 범위·격자 정수·출처·시각 형식을 DDL 로 강제한다 —
+    --        브라우저 입력을 그대로 신뢰하지 않는다(제안 §2·§3).
+    CHECK (latitude  IS NULL OR (latitude  BETWEEN -90.0  AND 90.0)),
+    CHECK (longitude IS NULL OR (longitude BETWEEN -180.0 AND 180.0)),
+    CHECK (kma_nx IS NULL OR (typeof(kma_nx) = 'integer' AND kma_nx > 0)),
+    CHECK (kma_ny IS NULL OR (typeof(kma_ny) = 'integer' AND kma_ny > 0)),
+    CHECK (coordinate_source IS NULL OR coordinate_source IN ('MANUAL','DEMO_FIXTURE')),
+    CHECK (coordinates_updated_at IS NULL OR coordinates_updated_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]*'),
+    -- 위경도·격자는 함께 확정된다 — 넷 다 있거나 넷 다 없다(부분 저장 금지, 제안 §3)
+    CHECK ((latitude IS NULL) = (longitude IS NULL)
+       AND (latitude IS NULL) = (kma_nx IS NULL)
+       AND (latitude IS NULL) = (kma_ny IS NULL))
 );
 
 -- A-3. 장치 정보 — 6.2.4 / 7.2.2.4
@@ -404,7 +426,29 @@ CREATE TABLE public_data_record (
     region       TEXT,
     item         TEXT,
     payload      TEXT NOT NULL,                        -- 원본 응답 (JSON)
+    -- F-258: 어느 온실·격자·발표회차의 예보인지, 실데이터인지 폴백인지를
+    --        payload 파싱에 의존하지 않고 명시 추적한다(제안 §3). 조회 API 가
+    --        이 값들을 노출해 초안이 어떤 위치·회차를 근거로 삼았는지 보인다.
+    greenhouse_id TEXT,                                 -- 대상 온실
+    base_date    TEXT,                                  -- 실제 요청 발표일자 (YYYYMMDD)
+    base_time    TEXT,                                  -- 실제 요청 발표시각 (HHMM)
+    nx           INTEGER,                               -- 실제 요청 격자 X
+    ny           INTEGER,                               -- 실제 요청 격자 Y
+    data_origin  TEXT NOT NULL DEFAULT 'FALLBACK',      -- LIVE·FALLBACK·DEMO_FIXTURE
+    -- F-259: 예보 대상일·최고기온(TMX)을 payload 파싱 없이 명시 컬럼으로 둔다.
+    --        화면(web)이 기상청 응답 스키마(category='TMX' 등)를 다시 해석하지
+    --        않도록 서비스 계층(dms)이 수집 시 뽑아 저장한다 — LIVE 뿐 아니라
+    --        DEMO_FIXTURE·FALLBACK 도 payload 에 예보가 있으므로 항상 채운다
+    --        (nx/ny/base_* 는 '실제 요청' 이라 폴백에서 NULL 이지만, 이 둘은
+    --        '실제로 초안에 쓰인 예보값' 이라 origin 과 무관하게 존재한다).
+    forecast_date TEXT,                                 -- 예보 대상일 (YYYYMMDD, TMX 항목)
+    forecast_tmax_c REAL,                               -- 예보 최고기온 TMX (°C)
     FOREIGN KEY (source_id) REFERENCES public_data_source(id),
+    FOREIGN KEY (greenhouse_id) REFERENCES greenhouse_info(id),
+    CHECK (data_origin IN ('LIVE','FALLBACK','DEMO_FIXTURE')),
+    CHECK (base_date IS NULL OR base_date GLOB '[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]'),
+    CHECK (base_time IS NULL OR base_time GLOB '[0-9][0-9][0-9][0-9]'),
+    CHECK (forecast_date IS NULL OR forecast_date GLOB '[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]'),
     CHECK (fetched_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]*'),   -- F-184
     -- F-184: period_from/period_to 는 날짜 단독(YYYY-MM-DD)도 유효한 값이다 —
     --        GLOB 은 접두 검사라 시각이 없어도 그대로 통과한다.
@@ -454,10 +498,17 @@ CREATE TABLE control_rule (
     rejected_at   TEXT,
     rejected_by   TEXT,
     reject_reason TEXT,
+    -- F-259: 이 초안이 어느 공공데이터 레코드(온실·격자·발표회차·예보값)를
+    --        근거로 만들어졌는지 결속한다. 초안 카드가 표와 같은 예보 메타데이터를
+    --        보이려면 근거가 필요하다(제안 §3). AI_DRAFT 로 DMS 예보를 쓴 경우에만
+    --        채워지고 WIZARD·SCRIPT 는 NULL 이다 — 승인 게이트(action_json·
+    --        approved_at 계열 CHECK)와 무관한 순수 출처 추적 컬럼이다.
+    public_data_record_id TEXT,                          -- 초안 근거 예보 레코드 (F-259)
     FOREIGN KEY (model_id)    REFERENCES control_model(id),
     FOREIGN KEY (approved_by) REFERENCES user_info(id),
     FOREIGN KEY (rejected_by) REFERENCES user_info(id),
     FOREIGN KEY (target_install_id) REFERENCES device_install_info(id),
+    FOREIGN KEY (public_data_record_id) REFERENCES public_data_record(id),
     CHECK (origin IN ('AI_DRAFT','WIZARD','SCRIPT')),
     CHECK (generation IS NULL OR generation IN ('AI','THRESHOLD_FALLBACK','WIZARD','SCRIPT')),
     -- F-083: AI 초안 요청은 서버가 모델을 돌린 결과를 남겨야 한다.
