@@ -1,14 +1,14 @@
 """
-backend/api.py — REST + SSE 표면. 정본은 `project_docs/api/openapi.json`
-(API_명세서.md §4가 "왜 그렇게 정했는지"를 적는다).
+backend/api.py — REST + SSE 표면.
+설계 의도와 구현 원칙을 함께 적는다.
 
 `create_app()`이 유일한 조립 지점이다 — `run.py`(구성 루트)가 `SiapLink`·
 `FrameBuilder` 구현체(`siap.link.SiapNodeLink`·`siap.build.FrameBuilderImpl`)를
-주입한다. 이 파일은 `siap/` 내부 심볼을 import하지 않는다(CLAUDE.md §2.2) —
+주입한다. 이 파일은 `siap/` 내부 심볼을 import하지 않는다 —
 `contracts/`(Frame·SiapLink·FrameBuilder Protocol)와 `backend/services/*`만
 참조한다.
 
-원칙 4가지(openapi.json info.description과 동일) — ①응답 필드명은
+원칙 4가지(API 규격 info.description과 동일) — ①응답 필드명은
 1369-Part1 논리 모델 속성명 그대로 ②노드/디바이스 종류를 경로·스키마에
 하드코딩하지 않는다 ③표준 위반 판정은 `siap/codec.py`가 이미 끝냈다, 이
 API는 렌더링만 한다 ④제어 실행 경로에서 클라이언트는 명령·대상을 지정할
@@ -29,7 +29,7 @@ from fastapi import Body, FastAPI, Header, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-try:                    # F-025 와 같은 원칙
+try:                    # 와 같은 원칙
     from backend import repository
     from backend import db as backend_db
     from backend.services import dms, ems, fcs, fms, mms
@@ -59,7 +59,7 @@ except ImportError:
 
 
 # ═══════════════════════════════════════════════════════════════
-#  RFC 9457 오류 응답 (API 명세서 §4.5)
+#  RFC 9457 오류 응답
 # ═══════════════════════════════════════════════════════════════
 
 class ApiProblem(Exception):
@@ -95,7 +95,7 @@ def _not_found(what: str) -> ApiProblem:
 
 
 # ═══════════════════════════════════════════════════════════════
-#  시각 변환 — frame_log.t 만 epoch, 나머지는 ISO 8601(API 명세서 §2)
+#  시각 변환 — frame_log.t 만 epoch, 나머지는 ISO 8601
 # ═══════════════════════════════════════════════════════════════
 
 def _iso_to_epoch(s: str) -> float:
@@ -103,7 +103,7 @@ def _iso_to_epoch(s: str) -> float:
 
 
 # ═══════════════════════════════════════════════════════════════
-#  ControlAction 검증 — F-051·F-054·F-055 (openapi.json 의 allOf 를 그대로 옮김)
+#  ControlAction 검증 — API 규격의 allOf를 그대로 옮김
 # ═══════════════════════════════════════════════════════════════
 
 _INT_MIN, _INT_MAX = -2_147_483_648, 2_147_483_647
@@ -137,7 +137,7 @@ def _validate_device_property_request(body: Any) -> tuple[dict, dict]:
     has_greenhouse = "greenhouse_id" in selector
     if has_install == has_greenhouse:
         raise ApiProblem(400, "잘못된 요청 형식",
-                          detail="selector는 install_id 또는 greenhouse_id 중 정확히 하나여야 한다(F-093)")
+                          detail="selector는 install_id 또는 greenhouse_id 중 정확히 하나여야 한다")
     if has_install and set(selector) != {"install_id"}:
         raise ApiProblem(400, "잘못된 요청 형식",
                           detail="install_id 개별 선택에는 구역 필터를 함께 쓸 수 없다")
@@ -177,7 +177,7 @@ def _validate_control_action(action: Any) -> dict:
     extra = set(action) - {"value", "value_type", "duration_sec"}
     if extra:
         raise ApiProblem(400, "잘못된 요청 형식",
-                          detail=f"action 에 허용되지 않는 필드가 있다: {sorted(extra)} (F-051)")
+                          detail=f"action 에 허용되지 않는 필드가 있다: {sorted(extra)}")
     if "value" not in action or "value_type" not in action:
         raise ApiProblem(400, "잘못된 요청 형식", detail="action.value, action.value_type 는 필수다")
     vt = action["value_type"]
@@ -194,11 +194,11 @@ def _validate_control_action(action: Any) -> dict:
         lo, hi = (_INT_MIN, _INT_MAX) if vt == "INT" else (_UINT_MIN, _UINT_MAX)
         if not (lo <= v <= hi):
             raise ApiProblem(400, "잘못된 요청 형식",
-                              detail=f"value={v} 가 {vt} 32bit 범위를 벗어난다(F-054)")
+                              detail=f"value={v} 가 {vt} 32bit 범위를 벗어난다")
     else:
         if not (-_FLOAT_MAX <= float(v) <= _FLOAT_MAX):
             raise ApiProblem(400, "잘못된 요청 형식",
-                              detail=f"value={v} 가 FLOAT 표현 가능 범위를 벗어난다(F-055)")
+                              detail=f"value={v} 가 FLOAT 표현 가능 범위를 벗어난다")
     duration = action.get("duration_sec")
     if duration is not None:
         if isinstance(duration, bool) or not isinstance(duration, int) or duration < 0:
@@ -207,14 +207,14 @@ def _validate_control_action(action: Any) -> dict:
 
 
 # ═══════════════════════════════════════════════════════════════
-#  응답 변환 — DB row/dataclass → openapi.json 스키마 dict
+#  응답 변환 — DB row/dataclass → API 규격 스키마 dict
 # ═══════════════════════════════════════════════════════════════
 
 #: 0943 그림 7-1 헤더 7필드의 비트 폭. `contracts/frame.py::Header`의 필드
 #: 선언 순서·주석(version:8, msg_type:14, trans_type:2, msg_id:16,
 #: payload_len:16, gcg_id:20, node_id:20)과 동일 — 새로 해석하지 않고
 #: 그대로 옮긴 것이다. 가변 요소(DEVICE_MAIN_INFO 등) 필드 분해는
-#: `_payload_field_slices()`가 이어받는다(F-187, 아래).
+#: `_payload_field_slices()`가 아래에서 이어받는다.
 _HEADER_FIELD_LAYOUT: tuple[tuple[str, int], ...] = (
     ("Version", 8), ("Message Type", 14), ("Transmission Type", 2),
     ("Message Identifier", 16), ("Payload Length", 16), ("GCG ID", 20), ("Node ID", 20),
@@ -234,7 +234,7 @@ def _header_field_slices(f: repository.models.FrameLog) -> list[dict]:
     return out
 
 
-#: F-187 — 표 7-14 DEVICE_MAIN_INFO(56bit). `siap/codec.py::encode_dmi()`의
+#: 표 7-14 DEVICE_MAIN_INFO(56bit). `siap/codec.py::encode_dmi()`의
 #: `w.write(...)` 호출 순서·폭을 그대로 옮긴 것이다(새로 해석하지 않는다,
 #: `_HEADER_FIELD_LAYOUT`과 같은 원칙) — 값 자체는 `ingest.py`가 이미
 #: 디코딩해 `frame_log.elements_json`에 저장해 둔 것을 읽을 뿐이다.
@@ -262,8 +262,8 @@ _VALUE_LIKE_KEYS = {"value", "lower_value", "upper_value", "lower_limit", "upper
 def _value_to_raw_bits(value, value_type: int) -> int:
     """이미 해석된 값에서 32bit 부호 없는 원시 비트열을 역산한다. IEEE-754·
     2의 보수 변환은 고정된 산술 규칙이지 표준을 다시 해석하는 게 아니다
-    (§3.4가 막는 건 위반 판정 같은 의미 해석이 두 곳에 생기는 것이다) —
-    CLAUDE.md §3.5의 엔디안·FLOAT 표현 결정(big-endian, IEEE-754 single)을
+    위반 판정 같은 의미 해석을 추가하는 것은 아니다 —
+    표준 미규정 결정의 엔디안·FLOAT 표현 결정(big-endian, IEEE-754 single)을
     그대로 따른다."""
     if value_type == int(ValueType.FLOAT):
         return struct.unpack(">I", struct.pack(">f", float(value)))[0]
@@ -287,7 +287,7 @@ def _fmt_num(v) -> str | None:
 def _dmi_field_display(key: str | None, raw: int, item: dict) -> str | None:
     """표 7-14/7-15 코드 필드엔 표준 enum 이름을, 값 계열엔 디코딩된 실제
     값을 단다(화면은 이 문자열을 그대로 보여줄 뿐 다시 해석하지 않는다,
-    §3.4 — 정본 enum(contracts/frame.py)을 재사용한다)."""
+    — 정본 enum(contracts/frame.py)을 재사용한다)."""
     if key == "dev_type":
         return _enum_name(DevType, raw)
     if key == "value_type":
@@ -304,7 +304,7 @@ def _dmi_field_display(key: str | None, raw: int, item: dict) -> str | None:
 
 
 def _payload_field_slices(f: repository.models.FrameLog) -> list[dict]:
-    """F-187 — `frame_log.elements_json`(ingest.py가 저장한, 이미 디코딩된
+    """`frame_log.elements_json`(ingest.py가 저장한, 이미 디코딩된
     가변 요소)을 `_header_field_slices()`와 이어지는 `FieldSlice` 목록으로
     편다. 비트 재파싱을 하지 않는다 — 값은 전부 저장된 JSON에서 그대로
     읽는다. `elements_json`이 없으면(고정부만 있는 메시지·위반 프레임 등)
@@ -434,7 +434,7 @@ def _frame_dict(conn: sqlite3.Connection, f, proto_mode: Mode) -> dict:
     if f.is_valid and f.msg_type is not None and f.payload_len is not None:
         # `resolve_kind`/`element_count`는 contracts/frame.py의 순수 함수다 —
         # siap/codec.py 를 다시 구현하지 않는다. 위반 프레임은 kind 를
-        # 재판정하지 않는다(CLAUDE.md §3.4) — is_valid 인 프레임만 표시용으로 푼다.
+        # 재판정하지 않는다 — is_valid 인 프레임만 표시용으로 푼다.
         kind = resolve_kind(f.msg_type, f.payload_len, proto_mode)
         if kind is not None:
             kind_name = kind.name
@@ -445,7 +445,7 @@ def _frame_dict(conn: sqlite3.Connection, f, proto_mode: Mode) -> dict:
         "id": f.id, "t": f.t, "direction": f.direction, "raw_hex": f.raw_hex,
         "header": header, "kind": kind_name, "element_count": elem, "is_valid": f.is_valid,
         "violations": violations,
-        "fields": _header_field_slices(f) + _payload_field_slices(f),   # F-187
+        "fields": _header_field_slices(f) + _payload_field_slices(f),
         "judgement": repository.frame_judgement(conn, f),
     }
 
@@ -466,10 +466,10 @@ def create_app(*, db_path: str | Path, link: SiapLink, builder: FrameBuilder,
     Protocol만 만족하면 된다 — 테스트는 `contracts/fake_link.py`의
     `FakeSiapLink`·`FakeFrameBuilder`를 넘긴다.
 
-    `inject_fn` — `POST /sim/inject`(F-084)가 골든 벡터 원본 바이트를 실제
+    `inject_fn` — `POST /sim/inject`가 골든 벡터 원본 바이트를 실제
     전송 계층에 흘려보낼 때 쓰는 훅. simulate 모드에서는 `run.py`가
     `sim/inject.py`를 감싼 콜백을 넘긴다(`sim/`도 계약 경계 반대편이라
-    이 파일이 직접 import하지 않는다, 아키텍처 §2.2 계층도). 없으면
+    이 파일이 직접 import하지 않는다). 없으면
     (`None`) 항상 409로 거부한다."""
     app = FastAPI(
         title="표준 프로토콜 기반 개방형 스마트온실 노드 - REST API",
@@ -486,7 +486,7 @@ def create_app(*, db_path: str | Path, link: SiapLink, builder: FrameBuilder,
 
     def get_conn() -> sqlite3.Connection:
         """호출마다 새 연결을 연다(`backend/db.py` 계약 그대로) — API
-        스레드가 자신만의 연결로 쓰기까지 끝낸다(아키텍처 §4.4-a③, F-186)."""
+        스레드가 자신만의 연결로 쓰기까지 끝낸다."""
         return backend_db.connect(app.state.db_path)
 
     @app.exception_handler(ApiProblem)
@@ -597,8 +597,8 @@ def create_app(*, db_path: str | Path, link: SiapLink, builder: FrameBuilder,
                      offset: int = Query(0, ge=0)):
         conn = get_conn()
         try:
-            # F-191 — 0937 6.4-3 "미수집 알림"이 실제로 생성되는 유일한 진입점.
-            # 전용 스케줄러 스레드를 새로 두지 않고(CLAUDE.md §4.3 동시성 모델을
+            # 0937 6.4-3 "미수집 알림"이 실제로 생성되는 유일한 진입점.
+            # 전용 스케줄러 스레드를 새로 두지 않고(동시성 모델을
             # 넓히지 않는다) 조회 시점에 판정한다(check-on-read) — 이 알림
             # 목록을 읽는 사람이 그 시점 기준 최신 판정을 보장받는다.
             # `/stream`(SSE)도 매 틱 같은 함수를 불러 계속 열려 있는 대시보드는
@@ -658,7 +658,7 @@ def create_app(*, db_path: str | Path, link: SiapLink, builder: FrameBuilder,
     @app.get("/api/v1/stream")
     async def stream_events(events: str | None = None, request: Request = None):
         """SSE — node_up/node_down/frame/violation/alert/execution. 폴백은
-        1초 폴링(아키텍처 §8.1) — 이 엔드포인트 자체는 0.5초 간격으로
+        1초 폴링 — 이 엔드포인트 자체는 0.5초 간격으로
         DB·`link.registry()`를 다시 읽어 새 행만 내보낸다."""
         wanted = set(events.split(",")) if events else None
 
@@ -693,7 +693,7 @@ def create_app(*, db_path: str | Path, link: SiapLink, builder: FrameBuilder,
                         if wanted is None or ev in wanted:
                             yield f"event: {ev}\ndata: {json.dumps(d, ensure_ascii=False)}\n\n".encode("utf-8")
 
-                    fms.check_stale_devices(conn, repository.now_iso())   # F-191
+                    fms.check_stale_devices(conn, repository.now_iso())
                     alerts, _ = repository.list_alerts_page(conn, limit=20, offset=0)
                     for a in alerts:
                         if a.id in last_alert_seen:
@@ -766,7 +766,17 @@ def create_app(*, db_path: str | Path, link: SiapLink, builder: FrameBuilder,
                 model_id = body.get("model_id")
                 if not model_id:
                     raise ApiProblem(400, "잘못된 요청 형식", detail="origin=AI_DRAFT 는 model_id 가 필수다")
-                inputs = dict(body.get("inputs") or {})
+                raw_inputs = body.get("inputs")
+                if raw_inputs is not None and not isinstance(raw_inputs, dict):
+                    raise ApiProblem(400, "잘못된 요청 형식", detail="inputs 는 JSON 객체여야 한다")
+                inputs = dict(raw_inputs or {})
+                if "forecast_tmax_c" in inputs:
+                    raise ApiProblem(
+                        400,
+                        "잘못된 요청 형식",
+                        detail=("forecast_tmax_c 는 직접 입력할 수 없다. "
+                                "DMS 공공데이터 레코드의 예보값을 사용한다"),
+                    )
                 # 0937 6.3-3/6.3-4 — DMS 가 사전 획득한 공공데이터를 입력으로 쓴다.
                 record_id = inputs.get("public_data_record_id")
                 if record_id:
@@ -898,10 +908,10 @@ def create_app(*, db_path: str | Path, link: SiapLink, builder: FrameBuilder,
     def inject_vector(body: dict = Body(...), x_user_id: str = Header(..., alias="X-User-Id")):
         vector_id = body.get("vector_id")
         if vector_id not in {f"X0{i}" for i in range(1, 9)} or set(body) != {"vector_id"}:
-            raise ApiProblem(400, "잘못된 요청 형식", detail="vector_id 는 X01~X08 중 하나만 받는다(F-084)")
+            raise ApiProblem(400, "잘못된 요청 형식", detail="vector_id 는 X01~X08 중 하나만 받는다")
         if run_mode == "hardware":
             raise ApiProblem(409, "hardware 모드에서는 주입할 수 없다",
-                              detail="실물 링크에 조작된 프레임을 흘리면 실측 로그의 신뢰성이 깨진다(CLAUDE.md §1-1)")
+                              detail="실물 링크에 조작된 프레임을 흘리면 실측 로그의 신뢰성이 깨진다")
         conn = get_conn()
         try:
             _require_user(x_user_id, conn)
@@ -933,9 +943,9 @@ def create_app(*, db_path: str | Path, link: SiapLink, builder: FrameBuilder,
         finally:
             conn.close()
 
-    # ── web/ 정적 서빙 (단계 7, F-188 후속) ────────────────────────
-    # web/ 은 빌드 없는 순수 바닐라라 파일을 그대로 서빙하면 된다(화면_설계서
-    # §1). 같은 오리진(http://127.0.0.1:8000)에서 API 와 화면을 함께 띄워
+    # ── web/ 정적 서빙 ────────────────────────
+    # web/ 은 빌드 없는 순수 바닐라라 파일을 그대로 서빙하면 된다.
+    # 같은 오리진(http://127.0.0.1:8000)에서 API와 화면을 함께 띄워
     # CORS 를 아예 필요 없게 만드는 쪽을 골랐다 — 새 의존성도, 새 오리진
     # 헤더 관리도 늘리지 않는다. `/api/v1/*` 라우트가 먼저 등록돼 있으므로
     # 이 마운트는 그 외 경로("/", "/verify.html" 등)만 받는다. `html=True`

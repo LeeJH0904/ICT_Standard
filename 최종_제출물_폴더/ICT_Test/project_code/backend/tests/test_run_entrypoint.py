@@ -55,6 +55,26 @@ class _Args:
         self.db = db
 
 
+def test_main_loads_env_before_selecting_mode(monkeypatch):
+    calls: list[str] = []
+    monkeypatch.setattr(run, "load_env_file", lambda: calls.append("load"))
+    monkeypatch.setattr(run, "_run_hardware", lambda args: calls.append("run") or 0)
+
+    assert run.main(["--mode", "hardware", "--port", "COM1"]) == 0
+    assert calls == ["load", "run"]
+
+
+def test_main_reports_env_error_without_exposing_value(monkeypatch, capsys):
+    def _fail():
+        raise run.EnvFileError(".env:1: 지원하지 않는 환경변수 이름: TYPO_API_KEY")
+
+    monkeypatch.setattr(run, "load_env_file", _fail)
+
+    assert run.main(["--mode", "replay"]) == 2
+    output = capsys.readouterr().out
+    assert "환경변수 파일 오류" in output
+    assert "secret-value" not in output
+
 def test_prepare_db_path_creates_schema_and_seed_f160(tmp_path):
     db_path = tmp_path / "new.db"
     got = run._prepare_db_path(_Args(str(db_path)))

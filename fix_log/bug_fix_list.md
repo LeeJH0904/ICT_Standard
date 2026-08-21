@@ -6,7 +6,7 @@
 > **불변식**: `표준결함` 행 수 = `CLAUDE.md` §3.6 총계 = 명세서의 장애 지점 합계
 > **자동 검사**: `python fix_log/meta_verify.py` — 인덱스·상세·설계 문서 수치를 기계 대조한다 (F-043)
 
-**다음 ID: `F-254`**
+**다음 ID: `F-258`**
 
 ## 표준결함 (19건) — 고칠 수 없음. 기획서 자산
 
@@ -269,6 +269,10 @@
 | F-251 | 오류 | 코드버그 | `project_docs/siap/tools/` · 검증 출구 문서 | `tools/` 이동 뒤 루트 계산·문서·import를 갱신하지 않아 `run_all.py`가 2/12만 통과 | 수정완료 | F-251_verification_tools_relocation_breaks_repo_root.md |
 | F-252 | 오류 | 코드버그 | `sim/virtual_node.py` · `mode_verify.py` | 냉난방기 초기값 `(0x86, INT, 20)`이 정상 골든 원본 밖이라 F-216 회귀 검사가 실패 | 수정완료 | F-252_cooling_heater_value_outside_golden_source.md |
 | F-253 | 오류 | 문서불일치 | `화면_설계서.md` · `verify.html` | `api.listNodes()` 호출이 §2.1 대응표에서 다시 누락되어 F-201 회귀 검사가 실패 | 수정완료 | F-253_verify_page_api_mapping_drift_recurrence.md |
+| F-254 | 오류 | 코드버그 | `backend/tests/test_config.py` · 전체 pytest | `.env` 로더 테스트가 `KMA_API_KEY`를 프로세스에 남겨 뒤에 실행되는 API 테스트가 순서 의존 실패 | 수정완료 | F-254_env_loader_test_leaks_process_state.md |
+| F-255 | 오류 | 코드버그 | `fix_log/meta_verify.py` · F-189 설정 코드 | 비밀값 검증기가 안전한 환경변수 이름·조회 코드를 실제 비밀정보로 오인해 117/119 실패 | 수정완료 | F-255_secret_scan_rejects_env_names.md |
+| F-256 | 오류 | 코드버그 | `web/rules.html` · `backend/api.py` | 화면이 입력받아 전송하는 `forecast_tmax_c`를 서버가 무시하고 별도 DMS 예보로 덮어씀 | 수정완료 | F-256_rules_forecast_input_ignored.md |
+| F-257 | 위험 | 문서불일치 | `docs/ai-usage.md` · F-189 개선 문서 | Responses API 공식 근거 링크가 폐기된 404 주소를 가리킴 | 수정완료 | F-257_openai_reference_link_404.md |
 
 > **결번**: F-018 ~ F-021. 규약 §2에 따라 번호는 재사용하지 않는다.
 > 직전 라운드에서 Claude가 수신한 인덱스에는 해당 행이 존재하지 않았다 (F-023 처리 기록 참조).
@@ -280,10 +284,10 @@
 | 상태 | 건수 | | 분류 | 건수 |
 |---|---|---|---|---|
 | 신규 | 0 | | 요건위반 | 6 |
-| 확인 | 0 | | 코드버그 | 140 |
-| 수정완료 | 228 | | 문서불일치 | 84 |
+| 확인 | 0 | | 코드버그 | 143 |
+| 수정완료 | 232 | | 문서불일치 | 85 |
 | 기각 | 1 | | 표준결함 | 19 |
-| 보류 | 1 | | **합계** | **249** |
+| 보류 | 1 | | **합계** | **253** |
 | 이관 | 19 | | | |
 
 > F-052 는 요청받은 문서화를 마쳐 `수정완료`지만, 그 안에 **보류 결정 1건**(온실관리 기반 인가 제약)이

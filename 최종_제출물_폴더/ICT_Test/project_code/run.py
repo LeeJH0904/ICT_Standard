@@ -55,6 +55,7 @@ REPO_ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from siap.link import SiapNodeLink                    # noqa: E402
+from backend.config import EnvFileError, load_env_file  # noqa: E402
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -436,6 +437,12 @@ def _run_hardware(args: argparse.Namespace) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    try:
+        load_env_file()
+    except EnvFileError as exc:
+        print(_cp949_safe(f"[run.py] 환경변수 파일 오류: {exc}"))
+        return 2
+
     parser = build_parser()
     args = parser.parse_args(argv)
 

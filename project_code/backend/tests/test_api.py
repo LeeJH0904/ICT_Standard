@@ -5,7 +5,7 @@
 
 `SiapLink`·`FrameBuilder`는 실제 프로토콜 계층(`siap/`) 대신
 `contracts/fake_link.py`의 대역체를 쓴다 — `backend/`는 애초에 `siap/`를
-import하지 않으므로(CLAUDE.md §2.2) 이 테스트도 그 경계를 넘지 않는다.
+import하지 않으므로 이 테스트도 그 경계를 넘지 않는다.
 """
 from __future__ import annotations
 
@@ -16,6 +16,7 @@ import pytest
 from _asgi_client import call, call_stream
 
 from backend import db, repository
+from backend.services import mms
 from backend.api import create_app
 from contracts.fake_link import FakeFrameBuilder, FakeSiapLink
 from contracts.frame import DeviceMainInfo, DevType, NodeProperty, Status, ValueType
@@ -62,7 +63,7 @@ def _register_node(link, node_id=3, gcg_id=1, num_devices=1):
 
 def _register_link_device(link, node_id, device_id, dev_type, subtype, value_type=ValueType.UINT, value=0):
     """`link.devices(node_id)` — `ems.set_device_property()`가 대상의 현재
-    Value Type 을 확인하는 유일한 출처다(F-137과 같은 원칙: 임의로 대체하지
+    Value Type 을 확인하는 유일한 출처다(과 같은 원칙: 임의로 대체하지
     않는다). `_register_device_install()`(DB)과는 별개로, 링크(런타임 세션)
     쪽에도 등록해야 한다."""
     existing = link._devices.get(node_id, ())
@@ -89,7 +90,7 @@ def _register_device_install(tmp_path, node_id=3, device_id=1, subtype=0x85, kin
 
 # ── system ──────────────────────────────────────────────────────────────
 
-def test_health_7_0937_6_3(app):                                    # 아키텍처 §6.3
+def test_health_7_0937_6_3(app):
     r = call(app, "GET", "/api/v1/health")
     assert r.status_code == 200
     body = r.json()
@@ -177,7 +178,7 @@ def test_list_alerts_0937_6_4_3(app, tmp_path):
 
 
 def test_list_alerts_triggers_stale_device_check_f191(app, monkeypatch):
-    """F-191 — `GET /api/v1/alerts`가 `fms.check_stale_devices()`를 실제로
+    """`GET /api/v1/alerts`가 `fms.check_stale_devices()`를 실제로
     호출하는가(check-on-read). 이전에는 이 함수가 정의만 되고 어디서도
     불리지 않아 0937 6.4-3 미수집 알림이 영구히 생기지 않았다."""
     from backend.services import fms as fms_module
@@ -211,7 +212,7 @@ def test_list_frames_and_get_frame_0943_7_3(app, tmp_path):
 
 
 def test_frame_fields_includes_payload_element_decomposition_f187(app, tmp_path):
-    """F-187 — elements_json 이 있는 프레임은 헤더 7필드 뒤에 가변 요소
+    """elements_json 이 있는 프레임은 헤더 7필드 뒤에 가변 요소
     (DEVICE_MAIN_INFO) 필드도 이어붙어야 한다."""
     import json
     con = db.connect(tmp_path / "api.db")
@@ -320,12 +321,30 @@ def test_create_ai_draft_falls_back_to_threshold_f083(app):
 
 
 def test_create_ai_draft_without_crop_threshold_says_so_f190(app):
-    """F-190 — 임계값은 서버 상수가 아니라 inputs.crop_tmax_c 로 온다.
+    """임계값은 서버 상수가 아니라 inputs.crop_tmax_c 로 온다.
     생략하면 추측하지 않고 그렇게 말한다."""
     r = call(app, "POST", "/api/v1/rules",
              json={"origin": "AI_DRAFT", "model_id": "demo-model-threshold-tmax"})
     assert r.status_code == 201
     assert "crop_tmax_c" in r.json()["draft_text"]
+
+
+def test_create_ai_draft_rejects_direct_forecast_tmax_f256(app):
+    """F-256 — 화면·외부 호출자가 보낸 예보값을 조용히 무시하지 않는다."""
+    r = call(
+        app,
+        "POST",
+        "/api/v1/rules",
+        json={
+            "origin": "AI_DRAFT",
+            "model_id": "demo-model-llm-irrigation",
+            "inputs": {"forecast_tmax_c": 999, "crop_tmax_c": 33},
+        },
+    )
+
+    assert r.status_code == 400
+    assert "forecast_tmax_c" in r.json()["detail"]
+    assert "DMS" in r.json()["detail"]
 
 
 def test_approve_requires_all_three_fields(app):
@@ -610,3 +629,28 @@ def test_inject_invalid_vector_400(app):
     r = call(app, "POST", "/api/v1/sim/inject", json={"vector_id": "NOPE"},
              headers={"X-User-Id": "demo-user-1"})
     assert r.status_code == 400
+
+def test_create_ai_draft_success_is_still_unapproved_f189(app, monkeypatch):
+    """실제 AI 성공도 설명용 초안일 뿐이며 승인·명령 필드는 비어 있다."""
+    ai_text = "예보 최고기온이 임계값을 초과하므로 관수 장치 가동을 권장합니다. 사람 승인 전에는 실행되지 않는 초안입니다."
+    monkeypatch.setattr(mms, "_try_llm_draft", lambda model, inputs: ai_text)
+
+    response = call(
+        app, "POST", "/api/v1/rules",
+        json={
+            "origin": "AI_DRAFT",
+            "model_id": "demo-model-llm-irrigation",
+            "inputs": {"crop_tmax_c": 33},
+        },
+    )
+    assert response.status_code == 201
+    rule = response.json()
+    assert rule["origin"] == "AI_DRAFT"
+    assert rule["generation"] == "AI"
+    assert rule["draft_text"] == ai_text
+    assert rule["condition_expr"] is None
+    assert rule["action"] is None
+    assert rule["target_install_id"] is None
+    assert rule["approved"] is False
+    assert rule["approved_at"] is None
+    assert rule["approved_by"] is None

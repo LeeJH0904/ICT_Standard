@@ -112,7 +112,7 @@ _FLOAT_MAX = 3.4028234663852886e38
 
 
 def _validate_device_property_request(body: Any) -> tuple[dict, dict]:
-    """`DevicePropertyRequest`·`DevicePropertySelector`·
+    """F-228 — `DevicePropertyRequest`·`DevicePropertySelector`·
     `DevicePropertyPatch`의 닫힌 OpenAPI 입력 계약을 런타임에도 적용한다.
     FastAPI의 타입 없는 ``dict``는 JSON Schema를 자동 적용하지 않으므로
     허용 키·필수 키·타입·범위를 명시적으로 같은 값으로 검사한다."""
@@ -766,7 +766,17 @@ def create_app(*, db_path: str | Path, link: SiapLink, builder: FrameBuilder,
                 model_id = body.get("model_id")
                 if not model_id:
                     raise ApiProblem(400, "잘못된 요청 형식", detail="origin=AI_DRAFT 는 model_id 가 필수다")
-                inputs = dict(body.get("inputs") or {})
+                raw_inputs = body.get("inputs")
+                if raw_inputs is not None and not isinstance(raw_inputs, dict):
+                    raise ApiProblem(400, "잘못된 요청 형식", detail="inputs 는 JSON 객체여야 한다")
+                inputs = dict(raw_inputs or {})
+                if "forecast_tmax_c" in inputs:
+                    raise ApiProblem(
+                        400,
+                        "잘못된 요청 형식",
+                        detail=("forecast_tmax_c 는 직접 입력할 수 없다. "
+                                "DMS 공공데이터 레코드의 예보값을 사용한다"),
+                    )
                 # 0937 6.3-3/6.3-4 — DMS 가 사전 획득한 공공데이터를 입력으로 쓴다.
                 record_id = inputs.get("public_data_record_id")
                 if record_id:

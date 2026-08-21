@@ -900,6 +900,37 @@ ALLOW = {
     ('dms.py', '네트워크 필수 의존 금지") `KMA_API_KEY`가 있을 때만'),
     ('dms.py', 'kma_key = os.environ.get(API_KEY_ENV)'),
     ('test_api.py', 'KMA_API_KEY 미설정'),
+    # F-255 — 애플리케이션이 허용하는 환경변수 이름 선언과 런타임 조회다.
+    # 실제 값 대입까지 허용하지 않도록 줄 문맥을 좁게 고정한다.
+    ('config.py', '"KMA_API_KEY",'),
+    ('config.py', '"OPENAI_API_KEY",'),
+    ('mms.py', 'api_key = os.getenv("OPENAI_API_KEY", "").strip()'),
+    ('mms.py', 'if not api_key or not model:'),
+    ('mms.py', 'len(api_key) > 4096'),
+    ('mms.py', 'for ch in api_key)'),
+    ('mms.py', 'parsed.password is not None'),
+    ('mms.py', 'return f"{base_url}/responses", api_key, model, timeout'),
+    ('mms.py', 'url, api_key, model_id, timeout = settings'),
+    ('mms.py', '"Authorization": f"Bearer {api_key}"'),
+    # F-255 — 비밀정보 거부 동작을 검증하기 위한 고정된 가짜 값과 변수명이다.
+    # 각 테스트 줄을 고정해 다른 자격증명 대입은 허용하지 않는다.
+    ('test_config.py', '"KMA_API_KEY=kma-test-key\\n"'),
+    ('test_config.py', '"OPENAI_API_KEY=\\n"'),
+    ('test_config.py', '"KMA_API_KEY", "OPENAI_BASE_URL", "OPENAI_MODEL", "OPENAI_TIMEOUT_SEC"'),
+    ('test_config.py', 'environ["KMA_API_KEY"] == "kma-test-key"'),
+    ('test_config.py', '"OPENAI_API_KEY" not in environ'),
+    ('test_config.py', '"TYPO_API_KEY=secret-value\\n"'),
+    ('test_config.py', '"OPENAI_API_KEY=first\\nOPENAI_API_KEY=second\\n"'),
+    ('test_config.py', "OPENAI_API_KEY='secret-value"),
+    ('test_config.py', '"OPENAI_API_KEY\\n"'),
+    ('test_config.py', '"secret-value" not in message'),
+    ('test_services_mms.py', 'setenv("OPENAI_API_KEY", "unit-test-key")'),
+    ('test_services_mms.py', '["OPENAI_API_KEY", "OPENAI_MODEL"]'),
+    ('test_services_mms.py', 'without_secret_in_log_f189'),
+    ('test_services_mms.py', 'non_ascii_api_key_without_network_f189'),
+    ('test_services_mms.py', 'setenv("OPENAI_API_KEY", "한글-키")'),
+    ('test_run_entrypoint.py', '지원하지 않는 환경변수 이름: TYPO_API_KEY'),
+    ('test_run_entrypoint.py', '"secret-value" not in output'),
 }
 def allowed(fname: str, line: str) -> bool:
     return any(f == fname and frag in line for f, frag in ALLOW)
@@ -916,7 +947,17 @@ for q in ROOT.rglob("*"):
             hits_secret.append(f"{q.name}:{i}")
         if q.suffix in (".py", ".c", ".h", ".ino") and SYNTH.search(line):
             hits_synth.append(f"{q.name}:{i}")
-t("금지 - 비밀정보·개인식별 패턴 없음 (CLAUDE.md 1 #2 #4)", not hits_secret, str(hits_secret[:5]))
+_secret_assignment_faults = (
+    ("config.py", 'OPENAI_API_KEY = "live-value"'),
+    ("mms.py", 'api_key = "live-value"'),
+)
+_missed_secret_faults = [
+    f"{fname}: {line}" for fname, line in _secret_assignment_faults
+    if not SECRET.search(line) or allowed(fname, line)
+]
+t("금지 - 비밀정보·개인식별 패턴 없음 (CLAUDE.md 1 #2 #4)",
+  not hits_secret and not _missed_secret_faults,
+  str((hits_secret + _missed_secret_faults)[:5]))
 
 # ── F-070: 개인 절대 경로 — .md 를 포함해 전수로 본다 ─────────────
 #    SECRET 스캔은 .md 를 건너뛰고 fix_log 도 제외한다(패턴 인용 때문). 그런데

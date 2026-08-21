@@ -16,6 +16,7 @@ import pytest
 from _asgi_client import call, call_stream
 
 from backend import db, repository
+from backend.services import mms
 from backend.api import create_app
 from contracts.fake_link import FakeFrameBuilder, FakeSiapLink
 from contracts.frame import DeviceMainInfo, DevType, NodeProperty, Status, ValueType
@@ -328,6 +329,24 @@ def test_create_ai_draft_without_crop_threshold_says_so_f190(app):
     assert "crop_tmax_c" in r.json()["draft_text"]
 
 
+def test_create_ai_draft_rejects_direct_forecast_tmax_f256(app):
+    """F-256 — 화면·외부 호출자가 보낸 예보값을 조용히 무시하지 않는다."""
+    r = call(
+        app,
+        "POST",
+        "/api/v1/rules",
+        json={
+            "origin": "AI_DRAFT",
+            "model_id": "demo-model-llm-irrigation",
+            "inputs": {"forecast_tmax_c": 999, "crop_tmax_c": 33},
+        },
+    )
+
+    assert r.status_code == 400
+    assert "forecast_tmax_c" in r.json()["detail"]
+    assert "DMS" in r.json()["detail"]
+
+
 def test_approve_requires_all_three_fields(app):
     r = call(app, "POST", "/api/v1/rules", json={"origin": "WIZARD", "draft_text": "x"})
     rule_id = r.json()["id"]
@@ -610,3 +629,28 @@ def test_inject_invalid_vector_400(app):
     r = call(app, "POST", "/api/v1/sim/inject", json={"vector_id": "NOPE"},
              headers={"X-User-Id": "demo-user-1"})
     assert r.status_code == 400
+
+def test_create_ai_draft_success_is_still_unapproved_f189(app, monkeypatch):
+    """실제 AI 성공도 설명용 초안일 뿐이며 승인·명령 필드는 비어 있다."""
+    ai_text = "예보 최고기온이 임계값을 초과하므로 관수 장치 가동을 권장합니다. 사람 승인 전에는 실행되지 않는 초안입니다."
+    monkeypatch.setattr(mms, "_try_llm_draft", lambda model, inputs: ai_text)
+
+    response = call(
+        app, "POST", "/api/v1/rules",
+        json={
+            "origin": "AI_DRAFT",
+            "model_id": "demo-model-llm-irrigation",
+            "inputs": {"crop_tmax_c": 33},
+        },
+    )
+    assert response.status_code == 201
+    rule = response.json()
+    assert rule["origin"] == "AI_DRAFT"
+    assert rule["generation"] == "AI"
+    assert rule["draft_text"] == ai_text
+    assert rule["condition_expr"] is None
+    assert rule["action"] is None
+    assert rule["target_install_id"] is None
+    assert rule["approved"] is False
+    assert rule["approved_at"] is None
+    assert rule["approved_by"] is None

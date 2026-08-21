@@ -45,15 +45,9 @@
         </select>
       </div>
       <div class="field" id="ai-fields">
-        <label for="draft-model">모델 ID</label>
-        <input id="draft-model" name="model_id" list="model-suggestions" placeholder="예: demo-model-llm-irrigation">
-        <datalist id="model-suggestions">
-          <option value="demo-model-llm-irrigation">
-          <option value="demo-model-threshold-tmax">
-        </datalist>
-        <label for="draft-inputs">입력값 (JSON, 모델의 input_spec 을 따른다)</label>
-        <textarea id="draft-inputs" name="inputs" rows="3" placeholder='{"forecast_tmax_c":35,"crop_tmax_c":30}'></textarea>
-        <p class="hint">공공데이터 표의 행을 참고해 예보값을 채워 넣습니다. 서버가 실제로 모델을 실행해 초안을 만듭니다 (draft_text 는 여기서 보내지 않습니다).</p>
+        <label for="draft-crop-tmax">작물 고온 임계값(°C)</label>
+        <input id="draft-crop-tmax" name="crop_tmax_c" type="number" step="any" value="33" required>
+        <p class="hint">예보 최고기온은 서버가 DMS 공공데이터의 최신 레코드에서 가져옵니다. 사용자는 작물 기준값만 입력합니다.</p>
       </div>
       <div class="field" id="manual-fields" hidden>
         <label for="draft-text">초안 문장</label>
@@ -126,6 +120,7 @@ import { announce, setConnStatus, setViewState } from "./static/a11y.js";
 import { formatDateTime, hex, escapeHtml } from "./static/fmt.js";
 
 const USER_ID = "demo-user-1"; // localhost 단일 사용자 데모 범위
+const AI_DRAFT_MODEL_ID = "demo-model-llm-irrigation"; // AI_DRAFT 내부 고정 모델
 
 const state = { pending: [], approved: [], executions: [], deviceOptions: [], deviceLabels: new Map(), sourcesById: new Map() };
 
@@ -147,14 +142,22 @@ function actionSummary(a) {
 // 필드든 신뢰할 수 없는 문자열은 escapeHtml() 을 거친다. id 류(rule.id·
 // device id)는 서버가 발번하지만 형식을 코드가 강제하지 않으므로 같은
 // 원칙으로 함께 이스케이프한다.
+function generationPathHtml(rule) {
+  if (rule.generation === "AI") {
+    return `<p class="status-line normal">생성 경로: AI</p>`;
+  }
+  if (rule.generation === "THRESHOLD_FALLBACK") {
+    return `<p class="status-line stale">생성 경로: THRESHOLD_FALLBACK — AI 설정 부재·호출 또는 응답 검증 실패로 임계값 초안을 사용했습니다.</p>`;
+  }
+  return "";
+}
+
 function pendingCardHtml(rule) {
   const id = escapeHtml(rule.id);
-  const genNote = rule.generation === "THRESHOLD_FALLBACK"
-    ? `<p class="status-line stale">AI 제공자 부재로 threshold 로 폴백했습니다 (THRESHOLD_FALLBACK)</p>` : "";
   return `<article class="card">
     <p class="badge unapproved">미승인</p>
-    <p class="hint">생성형 AI 초안 — 사람 검토 필요 · origin=${escapeHtml(rule.origin)}${rule.generation ? ` · generation=${escapeHtml(rule.generation)}` : ""}</p>
-    ${genNote}
+    <p class="hint">사람 검토 필요</p>
+    ${generationPathHtml(rule)}
     <p class="readonly-text">${escapeHtml(rule.draft_text)}</p>
     <details>
       <summary>승인하기</summary>
@@ -204,7 +207,8 @@ function approvedCardHtml(rule) {
   const id = escapeHtml(rule.id);
   return `<article class="card">
     <p class="badge normal">승인됨</p>
-    <p class="hint">generation=${escapeHtml(rule.generation ?? "—")} · 승인자 ${escapeHtml(rule.approved_by ?? "—")} · ${formatDateTime(rule.approved_at)}</p>
+    ${generationPathHtml(rule)}
+    <p class="hint">승인자 ${escapeHtml(rule.approved_by ?? "—")} · ${formatDateTime(rule.approved_at)}</p>
     <p class="readonly-text">${escapeHtml(rule.draft_text)}</p>
     <p>실행 판단 조건: ${escapeHtml(rule.condition_expr ?? "—")} / 명령: ${escapeHtml(actionSummary(rule.action))} / 대상: ${escapeHtml(installLabel(rule.target_install_id))}</p>
     <button type="button" class="primary run-rule" data-rule="${id}">실행</button>
@@ -215,6 +219,7 @@ function approvedCardHtml(rule) {
 function rejectedCardHtml(rule) {
   return `<article class="card">
     <p class="badge violation">거부됨</p>
+    ${generationPathHtml(rule)}
     <p class="hint">거부자 ${escapeHtml(rule.rejected_by ?? "—")} · ${formatDateTime(rule.rejected_at)}</p>
     <p class="readonly-text">${escapeHtml(rule.draft_text)}</p>
     <p>거부 사유: ${escapeHtml(rule.reject_reason)}</p>
@@ -356,10 +361,14 @@ document.getElementById("draft-form").addEventListener("submit", async (ev) => {
   const origin = document.getElementById("draft-origin").value;
   const body = { origin, condition_expr: document.getElementById("draft-cond").value || null };
   if (origin === "AI_DRAFT") {
-    body.model_id = document.getElementById("draft-model").value || null;
-    const raw = document.getElementById("draft-inputs").value.trim();
-    try { body.inputs = raw ? JSON.parse(raw) : null; }
-    catch { statusEl.textContent = "입력값 JSON 형식이 올바르지 않습니다."; return; }
+    body.model_id = AI_DRAFT_MODEL_ID;
+    const cropTmax = Number(document.getElementById("draft-crop-tmax").value);
+    if (!Number.isFinite(cropTmax)) {
+      statusEl.textContent = "작물 고온 임계값을 숫자로 입력하십시오.";
+      return;
+    }
+    body.inputs = { crop_tmax_c: cropTmax };
+
   } else {
     body.draft_text = document.getElementById("draft-text").value;
   }
